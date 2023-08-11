@@ -2,14 +2,19 @@
 
 use crate::simulation::{Simulation, self};
 use super::base_element::{BaseElement, Material};
-use na::{DMatrix, DVector};
 use nalgebra as na;
+use na::{DMatrix, DVector};
+use create::utils::compute_von_mises;
+use std::collections::HashMap;
 
 pub struct BrickElement {
     id: usize,
     connectivity: Vec<usize>,
     material: Material,
     deformation_gradient: DMatrix<f64>, // ... other properties specific to the 8-node brick element
+
+    //nodal_properties is a array of properties and for each a value for each node; The properties can be added as needed by string idetifiers
+    nodal_properties: HashMap<String, Vec<f64>>,
 }
 
 impl BrickElement {
@@ -200,8 +205,39 @@ impl BaseElement for BrickElement {
         return f;
     }
 
-    
-    
+
+    //TODO: test and implement:
+    fn compute_stress(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DVector<f64> {
+        //compute the stress at a given point
+        let B = self.compute_B(xi, eta, zeta, &simulation);
+        let C = self.material.get_3d_matrix();
+        let u = self.get_u(simulation);
+        let stress = C * B * u;
+        stress
+    }
+
+    fn compute_strain(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DVector<f64> {
+        //compute the strain at a given point
+        let B = self.compute_B(xi, eta, zeta, &simulation);
+        let u = self.get_u(simulation);
+        let strain = B * u;
+        strain
+    }
+
+    fn compute_element_nodal_properties(&self, simulation: &Simulation) -> Vec<ElementNodalProperties> {
+        //compute the nodal properties for each node
+        let mut nodal_properties = Vec::<ElementNodalProperties>::new();
+        let gauss_points = BrickElement::get_gauss_points();
+        for (xi, eta, zeta, _) in gauss_points {
+            let strain = self.compute_strain(xi, eta, zeta, &simulation);
+            let stress = self.compute_stress(xi, eta, zeta, &simulation);
+            let nodal_property = ElementNodalProperties::new(strain, stress);
+            nodal_properties.push(nodal_property);
+        }
+
+        nodal_properties
+    }
+
 
     // If you wish to override the default methods from BaseElement, you can do so here.
 }

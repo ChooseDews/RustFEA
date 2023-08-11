@@ -1,0 +1,6 @@
+- [ ] add tests for common elements and assemblies
+- [ ] add nodal property outputs
+- [ ] add intergrations with paraview?
+- [ ] add an explict solving scheme
+- [ ] Shell elements
+- [ ] contact xD

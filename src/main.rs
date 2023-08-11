@@ -17,7 +17,7 @@ fn main() {
     // let total_disp = node_instance.total_displacement();
     // println!("Total displacement magnitude: {}", total_disp);
 
-    let b = 5;
+    let b = 2;
     let (nodes, elements) = mesh_generation::generate_mesh(4*b, 4*b, 10*b, 1.0, 1.0, 5.0);
     let mut simulation = simulation::Simulation::from_arrays(nodes, elements.into_iter().map(|e| Box::new(e) as Box<dyn elements::base_element::BaseElement>).collect());
 
