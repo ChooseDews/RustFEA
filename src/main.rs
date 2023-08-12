@@ -4,6 +4,7 @@ mod elements;
 mod mesh_generation;
 mod io;
 mod simulation;
+mod utilities;
 
 
 fn main() {
@@ -17,12 +18,42 @@ fn main() {
     // let total_disp = node_instance.total_displacement();
     // println!("Total displacement magnitude: {}", total_disp);
 
-    let b = 2;
-    let (nodes, elements) = mesh_generation::generate_mesh(4*b, 4*b, 10*b, 1.0, 1.0, 5.0);
+    let material = elements::base_element::Material::aluminum();
+    let b = 40;
+
+    let base = 2.0;
+    let height = 2.0;
+    let length = 15.0;
+
+    let (nodes, elements) = mesh_generation::generate_mesh(b, 1, 10*b, height,  base, length);
     let mut simulation = simulation::Simulation::from_arrays(nodes, elements.into_iter().map(|e| Box::new(e) as Box<dyn elements::base_element::BaseElement>).collect());
-
-
     simulation.solve();
+
+
+    let load = 1e7;
+    let modulus = material.youngs_modulus;
+    let I = (1.0/12.0) * base * height.powi(3);
+    let disp_max = length.powi(3) * load / (3.0 * modulus * I);
+    println!("Analytical displacement: {}", disp_max);
+
+    //find node with max displacement and print it
+    let mut max_disp = 0.0;
+    let mut max_node = 0;
+    for node in simulation.nodes.iter() {
+        let disp = node.displacement.x;
+        if disp > max_disp {
+            max_disp = disp;
+            max_node = node.id;
+        }
+    }
+
+    println!("Max displacement: {} at node {}", max_disp, max_node);
+
+    let error = (disp_max - max_disp).abs() / disp_max;
+    println!("Error: {}", error);
+
+
+
 
     //println!("K_global: {:?}", K_global);
     // let (global_stiffness_matrix, global_force, specified_bc) = simulation.assemble();

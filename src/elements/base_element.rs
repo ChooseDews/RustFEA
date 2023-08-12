@@ -1,11 +1,60 @@
 extern crate nalgebra as na;
 use na::{DVector, DMatrix};
 use crate::simulation::Simulation;
+use std::collections::HashMap;
+
+
+#[derive(Debug)]
+pub struct ElementFields { //hashmap containing
+    pub field: HashMap<String, Vec<f64>>,
+    size: usize,
+    pub connectivity: Vec<usize>
+}
+
+
+impl ElementFields {
+    pub fn new(connectivity: Vec<usize>) -> Self {
+        let size = connectivity.len();
+        ElementFields {
+            field: HashMap::new(),
+            size,
+            connectivity
+        }
+    }
+
+    pub fn add_field(&mut self, name: &str, field: Vec<f64>) {
+        self.field.insert(name.to_string(), field);
+    }
+
+    pub fn find_field(&mut self, name: &str) -> Option<&mut Vec<f64>> {
+        //check if field exists if not create it
+        if !self.field.contains_key(name) {
+            self.field.insert(name.to_string(), vec![0.0; self.size]);
+        }
+        self.field.get_mut(name)
+    }
+
+    pub fn append_to_feild(&mut self, name: &str, nn: usize, value: f64) {
+        let current_field = self.find_field(name).unwrap();
+        current_field[nn] = value;
+    }
+
+    pub fn get_feild_names(&self) -> Vec<String> {
+        let mut names = Vec::new();
+        for key in self.field.keys() {
+            names.push(key.to_string());
+        }
+        names
+    }
+
+
+}
+
 pub struct Material {
     //linear elastic material properties
-    youngs_modulus: f64,
-    poisson_ratio: f64,
-    density: f64
+    pub youngs_modulus: f64,
+    pub poisson_ratio: f64,
+    pub density: f64
 }
 
 //3D [C] matrix
@@ -63,5 +112,10 @@ pub trait BaseElement {
     fn compute_force(&self, simulation: &Simulation) -> DVector<f64>;
     fn compute_jacobian_matrix(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DMatrix<f64>;
     fn get_X(&self, simulation: &Simulation) -> DMatrix<f64>;
+    fn get_u(&self, simulation: &Simulation) -> DVector<f64>;
     fn compute_B(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DMatrix<f64>;
+    fn compute_stress(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DVector<f64>;
+    fn compute_strain(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DVector<f64>;
+    // fn compute_volume(&self, simulation: &Simulation) -> f64;
+    fn compute_element_nodal_properties(&self, simulation: &Simulation) -> ElementFields;
 }

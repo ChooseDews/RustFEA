@@ -59,5 +59,18 @@ pub fn write_vtk(filename: &str, simulation: &Simulation) -> std::io::Result<()>
         )?;
     }
 
+    // Write node_feilds as scalar data
+    let node_feilds = &simulation.node_feilds;
+    let node_feilds_names = node_feilds.keys();
+    for name in node_feilds_names {
+        writeln!(file, "SCALARS {} float", name)?;
+        writeln!(file, "LOOKUP_TABLE default")?;
+        let field = node_feilds.get(name).unwrap();
+        for value in field {
+            writeln!(file, "{}", value)?;
+        }
+    }
+
+
     Ok(())
 }

@@ -1,11 +1,11 @@
 // src/elements/brick_element.rs
 
 use crate::simulation::{Simulation, self};
-use super::base_element::{BaseElement, Material};
+use super::base_element::{BaseElement, Material, ElementFields};
 use nalgebra as na;
 use na::{DMatrix, DVector};
-use create::utils::compute_von_mises;
 use std::collections::HashMap;
+use crate::utilities::{compute_von_mises};
 
 pub struct BrickElement {
     id: usize,
@@ -29,6 +29,7 @@ impl BrickElement {
             connectivity,
             material,
             deformation_gradient: DMatrix::<f64>::identity(3, 3),
+            nodal_properties: HashMap::new(),
             // ... initialize other properties here
         }
     }
@@ -38,6 +39,7 @@ impl BrickElement {
         //assume 2x2x2 gauss points for now
         let mut gauss_points: Vec<(f64, f64, f64, f64)> = Vec::new();
         let a = 1.0 / (3.0 as f64).sqrt();
+        //same order as node numbering (useful for computing properties at nodes)
         gauss_points.push((-a, -a, -a, 1.0));
         gauss_points.push((a, -a, -a, 1.0));
         gauss_points.push((a, a, -a, 1.0));
@@ -48,6 +50,31 @@ impl BrickElement {
         gauss_points.push((-a, a, a, 1.0));
         gauss_points
     }
+
+    // fn initialize_nodel_properties(&self) -> Vec<ElementField> {
+    //     //initialize nodal properties here
+    //     //stress, strain
+    //     //stress prefix: s_
+    //     //strain prefix: e_
+    //     let mut feilds = Vec::new();
+    //     let size = 8;
+
+    //     let stress_prefix = "s_";
+    //     let strain_prefix = "e_";
+    //     let dofs = vec!["xx", "yy", "zz", "xy", "yz", "xz"];
+
+    //     for dof in dofs {
+    //         let stress_name = format!("{}{}", stress_prefix, dof);
+    //         let strain_name = format!("{}{}", strain_prefix, dof);
+    //         let stress_feild = ElementField::empty(&stress_name, size);
+    //         let strain_feild = ElementField::empty(&strain_name, size);
+    //         feilds.push(stress_feild);
+    //         feilds.push(strain_feild);
+    //     }
+    //     print!("{:?}", feilds);
+    //     feilds
+        
+    // }
 
 }
 
@@ -116,6 +143,19 @@ impl BaseElement for BrickElement {
         X
     }
 
+    fn get_u(&self, simulation: &Simulation) -> DVector<f64> {
+        //compute u vector
+        //return as a DVector<f64>
+        let mut u = DVector::<f64>::zeros(24);
+        for (i, node_id) in self.connectivity.iter().enumerate() {
+            let node = simulation.get_node(*node_id).unwrap();
+            u[3 * i] = node.displacement[0];
+            u[3 * i + 1] = node.displacement[1];
+            u[3 * i + 2] = node.displacement[2];
+        }
+        u
+    }
+
     fn get_shape_derivatives(&self, xi: f64, eta: f64, zeta: f64) -> DMatrix<f64> {
         //we expect to return a 3x8 matrix of shape derivatives. ie. the derivative of N_i wrt. xi, eta, and zeta for each node i
         //derived with sympy
@@ -179,9 +219,7 @@ impl BaseElement for BrickElement {
         B
     }
 
-
     
-
     fn compute_stiffness(&self, simulation: &Simulation) -> DMatrix<f64> {
         
         let mut K = DMatrix::<f64>::zeros(24, 24);
@@ -218,26 +256,40 @@ impl BaseElement for BrickElement {
 
     fn compute_strain(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DVector<f64> {
         //compute the strain at a given point
-        let B = self.compute_B(xi, eta, zeta, &simulation);
+        let B: na::Matrix<f64, na::Dyn, na::Dyn, na::VecStorage<f64, na::Dyn, na::Dyn>> = self.compute_B(xi, eta, zeta, &simulation);
         let u = self.get_u(simulation);
         let strain = B * u;
         strain
     }
 
-    fn compute_element_nodal_properties(&self, simulation: &Simulation) -> Vec<ElementNodalProperties> {
+    fn compute_element_nodal_properties(&self, simulation: &Simulation) -> ElementFields {
         //compute the nodal properties for each node
-        let mut nodal_properties = Vec::<ElementNodalProperties>::new();
+        let mut element_feilds = ElementFields::new(self.get_connectivity().to_vec());
         let gauss_points = BrickElement::get_gauss_points();
+
+        let mut nn = 0; //node number
         for (xi, eta, zeta, _) in gauss_points {
             let strain = self.compute_strain(xi, eta, zeta, &simulation);
             let stress = self.compute_stress(xi, eta, zeta, &simulation);
-            let nodal_property = ElementNodalProperties::new(strain, stress);
-            nodal_properties.push(nodal_property);
+            element_feilds.append_to_feild("e_xx", nn, strain[0]);
+            element_feilds.append_to_feild("e_yy", nn, strain[1]);
+            element_feilds.append_to_feild("e_zz", nn, strain[2]);
+            element_feilds.append_to_feild("e_xy", nn, strain[3]);
+            element_feilds.append_to_feild("e_yz", nn, strain[4]);
+            element_feilds.append_to_feild("e_xz", nn, strain[5]);
+            element_feilds.append_to_feild("s_xx", nn, stress[0]);
+            element_feilds.append_to_feild("s_yy", nn, stress[1]);
+            element_feilds.append_to_feild("s_zz", nn, stress[2]);
+            element_feilds.append_to_feild("s_xy", nn, stress[3]);
+            element_feilds.append_to_feild("s_yz", nn, stress[4]);
+            element_feilds.append_to_feild("s_xz", nn, stress[5]);
+            let vm = compute_von_mises(stress);
+            element_feilds.append_to_feild("vm", nn, vm);
+            nn += 1;
         }
 
-        nodal_properties
+        return element_feilds;
     }
-
 
     // If you wish to override the default methods from BaseElement, you can do so here.
 }

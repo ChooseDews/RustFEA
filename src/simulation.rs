@@ -1,23 +1,46 @@
 // src/simulation.rs
 use super::node::Node;
-use crate::elements::base_element::BaseElement;
+use crate::elements::base_element::{BaseElement, ElementFields};
 use std::collections::HashMap;
 use na::{ComplexField, Vector3};
 use nalgebra as na;
 use nalgebra_sparse;
 
-
 pub struct Simulation {
-    nodes: Vec<Node>,
+    pub nodes: Vec<Node>,
     //we want to support more element types in the future so we use a trait object
     elements: Vec<Box<dyn BaseElement>>,
+    pub node_feilds: HashMap<String, Vec<f64>>
 }
+#[derive(Debug)]
+pub struct NodeAvgValue {
+    value: f64,
+    count: usize
+}
+
+impl NodeAvgValue {
+    pub fn new() -> Self {
+        NodeAvgValue {
+            value: 0.0,
+            count: 0
+        }
+    }
+    pub fn add_value(&mut self, value: f64) {
+        self.value += value;
+        self.count += 1;
+    }
+    pub fn get_avg(&self) -> f64 {
+        self.value/self.count as f64
+    }
+}
+    
 
 impl Simulation {
     pub fn new() -> Self {
         Simulation {
             nodes: Vec::new(),
             elements: Vec::new(),
+            node_feilds: HashMap::new()
         }
     }
 
@@ -34,6 +57,18 @@ impl Simulation {
         self.nodes.get(id)
     }
 
+    pub fn get_nodes(&self, ids: &[usize]) -> Vec<&Node> {
+        let mut nodes = Vec::new();
+        for id in ids {
+            nodes.push(self.get_node(*id).unwrap());
+        }
+        nodes
+    }
+
+    pub fn get_element(&self, id: usize) -> Option<&Box<dyn BaseElement>> {
+        self.elements.get(id)
+    }
+
     pub fn nodes(&self) -> &Vec<Node> {
         &self.nodes
     }
@@ -44,6 +79,10 @@ impl Simulation {
 
     pub fn elements(&self) -> &Vec<Box<dyn BaseElement>> {
         &self.elements
+    }
+
+    pub fn elements_mut(&mut self) -> &mut Vec<Box<dyn BaseElement>> {
+        &mut self.elements
     }
 
     pub fn get_specified_bc(&mut self) -> Vec<(usize, usize, usize)> {
@@ -60,15 +99,19 @@ impl Simulation {
             }
         }  
         //find nodes with z coordinate closest to min_z
+
         let tol = 1e-4;
+        let mut fixed_nodes = 0;
         for node in self.nodes(){
             if (node.position[2] - min_z).abs() < tol{
                 //fix node
-                specified_bc.push((node.id, 0, 0));
                 specified_bc.push((node.id, 1, 0));
+                specified_bc.push((node.id, 0, 0));
                 specified_bc.push((node.id, 2, 0));
+        
             }
         }
+
         specified_bc
     }
     
@@ -98,8 +141,8 @@ impl Simulation {
         let n = self.nodes.len()*3; //number of degrees of freedom
         let mut global_force: Vec<f64> = vec![0.0; n];
         //loop over nodes and add force to global_force
-        let f = 1e8/z_nodes.len() as f64;
-        let node_force = [-f, 0.0, 0.0]; 
+        let f = 1e7/z_nodes.len() as f64;
+        let node_force = [f, 0.0, 0.0]; 
         for node in z_nodes{
             let node_id = node.id;
             global_force[node_id*3] = node_force[0];
@@ -108,63 +151,7 @@ impl Simulation {
         }
 
 
-        //apply force on min-y and max-y nodes
-        //find min y coordinate and max y coordinate
-        let mut min_y = 0.0;
-        let mut max_y = 0.0;
-        for node in self.nodes(){
-            if node.position[1] < min_y{
-                min_y = node.position[1];
-            }
-            if node.position[1] > max_y{
-                max_y = node.position[1];
-            }
-        }
-
-        //find nodes with y coordinate closest to min_y and max_y
-        let mut min_y_nodes: Vec<&Node> = Vec::new();
-        let mut max_y_nodes: Vec<&Node> = Vec::new();
-
-        for node in self.nodes(){
-            if (node.position[1] - min_y).abs() < tol{
-                min_y_nodes.push(node);
-            }
-            if (node.position[1] - max_y).abs() < tol{
-                max_y_nodes.push(node);
-            }
-        }
-        //print how many nodes in max_y_nodes and min_y_nodes
-        println!("{} nodes in min_y_nodes and {} nodes in max_y_nodes", min_y_nodes.len(), max_y_nodes.len());
-        
-
-        //apply force to min_y_nodes and max_y_nodes in opposite directions
-        let f = 2e8/min_y_nodes.len() as f64;
-        let node_force = [-f, 0.0, 0.0];
-        for node in min_y_nodes{
-            let node_id = node.id;
-            global_force[node_id*3] = node_force[0];
-            global_force[node_id*3 + 1] = node_force[1];
-            global_force[node_id*3 + 2] = node_force[2];
-        }
-
-        let f = 2e8/max_y_nodes.len() as f64;
-        let node_force = [f, 0.0, 0.0];
-        for node in max_y_nodes{
-            let node_id = node.id;
-            global_force[node_id*3] = node_force[0];
-            global_force[node_id*3 + 1] = node_force[1];
-            global_force[node_id*3 + 2] = node_force[2];
-        }
-
-     
-
-
-
-
-
-
-
-
+    
         global_force
 
     }
@@ -221,6 +208,8 @@ impl Simulation {
         (global_stiffness_matrix, global_force, specified_bc)
     }
 
+    
+
     pub fn solve(&mut self) {
 
         //assemble global stiffness matrix and force vector
@@ -271,6 +260,51 @@ impl Simulation {
             node.set_displacement(u[node_id*3], u[node_id*3 + 1], u[node_id*3 + 2])
         }
         
+        println!("Computing element properties...");
+        let element_count = self.elements.len();
+     
+        //average element feilds for each node
+        let feilds = self.compute_element_properties(0).get_feild_names();
+    
+        //create hashmap -> [nodes]- > NodeAvgValue
+        let mut node_feilds: HashMap<String, Vec<NodeAvgValue>> = HashMap::new();
+        for feild in &feilds{
+            let mut node_avg_values: Vec<NodeAvgValue> = Vec::new();
+            for _ in 0..self.nodes.len(){
+                node_avg_values.push(NodeAvgValue::new());
+            }
+            node_feilds.insert(feild.to_string(), node_avg_values);
+        }
+
+        for i in 0..element_count{
+            let element = self.get_element(i).unwrap();
+            let element_props = element.compute_element_nodal_properties(&self);
+            let connectivity = element.get_connectivity();
+            for feild in &feilds{
+                let feild_values = element_props.field.get(feild).unwrap();
+                for (j, value) in feild_values.iter().enumerate(){
+                    let node_id = connectivity[j];
+                    let node_avg_value = node_feilds.get_mut(feild).unwrap();
+                    node_avg_value[node_id].add_value(*value);
+                }
+            }
+        }
+
+        self.node_feilds = HashMap::new();
+
+        //avg node_feilds
+        for feild in &feilds{
+            let node_avg_values = node_feilds.get_mut(feild).unwrap();
+            let mut node_feilds_value: Vec<f64> = Vec::new();
+            for node_avg_value in node_avg_values{
+                node_feilds_value.push(node_avg_value.get_avg());
+            }
+            self.node_feilds.insert(feild.to_string(), node_feilds_value);
+        }
+
+       // println!("{:?}", self.node_feilds);
+
+        
     
     }
 
@@ -285,4 +319,11 @@ impl Simulation {
         }
         simulation
     }
+
+    pub fn compute_element_properties(&self, id: usize) -> ElementFields {
+        let element = self.get_element(id).unwrap();
+        element.compute_element_nodal_properties(&self)
+    }
+
+
 }
