@@ -29,7 +29,6 @@ fn main() {
     let mut simulation = simulation::Simulation::from_arrays(nodes, elements.into_iter().map(|e| Box::new(e) as Box<dyn elements::base_element::BaseElement>).collect());
     simulation.solve();
 
-
     let load = 1e7;
     let modulus = material.youngs_modulus;
     let I = (1.0/12.0) * base * height.powi(3);

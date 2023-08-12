@@ -4,3 +4,4 @@ pub mod elements;
 pub mod simulation;
 pub mod io;
 pub mod utilities;
+pub mod mesh;
