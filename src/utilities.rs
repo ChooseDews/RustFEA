@@ -1,5 +1,5 @@
 use nalgebra as na;
-use na::{DMatrix, DVector};
+use na::{DVector};
 
 
 pub fn compute_von_mises(stress_vector: DVector<f64>) -> f64 {

@@ -5,7 +5,9 @@ mod mesh_generation;
 mod io;
 mod simulation;
 mod utilities;
-
+mod mesh;
+mod solver;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 fn main() {
     // Example usage
@@ -19,13 +21,13 @@ fn main() {
     // println!("Total displacement magnitude: {}", total_disp);
 
     let material = elements::base_element::Material::aluminum();
-    let b = 40;
+    let b = 20;
 
     let base = 2.0;
     let height = 2.0;
     let length = 15.0;
 
-    let (nodes, elements) = mesh_generation::generate_mesh(b, 1, 10*b, height,  base, length);
+    let (nodes, elements) = mesh_generation::generate_mesh(b, 2*b, 10*b, height,  base, length);
     let mut simulation = simulation::Simulation::from_arrays(nodes, elements.into_iter().map(|e| Box::new(e) as Box<dyn elements::base_element::BaseElement>).collect());
     simulation.solve();
 
@@ -64,7 +66,9 @@ fn main() {
     // }
 
 
-    match io::vtk_writer::write_vtk("mesh.vtk", &simulation) {
+    let current_epoch = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+    let filename = format!("{:?}_mesh.vtk", current_epoch);
+    match io::vtk_writer::write_vtk(filename.as_str(), &simulation) {
         Ok(()) => println!("VTK file written successfully!"),
         Err(e) => println!("Error writing VTK file: {}", e),
     }    

@@ -9,6 +9,8 @@ edition = "2021"
 clap = { version = "4.3.21", features = ["derive"] }
 nalgebra = "*"
 nalgebra-sparse = "*"
+russell_sparse = "*"
+russell_lab = "*"
 
 [profile.release]
 opt-level = 3

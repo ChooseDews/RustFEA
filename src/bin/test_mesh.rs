@@ -15,7 +15,6 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
-    println!("Reading mesh from file: {}", args.input);
     let mesh = read_inp_file(&args.input);
     mesh.print_info();
 
@@ -27,5 +26,12 @@ fn main() {
 
     let mut simulation = Simulation::from_arrays(nodes, elements);
     write_vtk("mesh_2.vtk", &simulation).unwrap();
+
+    println!("Assembling problem...");
+    let problem = simulation.assemble();
+    println!("Problem assembled!");
+    println!("Stiffness [K] value count: {}", problem.0.len());
+
+
 
 }

@@ -1,10 +1,8 @@
 // src/elements/brick_element.rs
-
-use crate::simulation::{Simulation, self};
+use crate::simulation::{Simulation};
 use super::base_element::{BaseElement, Material, ElementFields};
 use nalgebra as na;
 use na::{DMatrix, DVector};
-use std::collections::HashMap;
 use crate::utilities::{compute_von_mises};
 
 pub struct BrickElement {
@@ -12,9 +10,7 @@ pub struct BrickElement {
     connectivity: Vec<usize>,
     material: Material,
     deformation_gradient: DMatrix<f64>, // ... other properties specific to the 8-node brick element
-
     //nodal_properties is a array of properties and for each a value for each node; The properties can be added as needed by string idetifiers
-    nodal_properties: HashMap<String, Vec<f64>>,
 }
 
 impl BrickElement {
@@ -29,8 +25,6 @@ impl BrickElement {
             connectivity,
             material,
             deformation_gradient: DMatrix::<f64>::identity(3, 3),
-            nodal_properties: HashMap::new(),
-            // ... initialize other properties here
         }
     }
 
@@ -51,30 +45,6 @@ impl BrickElement {
         gauss_points
     }
 
-    // fn initialize_nodel_properties(&self) -> Vec<ElementField> {
-    //     //initialize nodal properties here
-    //     //stress, strain
-    //     //stress prefix: s_
-    //     //strain prefix: e_
-    //     let mut feilds = Vec::new();
-    //     let size = 8;
-
-    //     let stress_prefix = "s_";
-    //     let strain_prefix = "e_";
-    //     let dofs = vec!["xx", "yy", "zz", "xy", "yz", "xz"];
-
-    //     for dof in dofs {
-    //         let stress_name = format!("{}{}", stress_prefix, dof);
-    //         let strain_name = format!("{}{}", strain_prefix, dof);
-    //         let stress_feild = ElementField::empty(&stress_name, size);
-    //         let strain_feild = ElementField::empty(&strain_name, size);
-    //         feilds.push(stress_feild);
-    //         feilds.push(strain_feild);
-    //     }
-    //     print!("{:?}", feilds);
-    //     feilds
-        
-    // }
 
 }
 
@@ -130,7 +100,7 @@ impl BaseElement for BrickElement {
         global_position
     }
 
-    fn get_X(&self, simulation: &Simulation) -> DMatrix<f64> { //get global position of each node
+    fn get_x(&self, simulation: &Simulation) -> DMatrix<f64> { //get global position of each node
         //compute X matrix
         //return as a DMatrix<f64>
         let mut X = DMatrix::<f64>::zeros(3, 8);
@@ -176,17 +146,17 @@ impl BaseElement for BrickElement {
     fn compute_jacobian_matrix(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DMatrix<f64> {
         //compute the jacobian matrix
         //return as a DMatrix<f64>
-        let X = self.get_X(simulation);
+        let X = self.get_x(simulation);
         let dN = self.get_shape_derivatives(xi, eta, zeta);
         let jacobian_matrix = dN.transpose() * X.transpose();
         jacobian_matrix
     }
 
-    fn compute_B(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DMatrix<f64> {
+    fn compute_b(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DMatrix<f64> {
         let mut B = DMatrix::<f64>::zeros(6, 24);
         let J = self.compute_jacobian_matrix(xi, eta, zeta, &simulation);
         let J_inv = J.try_inverse().unwrap();
-        let N = self.get_shape_functions(xi, eta, zeta);
+        let _N = self.get_shape_functions(xi, eta, zeta);
         let dN = self.get_shape_derivatives(xi, eta, zeta);
         //compute B_i for each node [6x3] 6 strains and 3 displacements per node
         for i in 0..8 {
@@ -225,7 +195,7 @@ impl BaseElement for BrickElement {
         let mut K = DMatrix::<f64>::zeros(24, 24);
         let gauss_points = BrickElement::get_gauss_points();
         for (xi, eta, zeta, weight) in gauss_points {
-            let B = self.compute_B(xi, eta, zeta, &simulation);
+            let B = self.compute_b(xi, eta, zeta, &simulation);
             let J = self.compute_jacobian_matrix(xi, eta, zeta, &simulation);
             let detJ: f64 = J.determinant();
             let B_T: na::Matrix<f64, na::Dyn, na::Dyn, na::VecStorage<f64, na::Dyn, na::Dyn>> = B.transpose();
@@ -237,9 +207,9 @@ impl BaseElement for BrickElement {
         K
     }
 
-    fn compute_force(&self, simulation: &Simulation) -> DVector<f64> {
+    fn compute_force(&self, _simulation: &Simulation) -> DVector<f64> {
         //return 8*3 zero vector
-        let mut f = DVector::<f64>::zeros(24);
+        let f = DVector::<f64>::zeros(24);
         return f;
     }
 
@@ -247,7 +217,7 @@ impl BaseElement for BrickElement {
     //TODO: test and implement:
     fn compute_stress(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DVector<f64> {
         //compute the stress at a given point
-        let B = self.compute_B(xi, eta, zeta, &simulation);
+        let B = self.compute_b(xi, eta, zeta, &simulation);
         let C = self.material.get_3d_matrix();
         let u = self.get_u(simulation);
         let stress = C * B * u;
@@ -256,7 +226,7 @@ impl BaseElement for BrickElement {
 
     fn compute_strain(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DVector<f64> {
         //compute the strain at a given point
-        let B: na::Matrix<f64, na::Dyn, na::Dyn, na::VecStorage<f64, na::Dyn, na::Dyn>> = self.compute_B(xi, eta, zeta, &simulation);
+        let B: na::Matrix<f64, na::Dyn, na::Dyn, na::VecStorage<f64, na::Dyn, na::Dyn>> = self.compute_b(xi, eta, zeta, &simulation);
         let u = self.get_u(simulation);
         let strain = B * u;
         strain

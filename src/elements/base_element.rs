@@ -71,7 +71,7 @@ impl Material {
         let mut C = DMatrix::<f64>::zeros(6,6);
         let E = self.youngs_modulus;
         let v = self.poisson_ratio;
-        let G = E / (2.0 * (1.0 + v));
+        let _g = E / (2.0 * (1.0 + v));
         let lambda = (E * v) / ((1.0 + v) * (1.0 - 2.0 * v));
         let mu = E / (2.0 * (1.0 + v));
         C[(0,0)] = lambda + 2.0 * mu;
@@ -107,13 +107,13 @@ pub trait BaseElement {
     fn get_deformation_gradient(&self) -> &DMatrix<f64>;
     fn get_shape_functions(&self, xi: f64, eta: f64, zeta: f64) -> DVector<f64>;
     fn get_shape_derivatives(&self, xi: f64, eta: f64, zeta: f64) -> DMatrix<f64>;
-    fn get_global_position(&self, N: &DVector<f64>, simulation: &Simulation) -> na::Vector3<f64>;
+    fn get_global_position(&self, n: &DVector<f64>, simulation: &Simulation) -> na::Vector3<f64>;
     fn compute_stiffness(&self, simulation: &Simulation) -> DMatrix<f64>;
     fn compute_force(&self, simulation: &Simulation) -> DVector<f64>;
     fn compute_jacobian_matrix(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DMatrix<f64>;
-    fn get_X(&self, simulation: &Simulation) -> DMatrix<f64>;
+    fn get_x(&self, simulation: &Simulation) -> DMatrix<f64>;
     fn get_u(&self, simulation: &Simulation) -> DVector<f64>;
-    fn compute_B(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DMatrix<f64>;
+    fn compute_b(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DMatrix<f64>;
     fn compute_stress(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DVector<f64>;
     fn compute_strain(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DVector<f64>;
     // fn compute_volume(&self, simulation: &Simulation) -> f64;

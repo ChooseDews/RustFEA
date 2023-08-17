@@ -3,9 +3,7 @@ use crate::node::Node;
 use crate::elements::{ BaseElement, BrickElement, Material };
 
 
-
 #[derive(Debug)]
-
 pub struct MeshNode {
     pub coordinates: Vec<f64>,
     pub id: usize,

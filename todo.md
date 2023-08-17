@@ -1,5 +1,6 @@
 - [~] add tests for common elements and assemblies
 - [x] add nodal property outputs
+- [ ] Use better solver for Ax=b
 - [ ] add intergrations with paraview?
 - [ ] add an explict solving scheme
 - [ ] Shell elements

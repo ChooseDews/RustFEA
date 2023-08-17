@@ -2,9 +2,10 @@
 use super::node::Node;
 use crate::elements::base_element::{BaseElement, ElementFields};
 use std::collections::HashMap;
-use na::{ComplexField, Vector3};
 use nalgebra as na;
 use nalgebra_sparse;
+use crate::solver::{direct_solve, direct_choslky};
+use crate::io::matrix_writer::write_hashmap_sparse_matrix;
 
 pub struct Simulation {
     pub nodes: Vec<Node>,
@@ -101,7 +102,7 @@ impl Simulation {
         //find nodes with z coordinate closest to min_z
 
         let tol = 1e-4;
-        let mut fixed_nodes = 0;
+        let _fixed_nodes = 0;
         for node in self.nodes(){
             if (node.position[2] - min_z).abs() < tol{
                 //fix node
@@ -163,7 +164,7 @@ impl Simulation {
         //for now, just return an empty hashmap and two empty vectors
         let mut global_stiffness_matrix: HashMap<(usize, usize), f64> = HashMap::new();
         let DOF = 3; //degrees of freedom per node (x, y, z)
-        let n = self.nodes.len()*DOF;
+        let _n = self.nodes.len()*DOF;
 
 
 
@@ -178,7 +179,7 @@ impl Simulation {
         println!("{} nodes and {} elements", self.nodes.len(), self.elements.len());
         for element in self.elements(){
             let element_stiffness_matrix = element.compute_stiffness(&self);
-            let element_force_vector = element.compute_force(&self);
+            let _element_force_vector = element.compute_force(&self);
             let element_connectivity = element.get_connectivity();
             let node_count = element_connectivity.len();
             //loop over element_stiffness_matrix and append to global_stiffness_matrix according to element_connectivity
@@ -212,17 +213,16 @@ impl Simulation {
 
     pub fn solve(&mut self) {
 
+
+
         //assemble global stiffness matrix and force vector
         let (mut global_stiffness_matrix, global_force, specified_bc) = self.assemble();
-        let max_i = self.nodes.len()*3;
-        //load into nalgebra sparse matrix
-        let mut sparse_matrix: nalgebra_sparse::CooMatrix<f64> = nalgebra_sparse::CooMatrix::new(max_i, max_i);
-        let mut max_stiffness_value = 0.0;
 
-
+        println!("Solving System...");
+        
         //add stiffness on specified bc to diagonal
         let extra_stiffness = 1e12;
-        for (node_id, dof, value) in specified_bc{
+        for (node_id, dof, _value) in specified_bc{
             let i = node_id*3 + dof;
             let j = node_id*3 + dof;
             let mut v = global_stiffness_matrix[&(i, j)];
@@ -230,29 +230,25 @@ impl Simulation {
             global_stiffness_matrix.insert((i, j), v);
         }
 
+        let u = direct_solve(&global_stiffness_matrix, &global_force);
+        //let u = direct_choslky(&global_stiffness_matrix, global_force);
 
-        for ((i, j), value) in global_stiffness_matrix.iter(){
-            let mut v = *value;
-            if v.abs() > max_stiffness_value{
-                max_stiffness_value = v.abs();
-            }
-            //add to diagonal if i == j
-            if i == j{
-                v += 0.0001; //add small value to diagonal to avoid singularity
-            }
-            sparse_matrix.push(*i, *j, v);
-        }
-        println!("max stiffness value: {}", max_stiffness_value);
+        //write global stiff matrix
+        write_hashmap_sparse_matrix("big.matrix",&global_stiffness_matrix).unwrap();
 
-        let csc = nalgebra_sparse::CscMatrix::from(&sparse_matrix);
 
-        println!("solving system...");
-        //use cholesky decomposition to solve system
-        let cholesky = nalgebra_sparse::factorization::CscCholesky::factor(&csc).unwrap();
+        // //compate u and u_new
+        // let mut max_diff = 0.0;
+        // for (i, value) in u.iter().enumerate(){
+        //     let diff = (value - u_new[i]).abs();
+        //     if diff > max_diff{
+        //         max_diff = diff;
+        //     }
+        // }
+        // println!("max diff: {}", max_diff);
+
         
-        //solve system
-        let g_force = nalgebra::DVector::from_vec(global_force);
-        let u: na::Matrix<f64, na::Dyn, na::Dyn, na::VecStorage<f64, na::Dyn, na::Dyn>> = cholesky.solve(&g_force);
+        println!("Post Solve Computation...");
 
         //populate node displacements
         for node in self.nodes_mut(){
@@ -260,7 +256,6 @@ impl Simulation {
             node.set_displacement(u[node_id*3], u[node_id*3 + 1], u[node_id*3 + 2])
         }
         
-        println!("Computing element properties...");
         let element_count = self.elements.len();
      
         //average element feilds for each node

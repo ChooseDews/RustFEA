@@ -1,10 +1,8 @@
 // written with gmsh with an export to .inp in mind
-
-use crate::mesh::{ElementGroup, Mesh, MeshElement, MeshNode, NodeGroup};
 use std::fs::{read_to_string, canonicalize};
-use std::path::Path;
-use std::fs;
 use std::collections::HashMap;
+use crate::mesh::{ElementGroup, Mesh, MeshElement, MeshNode, NodeGroup};
+
 
 //naive method but okay for the size of meshes
 fn read_lines(filename: &str) -> Vec<String> {
@@ -19,9 +17,10 @@ fn read_lines(filename: &str) -> Vec<String> {
 }
 
 pub fn read_inp_file(filename: &str) -> Mesh { //read mesh from .inp file re-index from zero
+
     let mut mesh = Mesh::empty();
     let lines = read_lines(filename);
-    //we need to identify each *ELEMENT, *NODE, *ELSET, and *NSET blocks and read them into the mesh
+
     let mut current_block = -1; //0 = *NODE, 1 = *ELEMENT, 2 = *ELSET, 3 = *NSET
     let headings = vec!["*NODE", "*ELEMENT", "*ELSET", "*NSET"];
     let mut params: HashMap<String, String> = HashMap::new();
@@ -35,7 +34,7 @@ pub fn read_inp_file(filename: &str) -> Mesh { //read mesh from .inp file re-ind
                     params = HashMap::new();
                     let line_parts = line.split(',').map(|s| s.trim()).collect::<Vec<&str>>();
                     for part in line_parts {
-                        if(part.contains('*')) { continue }
+                        if part.contains('*') { continue }
                         let param_parts = part.split('=').map(|s| s.trim()).collect::<Vec<&str>>();
                         if param_parts.len() != 2 { continue }
                         params.insert(param_parts[0].to_string(), param_parts[1].to_string());
@@ -89,7 +88,7 @@ pub fn read_inp_file(filename: &str) -> Mesh { //read mesh from .inp file re-ind
                 mesh.elements.insert(id, element);
                 //add element to element group
                 if mesh.element_groups.contains_key(el_set) {
-                    let mut group = mesh.element_groups.get_mut(el_set).unwrap();
+                    let group = mesh.element_groups.get_mut(el_set).unwrap();
                     group.elements.push(id);
                 } else {
                     let group = ElementGroup {
@@ -108,7 +107,7 @@ pub fn read_inp_file(filename: &str) -> Mesh { //read mesh from .inp file re-ind
                 //index from zero
                 let el_nums = el_nums.iter().map(|n| n - 1).collect::<Vec<usize>>();
                 if mesh.element_groups.contains_key(el_set) {
-                    let mut group = mesh.element_groups.get_mut(el_set).unwrap();
+                    let group = mesh.element_groups.get_mut(el_set).unwrap();
                     group.elements.extend(el_nums);
                 } else {
                     let group = ElementGroup {
@@ -127,7 +126,7 @@ pub fn read_inp_file(filename: &str) -> Mesh { //read mesh from .inp file re-ind
                 //index from zero
                 let node_nums = node_nums.iter().map(|n| n - 1).collect::<Vec<usize>>();
                 if mesh.node_groups.contains_key(n_set) {
-                    let mut group = mesh.node_groups.get_mut(n_set).unwrap();
+                    let group = mesh.node_groups.get_mut(n_set).unwrap();
                     group.nodes.extend(node_nums);
                 } else {
                     let group = NodeGroup {
