@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use nalgebra as na;
 use nalgebra_sparse;
 use crate::solver::{direct_solve, direct_choslky};
-use crate::io::matrix_writer::write_hashmap_sparse_matrix;
+use crate::io::matrix_writer::{write_hashmap_sparse_matrix, write_vector};
 
 pub struct Simulation {
     pub nodes: Vec<Node>,
@@ -235,7 +235,7 @@ impl Simulation {
 
         //write global stiff matrix
         write_hashmap_sparse_matrix("big.matrix",&global_stiffness_matrix).unwrap();
-
+        write_vector("big.force", &global_force).unwrap();
 
         // //compate u and u_new
         // let mut max_diff = 0.0;

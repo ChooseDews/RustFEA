@@ -1,33 +1,45 @@
 use std::fs::File;
 use std::io::prelude::*;
 use std::collections::HashMap;
+use std::io::{BufWriter, Write};
 
 pub fn write_hashmap_sparse_matrix(filename: &str, sparse_matrix: &HashMap<(usize, usize), f64>) -> std::io::Result<()> {
     let nzn = sparse_matrix.len();
-
-    println!("Number of Non Zero Values: {}", nzn);
+    println!("Writing Matrix Out - Number of Non Zero Values: {}", nzn);
+    
     // Check size of matrix and reject if too large
+    // This code is commented out, but you can bring it back if you need to.
     // if nzn > 100_000_000 {
     //     let error = format!("Matrix too large to write to file. Size: {}", sparse_matrix.len());
     //     return Err(std::io::Error::new(std::io::ErrorKind::Other, error));
     // }
 
-    // Open the file for writing directly
-    let mut file = File::create(filename)?;
+    // Open the file for writing and buffer the writes
+    let file = File::create(filename)?;
+    let mut writer = BufWriter::new(file);
 
-    // Sort hashmap keys and write to file directly
-    let mut keys: Vec<(usize, usize)> = sparse_matrix.keys().cloned().collect();
-    keys.sort();
+    // Collect the filtered pairs into a Vec and sort
+    let mut entries: Vec<_> = sparse_matrix.iter().filter(|&(&(row, col), _)| row <= col).collect();
+    entries.sort_by_key(|&((row, col), _)| (row, col));
 
-    for key in keys {
-        let value = sparse_matrix[&key];
-        let (row, col) = key;
-
-        // Only write upper right triangle
-        if row <= col {
-            writeln!(file, "{}, {}, {}", row, col, value)?;
-        }
+    for &((row, col), &value) in &entries {
+        writeln!(writer, "{} {} {}", row, col, value)?;
     }
+
+    Ok(())
+}
+
+pub fn write_vector(filename: &str, vector: &Vec<f64>) -> std::io::Result<()> {
+    // Open the file for writing and buffer the writes
+    let file = File::create(filename)?;
+    let mut writer = BufWriter::new(file);
+
+    for (i, value) in vector.iter().enumerate() {
+        writeln!(writer, "{} {}", i, value)?;
+    }
+
+    // Ensure everything is written to the file
+    writer.flush()?;
 
     Ok(())
 }

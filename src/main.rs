@@ -49,12 +49,8 @@ fn main() {
     }
 
     println!("Max displacement: {} at node {}", max_disp, max_node);
-
     let error = (disp_max - max_disp).abs() / disp_max;
     println!("Error: {}", error);
-
-
-
 
     //println!("K_global: {:?}", K_global);
     // let (global_stiffness_matrix, global_force, specified_bc) = simulation.assemble();
@@ -64,7 +60,6 @@ fn main() {
     //     Ok(()) => println!("Matrix written successfully!"),
     //     Err(e) => println!("Error writing matrix: {}", e),
     // }
-
 
     let current_epoch = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
     let filename = format!("{:?}_mesh.vtk", current_epoch);
