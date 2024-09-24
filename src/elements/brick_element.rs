@@ -4,7 +4,10 @@ use super::base_element::{BaseElement, Material, ElementFields};
 use nalgebra as na;
 use na::{DMatrix, DVector};
 use crate::utilities::{compute_von_mises};
+use serde::{Serialize, Deserialize};
 
+
+#[derive(Serialize, Deserialize, Debug)] // Derive NDim if possible
 pub struct BrickElement {
     id: usize,
     connectivity: Vec<usize>,
@@ -48,6 +51,7 @@ impl BrickElement {
 
 }
 
+#[typetag::serde]
 impl BaseElement for BrickElement {
     fn get_id(&self) -> usize {
         self.id

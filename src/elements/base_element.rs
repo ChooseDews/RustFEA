@@ -2,9 +2,10 @@ extern crate nalgebra as na;
 use na::{DVector, DMatrix};
 use crate::simulation::Simulation;
 use std::collections::HashMap;
+use serde::{Serialize, Deserialize};
+use typetag;
 
-
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ElementFields { //hashmap containing
     pub field: HashMap<String, Vec<f64>>,
     size: usize,
@@ -50,6 +51,7 @@ impl ElementFields {
 
 }
 
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Material {
     //linear elastic material properties
     pub youngs_modulus: f64,
@@ -100,6 +102,7 @@ impl Material {
 
 }
 
+#[typetag::serde]
 pub trait BaseElement {
     fn get_id(&self) -> usize;
     fn get_connectivity(&self) -> &Vec<usize>;

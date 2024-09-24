@@ -2,17 +2,33 @@
 use super::node::Node;
 use crate::elements::base_element::{BaseElement, ElementFields};
 use std::collections::HashMap;
-use nalgebra as na;
-use nalgebra_sparse;
 use crate::solver::{direct_solve, direct_choslky};
 use crate::io::matrix_writer::{write_hashmap_sparse_matrix, write_vector};
+use serde::{Serialize, Deserialize};
+use std::fmt;
 
+#[derive(Serialize, Deserialize)]
 pub struct Simulation {
+
+    //mesh data
     pub nodes: Vec<Node>,
-    //we want to support more element types in the future so we use a trait object
+    
     elements: Vec<Box<dyn BaseElement>>,
-    pub node_feilds: HashMap<String, Vec<f64>>
+
+    //feild output data
+    pub node_feilds: HashMap<String, Vec<f64>>,
+
+    //boundary conditions
 }
+
+impl fmt::Display for Simulation {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // Customize the output format as needed
+        write!(f, "Simulation [NodeCount: {}, ElementCount: {}]", self.nodes.len(), self.elements.len())
+    }
+}
+
+
 #[derive(Debug)]
 pub struct NodeAvgValue {
     value: f64,
@@ -56,6 +72,11 @@ impl Simulation {
     // Get a reference to a node by its ID
     pub fn get_node(&self, id: usize) -> Option<&Node> {
         self.nodes.get(id)
+    }
+
+    //get mut ref
+    pub fn get_node_mut(&mut self, id: usize) -> Option<&mut Node> {
+        self.nodes.get_mut(id)
     }
 
     pub fn get_nodes(&self, ids: &[usize]) -> Vec<&Node> {
@@ -230,8 +251,8 @@ impl Simulation {
         //let u = direct_choslky(&global_stiffness_matrix, global_force);
 
         //write global stiff matrix
-        write_hashmap_sparse_matrix("big.matrix",&global_stiffness_matrix).unwrap();
-        write_vector("big.force", &global_force).unwrap();
+        write_hashmap_sparse_matrix("temp/big.matrix",&global_stiffness_matrix).unwrap();
+        write_vector("temp/big.force", &global_force).unwrap();
 
         // //compate u and u_new
         // let mut max_diff = 0.0;

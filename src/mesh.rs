@@ -1,9 +1,12 @@
 use std::collections::HashMap;
 use crate::node::Node;
 use crate::elements::{ BaseElement, BrickElement, Material };
+use serde::{Serialize, Deserialize};
 
 
-#[derive(Debug)]
+
+#[derive(Debug, Serialize, Deserialize)]
+
 pub struct MeshNode {
     pub coordinates: Vec<f64>,
     pub id: usize,
@@ -19,7 +22,7 @@ impl MeshNode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MeshElement {
     pub connectivity: Vec<usize>,
     pub name: String,
@@ -52,20 +55,20 @@ impl MeshElement {
 
 
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ElementGroup {
     pub elements: Vec<usize>, //indices of elements in the mesh
     pub name: String,
     pub el_type: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct NodeGroup {
     pub nodes: Vec<usize>, //indices of nodes in the mesh
     pub name: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Mesh {
     pub nodes: HashMap<usize, MeshNode>,
     pub elements: HashMap<usize, MeshElement>,

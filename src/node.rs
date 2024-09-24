@@ -1,10 +1,10 @@
 // src/node.rs
-
+use serde::{Serialize, Deserialize};
 extern crate nalgebra as na;
 
 use na::Vector3;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Node {
     pub id: usize,
     pub position: Vector3<f64>,

@@ -16,3 +16,7 @@ Cargo.lock
 *.zip
 *.matrix
 *.vtk
+*.json
+*.json.xz
+
+temp/*

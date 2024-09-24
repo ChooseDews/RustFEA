@@ -9,6 +9,9 @@ mod mesh;
 mod solver;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use io::file::{seralized_write_json, seralized_write_bincode};
+
+
 fn main() {
     // Example usage
     // let mut node_instance = node::Node::new(1, 0.0, 0.0, 0.0);
@@ -62,12 +65,19 @@ fn main() {
     // }
 
     let current_epoch = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    let filename = format!("{:?}_mesh.vtk", current_epoch);
+    let filename = format!("temp/{:?}_mesh.vtk", current_epoch);
     match io::vtk_writer::write_vtk(filename.as_str(), &simulation) {
         Ok(()) => println!("VTK file written successfully!"),
         Err(e) => println!("Error writing VTK file: {}", e),
     }    
-    
+
+
+    //save project
+    seralized_write_json("temp/simulation_run.json", &simulation);
+    seralized_write_json("temp/simulation_run.json.xz", &simulation);
+
+    seralized_write_bincode("temp/simulation_run.bin", &simulation);
+    seralized_write_bincode("temp/simulation_run.bin.xz", &simulation);
 
 }
 

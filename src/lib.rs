@@ -7,3 +7,4 @@ pub mod io;
 pub mod utilities;
 pub mod mesh;
 pub mod solver;
+pub mod bc;
