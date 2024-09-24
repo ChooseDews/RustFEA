@@ -4,7 +4,7 @@ use russell_sparse::{ConfigSolver, Solver, SparseTriplet, StrError, LinSolKind};
 use std::collections::HashMap;
 use nalgebra as na;
 use nalgebra_sparse;
-use std::time::{Instant};
+use std::time::Instant;
 
 
 pub fn get_max_row_col(global_stiffness_matrix: &HashMap<(usize, usize), f64>) -> (usize, usize) {

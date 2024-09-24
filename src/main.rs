@@ -21,7 +21,7 @@ fn main() {
     // println!("Total displacement magnitude: {}", total_disp);
 
     let material = elements::base_element::Material::aluminum();
-    let b = 20;
+    let b = 4;
 
     let base = 2.0;
     let height = 2.0;

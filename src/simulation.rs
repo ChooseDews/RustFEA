@@ -165,11 +165,7 @@ impl Simulation {
         let mut global_stiffness_matrix: HashMap<(usize, usize), f64> = HashMap::new();
         let DOF = 3; //degrees of freedom per node (x, y, z)
         let _n = self.nodes.len()*DOF;
-
-
-
         let global_force = self.assemble_global_force();
-
         let specified_bc = self.get_specified_bc();
 
 
