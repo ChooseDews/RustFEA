@@ -22,3 +22,7 @@ opt-level = 3
 
 [profile.dev]
 opt-level = 3
+
+[lints.rust]
+unused = "allow"
+non_snake_case = "allow" #nice for fea vars

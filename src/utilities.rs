@@ -14,8 +14,6 @@ pub fn compute_von_mises(stress_vector: DVector<f64>) -> f64 {
     s_vm.sqrt()
 }
 
-
-
 //compute the y displacement of a cantilever beam with a point load at the end
 pub fn eular_beam_displacement(x: f64, length: f64, load: f64, modulus: f64, moment_of_inertia: f64) -> f64 {
     let y = load * x.powi(2) * (3.0 * length - x) / (6.0 * modulus * moment_of_inertia);
