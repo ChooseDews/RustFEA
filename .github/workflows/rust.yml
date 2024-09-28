@@ -20,10 +20,10 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y --no-install-recommends \
-          build-essential \
           liblapacke-dev \
           libopenblas-dev \
-          libsuitesparse-dev
+          libsuitesparse-dev \
+          libmumps-dev
     - name: Build
       run: cargo build --verbose
     - name: Run tests
