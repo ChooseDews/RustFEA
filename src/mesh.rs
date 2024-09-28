@@ -88,6 +88,11 @@ impl Mesh {
         }
     }
 
+    pub fn get_nodes_in_group(&self, group_name: &str) -> Vec<usize> {
+        let group = self.node_groups.get(group_name).expect(&format!("Node group: {} not found in mesh", group_name));
+        group.nodes.clone()
+    }
+
     pub fn print_info(&self) {
         println!("Mesh: {}", self.name);
         println!("Number of nodes: {}", self.nodes.len());

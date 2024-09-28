@@ -121,4 +121,5 @@ pub trait BaseElement {
     fn compute_strain(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DVector<f64>;
     // fn compute_volume(&self, simulation: &Simulation) -> f64;
     fn compute_element_nodal_properties(&self, simulation: &Simulation) -> ElementFields;
+    fn type_name(&self) -> &'static str;
 }

@@ -9,7 +9,6 @@ fn read_lines(filename: &str) -> Vec<String> {
     let abs_path = canonicalize(filename).unwrap();
     let abs_path = abs_path.to_str().unwrap();
     let mut result = Vec::new();
-    println!("Reading mesh from file: {}", abs_path);
     for line in read_to_string(abs_path).unwrap().lines() {
         result.push(line.to_string())
     }
@@ -17,6 +16,12 @@ fn read_lines(filename: &str) -> Vec<String> {
 }
 
 pub fn read_inp_file(filename: &str) -> Mesh { //read mesh from .inp file re-index from zero
+
+    //panic of .inp or empty
+    if filename.is_empty() { panic!("No mesh file specified"); }
+    if !filename.ends_with(".inp") { panic!("File is not a .inp file: {}", filename ); }
+
+    println!("🕸️  Reading mesh from file : {} 🕸️", filename);
 
     let mut mesh = Mesh::empty();
     let lines = read_lines(filename);

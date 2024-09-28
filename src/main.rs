@@ -7,6 +7,7 @@ mod simulation;
 mod utilities;
 mod mesh;
 mod solver;
+mod bc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use io::file::{seralized_write_json, seralized_write_bincode};

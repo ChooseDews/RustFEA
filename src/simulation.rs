@@ -1,24 +1,30 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
-use serde::{Deserialize, Serialize};
 
-use crate::node::Node;
+use crate::bc::condition::BoundaryCondition;
 use crate::elements::base_element::{BaseElement, ElementFields};
 use crate::io::matrix_writer::{write_hashmap_sparse_matrix, write_vector};
+use crate::node::Node;
 use crate::solver::{direct_choslky, direct_solve};
 
+use crate::io::input_reader::Keywords;
 
 #[derive(Serialize, Deserialize)]
 pub struct Simulation {
     //mesh data
     pub nodes: Vec<Node>,
-
     elements: Vec<Box<dyn BaseElement>>,
-
-    //feild output data
     pub node_feilds: HashMap<String, Vec<f64>>,
     //boundary conditions
+    pub boundary_conditions: Vec<Box<dyn BoundaryCondition>>,
+    //simulation data
+    pub load_vector: Vec<f64>, //global force vector
+    pub fixed_global_nodal_values: HashMap<usize, f64>,
+    pub dofs: usize,
+    pub keywords: Keywords
 }
+
 
 impl fmt::Display for Simulation {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -60,11 +66,38 @@ impl Simulation {
             nodes: Vec::new(),
             elements: Vec::new(),
             node_feilds: HashMap::new(),
+            boundary_conditions: Vec::new(),
+            load_vector: Vec::new(),
+            fixed_global_nodal_values: HashMap::new(),
+            keywords: Keywords::new(),
+            dofs: 3,
         }
+    }
+
+    pub fn get_global_index(&self, node_id: usize, dof: usize) -> usize {
+        node_id * self.dofs + dof
+    }
+
+    pub fn set_keywords(&mut self, keywords: Keywords) {
+        self.keywords = keywords;
+    }
+
+    pub fn set_dofs(&mut self, dofs: usize) {
+        self.dofs = dofs;
+    }
+
+    //initalize function for once nodes+elements are fixed
+    pub fn initialize(&mut self) {
+        let n = self.nodes.len() * self.dofs;
+        self.load_vector = vec![0.0; n];
     }
 
     pub fn add_node(&mut self, node: Node) {
         self.nodes.push(node);
+    }
+
+    pub fn add_boundary_condition(&mut self, bc: Box<dyn BoundaryCondition>) {
+        self.boundary_conditions.push(bc);
     }
 
     pub fn add_element(&mut self, element: Box<dyn BaseElement>) {
@@ -103,48 +136,36 @@ impl Simulation {
         &mut self.elements
     }
 
-    pub fn get_specified_bc(&mut self) -> Vec<(usize, usize, usize)> {
+    pub fn get_global_force(&self) -> Vec<f64> {
+        self.load_vector.clone()
+    }
 
-        //TODO: Make general with bc
-        let mut specified_bc = Vec::new();
-        let min_z = self.nodes.iter().map(|node| node.position[2]).fold(f64::INFINITY, f64::min);
-        let tol = 1e-4;
-
-        for node in &self.nodes {
-            if (node.position[2] - min_z).abs() < tol {
-                specified_bc.push((node.id, 0, 0));
-                specified_bc.push((node.id, 1, 0));
-                specified_bc.push((node.id, 2, 0));
-            }
+    pub fn handle_bc(&mut self) {
+        let mut boundary_conditions = std::mem::take(&mut self.boundary_conditions);
+        for bc in &mut boundary_conditions {
+            bc.apply(self);
         }
+        self.boundary_conditions = boundary_conditions;
+    }
 
+    pub fn get_specified_bc(&mut self) -> Vec<(usize, f64)> {
+        let mut specified_bc = Vec::new();
+        for (global_index, value) in &self.fixed_global_nodal_values {
+            specified_bc.push((*global_index, *value));
+        }
         specified_bc
     }
 
-    pub fn assemble_global_force(&self) -> Vec<f64> {
-        //for now select z most nodes
-        let max_z = self.nodes.iter().map(|node| node.position[2]).fold(f64::NEG_INFINITY, f64::max);
-        let tol = 1e-4;
-        let z_nodes: Vec<&Node> = self.nodes.iter().filter(|node| (node.position[2] - max_z).abs() < tol).collect();
-        let n = self.nodes.len() * 3; //number of degrees of freedom
-        let mut global_force: Vec<f64> = vec![0.0; n];
-        //loop over nodes and add force to global_force
-        let f = 1e7 / z_nodes.len() as f64;
-        let node_force = [f, 0.0, 0.0];
-        for node in z_nodes {
-            let node_id = node.id;
-            global_force[node_id * 3] = node_force[0];
-            global_force[node_id * 3 + 1] = node_force[1];
-            global_force[node_id * 3 + 2] = node_force[2];
-        }
-
-        global_force
+    pub fn assemble_global_force(&mut self) {
+        self.initialize();
+        self.handle_bc();
     }
 
-    pub fn assemble(&mut self) -> (HashMap<(usize, usize), f64>, Vec<f64>, Vec<(usize, usize, usize)>) {
+    pub fn assemble(&mut self) -> (HashMap<(usize, usize), f64>, Vec<f64>) {
         let mut global_stiffness_matrix = HashMap::new();
         let dof = 3;
-        let global_force = self.assemble_global_force();
+        self.assemble_global_force(); //populates global force and fixed global nodal values
+        let mut global_force = self.get_global_force();
         let specified_bc = self.get_specified_bc();
 
         for element in &self.elements {
@@ -166,32 +187,29 @@ impl Simulation {
                 }
             }
         }
+        let extra_stiffness = self.keywords.get_single_float("EXTRA_STIFFNESS").unwrap_or(1e12);
+        for (g_index, value) in specified_bc {
+            let mut v = global_stiffness_matrix[&(g_index, g_index)];
+            v += extra_stiffness;
+            global_stiffness_matrix.insert((g_index, g_index), v);
+            if value.abs() > 0.0 {
+                global_force[g_index] += value * extra_stiffness; // F = K*u so K_extra*u_extra = -F_extra
+            }
+        }
 
-        (global_stiffness_matrix, global_force, specified_bc)
+        (global_stiffness_matrix, global_force)
     }
 
     pub fn solve(&mut self) {
         //assemble global stiffness matrix and force vector
-        let (mut global_stiffness_matrix, global_force, specified_bc) = self.assemble();
+        let (mut global_stiffness_matrix, mut global_force) = self.assemble();
 
         println!("Solving System...");
 
-        //add stiffness on specified bc to diagonal
-        let extra_stiffness = 1e12;
-        for (node_id, dof, _value) in specified_bc {
-            let i = node_id * 3 + dof;
-            let j = node_id * 3 + dof;
-            let mut v = global_stiffness_matrix[&(i, j)];
-            v += extra_stiffness;
-            global_stiffness_matrix.insert((i, j), v);
-        }
-
         let u = direct_solve(&global_stiffness_matrix, &global_force);
         //let u = direct_choslky(&global_stiffness_matrix, global_force);
-
-        write_hashmap_sparse_matrix("temp/big.matrix", &global_stiffness_matrix).unwrap();
-        write_vector("temp/big.force", &global_force).unwrap();
-
+        // write_hashmap_sparse_matrix("temp/big.matrix", &global_stiffness_matrix).unwrap();
+        // write_vector("temp/big.force", &global_force).unwrap();
 
         println!("Post Solve Computation...");
 
@@ -247,8 +265,9 @@ impl Simulation {
     }
 
     //create from array of nodes and elements
-    pub fn from_arrays(nodes: Vec<Node>, elements: Vec<Box<dyn BaseElement>>) -> Self {
+    pub fn from_arrays(nodes: Vec<Node>, elements: Vec<Box<dyn BaseElement>>, dofs: usize) -> Self {
         let mut simulation = Simulation::new();
+        simulation.set_dofs(dofs);
         for node in nodes {
             simulation.add_node(node);
         }
@@ -261,5 +280,52 @@ impl Simulation {
     pub fn compute_element_properties(&self, id: usize) -> ElementFields {
         let element = self.get_element(id).unwrap();
         element.compute_element_nodal_properties(&self)
+    }
+
+    pub fn print(&self) {
+        println!("Simulation Summary:");
+        println!("-------------------");
+        println!("DOFs: {}", self.dofs);
+        println!("Nodes: {}", self.nodes.len());
+        println!("Elements: {}", self.elements.len());
+        println!("Boundary Conditions: {}", self.boundary_conditions.len());
+        println!("Node Fields: {}", self.node_feilds.len());
+
+        if !self.node_feilds.is_empty() {
+            println!("  Field names:");
+            for field_name in self.node_feilds.keys() {
+                println!("    - {}", field_name);
+            }
+        }
+
+        println!("Load Vector Size: {}", self.load_vector.len());
+        println!(
+            "Fixed Nodal Values: {}",
+            self.fixed_global_nodal_values.len()
+        );
+
+        // Print element types and counts
+        let mut element_types = std::collections::HashMap::new();
+        for element in &self.elements {
+            let type_name = element.type_name();
+            *element_types.entry(type_name).or_insert(0) += 1;
+        }
+        println!("Element Types:");
+        for (type_name, count) in element_types {
+            println!("  - {}: {}", type_name, count);
+        }
+
+        // Print boundary condition types and counts
+        let mut bc_types = std::collections::HashMap::new();
+        for bc in &self.boundary_conditions {
+            let type_name = bc.type_name();
+            *bc_types.entry(type_name).or_insert(0) += 1;
+        }
+        println!("Boundary Condition Types:");
+        for (type_name, count) in bc_types {
+            println!("  - {}: {}", type_name, count);
+        }
+
+        // println!("Load Vector: {:?}", self.load_vector);
     }
 }

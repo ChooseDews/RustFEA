@@ -1,0 +1,16 @@
+
+
+
+
+NAME BAR Simulation
+MESH_FILE ./example_input_bar.inp #example comment
+#DOF 3
+#Boundary Conditions
+fixed_bc free_end -0.2 _ _
+fixed_bc fixed_end 0 0 0
+#Material
+MATERIAL 1 200000 0.3
+#Output
+OUTPUT ./temp/simple_bar_3d.json.xz
+OUTPUT_VTK ./temp/simple_bar_3d.vtk
+

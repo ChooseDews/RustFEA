@@ -5,7 +5,7 @@ use rust_fea::io::vtk_writer::write_vtk;
 use serde_json;
 use std::fs::File;
 use std::io::Write;
-use rust_fea::io::file::{write_json_file, read_json_file, seralized_write_json};
+use rust_fea::io::file::{seralized_read, seralized_write};
 use rust_fea::io::project::Project;
 
 
@@ -37,23 +37,11 @@ fn main() {
     println!("Problem assembled!");
     println!("Stiffness [K] value count: {}", problem.0.len());
 
-
-    //save mesh to json file
-    seralized_write_json("temp/mesh.json.xz", &mesh);
-    seralized_write_json("temp/mesh.json", &mesh);
-    seralized_write_json("temp/sim.json", &simulation);
-    
-
-    //read simulation from json file
-    let sim_value = read_json_file("temp/sim.json");
-    let sim_read: Simulation = serde_json::from_value(sim_value).unwrap();
+    seralized_write("temp/mesh.json.xz", &mesh);
+    seralized_write("temp/sim.json.xz", &simulation);
+    let sim_read: Simulation = seralized_read("temp/sim.json.xz");
     println!("Simulation read from json: {}", sim_read);
-
-
-    //create project
     let project = Project::from(mesh, simulation);
-    //save the project
-    seralized_write_json("temp/project.json", &project);
-    seralized_write_json("temp/project.json.xz", &project);
+    seralized_write("temp/project.json.xz", &project);
 
 }

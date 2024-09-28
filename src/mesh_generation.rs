@@ -57,3 +57,4 @@ pub fn generate_mesh(n_x: usize, n_y: usize, n_z: usize, s_x: f64, s_y: f64, s_z
 
     (nodes, elements)
 }
+

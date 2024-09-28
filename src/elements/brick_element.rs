@@ -7,7 +7,7 @@ use crate::utilities::{compute_von_mises};
 use serde::{Serialize, Deserialize};
 
 
-#[derive(Serialize, Deserialize, Debug)] // Derive NDim if possible
+#[derive(Serialize, Deserialize, Debug)] 
 pub struct BrickElement {
     id: usize,
     connectivity: Vec<usize>,
@@ -265,5 +265,7 @@ impl BaseElement for BrickElement {
         return element_feilds;
     }
 
-    // If you wish to override the default methods from BaseElement, you can do so here.
+    fn type_name(&self) -> &'static str {
+        "BrickElement"
+    }
 }

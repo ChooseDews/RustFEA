@@ -18,5 +18,5 @@ Cargo.lock
 *.vtk
 *.json
 *.json.xz
-
+**.msh
 temp/*

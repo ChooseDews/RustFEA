@@ -1,0 +1,20 @@
+NAME BAR Simulation
+DOF 3
+
+#MESH
+MESH_FILE ./curved_bar_big.inp #example comment
+
+#Boundary Conditions
+fixed_bc end1 -0.1 -0.1 _
+fixed_bc end2 0 0 0
+
+#Material
+MATERIAL 1 200000 0.3
+
+#Output
+OUTPUT ./temp/curved_bar.json.xz
+OUTPUT_VTK ./temp/curved_bar.vtk
+
+
+#SOLVER SETTINGS
+EXTRA_STIFFNESS 1e13
