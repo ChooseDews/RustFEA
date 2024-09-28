@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use crate::node::Node;
 use crate::elements::{ BaseElement, BrickElement, Material };
 use serde::{Serialize, Deserialize};
-
+use crate::io::file::seralized_read;
 
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -88,9 +88,33 @@ impl Mesh {
         }
     }
 
+    pub fn load(filename: &str) -> Self {
+        let mesh: Mesh = seralized_read(filename);
+        mesh
+    }
+
     pub fn get_nodes_in_group(&self, group_name: &str) -> Vec<usize> {
         let group = self.node_groups.get(group_name).expect(&format!("Node group: {} not found in mesh", group_name));
         group.nodes.clone()
+    }
+
+    //curve with sin(x) for fun
+    pub fn curve_func(node: &MeshNode) -> Vec<f64> {
+        let x = node.coordinates[0];
+        let y = node.coordinates[1];
+        let z = node.coordinates[2];
+        vec![x, y + 0.5 * z.sin(), z]
+    }
+
+    pub fn apply_func_to_nodel_positions(&mut self, func: &dyn Fn(&MeshNode) -> Vec<f64>) {
+        for node in self.nodes.values_mut() {
+            let new_pos = func(&node);
+            node.coordinates = new_pos;
+        }
+    }
+
+    pub fn apply_func(&mut self) {
+        self.apply_func_to_nodel_positions(&Mesh::curve_func);
     }
 
     pub fn print_info(&self) {

@@ -4,7 +4,7 @@ use std::path::Path;
 use std::collections::HashMap;
 use crate::simulation::Simulation;
 use crate::bc::{BoundaryCondition, FixedCondition, LoadCondition};
-use crate::io::mesh_reader::read_inp_file;
+use crate::io::mesh_reader::read_file;
 use std::error::Error;
 use serde::{Serialize, Deserialize};
 use crate::mesh::Mesh;
@@ -123,7 +123,7 @@ pub fn read_simulation_file(file_path: &str) -> Result<(Keywords, Vec<Simulation
     let mesh_file = keywords.get_single_value("MESH_FILE").unwrap();
     let mesh_path = Path::new(file_path).parent().unwrap().join(mesh_file);
     let mesh_path_str = mesh_path.to_str().unwrap();
-    let mesh = read_inp_file(mesh_path_str);
+    let mesh: Mesh = read_file(mesh_path_str);
     // mesh.print_info();
     let nodes = mesh.convert_to_nodes();
     let elements = mesh.convert_to_elements();

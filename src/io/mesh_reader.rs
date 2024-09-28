@@ -3,7 +3,6 @@ use std::fs::{read_to_string, canonicalize};
 use std::collections::HashMap;
 use crate::mesh::{ElementGroup, Mesh, MeshElement, MeshNode, NodeGroup};
 
-
 //naive method but okay for the size of meshes
 fn read_lines(filename: &str) -> Vec<String> {
     let abs_path = canonicalize(filename).unwrap();
@@ -15,11 +14,16 @@ fn read_lines(filename: &str) -> Vec<String> {
     result
 }
 
-pub fn read_inp_file(filename: &str) -> Mesh { //read mesh from .inp file re-index from zero
+
+pub fn read_file(filename: &str) -> Mesh { //read mesh from .inp file re-index from zero
+
+    //if it contains .mesh then use seralized read
+    if filename.contains(".mesh") {
+        return Mesh::load(filename);
+    }
 
     //panic of .inp or empty
     if filename.is_empty() { panic!("No mesh file specified"); }
-    if !filename.ends_with(".inp") { panic!("File is not a .inp file: {}", filename ); }
 
     println!("🕸️  Reading mesh from file : {} 🕸️", filename);
 

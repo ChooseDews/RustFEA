@@ -8,10 +8,10 @@ mod utilities;
 mod mesh;
 mod solver;
 mod bc;
+
+
 use std::time::{SystemTime, UNIX_EPOCH};
-
-use io::file::{seralized_write_json, seralized_write_bincode};
-
+use io::file::seralized_write;
 
 fn main() {
     // Example usage
@@ -32,7 +32,7 @@ fn main() {
     let length = 15.0;
 
     let (nodes, elements) = mesh_generation::generate_mesh(b, 2*b, 10*b, height,  base, length);
-    let mut simulation = simulation::Simulation::from_arrays(nodes, elements.into_iter().map(|e| Box::new(e) as Box<dyn elements::base_element::BaseElement>).collect());
+    let mut simulation = simulation::Simulation::from_arrays(nodes, elements.into_iter().map(|e| Box::new(e) as Box<dyn elements::base_element::BaseElement>).collect(), 3);
     simulation.solve();
 
     let load = 1e7;
@@ -74,11 +74,11 @@ fn main() {
 
 
     //save project
-    seralized_write_json("temp/simulation_run.json", &simulation);
-    seralized_write_json("temp/simulation_run.json.xz", &simulation);
+    seralized_write("temp/simulation_run.json", &simulation);
+    seralized_write("temp/simulation_run.json.xz", &simulation);
 
-    seralized_write_bincode("temp/simulation_run.bin", &simulation);
-    seralized_write_bincode("temp/simulation_run.bin.xz", &simulation);
+    seralized_write("temp/simulation_run.bin", &simulation);
+    seralized_write("temp/simulation_run.bin.xz", &simulation);
 
 }
 
