@@ -112,6 +112,8 @@ pub trait BaseElement {
     fn get_shape_derivatives(&self, xi: f64, eta: f64, zeta: f64) -> DMatrix<f64>;
     fn get_global_position(&self, n: &DVector<f64>, simulation: &Simulation) -> na::Vector3<f64>;
     fn compute_stiffness(&self, simulation: &Simulation) -> DMatrix<f64>;
+    fn get_stiffness(&self) -> &DMatrix<f64>;
+    fn set_stiffness(&mut self, stiffness: DMatrix<f64>);
     fn compute_force(&self, simulation: &Simulation) -> DVector<f64>;
     fn compute_jacobian_matrix(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DMatrix<f64>;
     fn get_x(&self, simulation: &Simulation) -> DMatrix<f64>;

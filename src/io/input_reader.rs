@@ -8,7 +8,7 @@ use crate::io::mesh_reader::read_file;
 use std::error::Error;
 use serde::{Serialize, Deserialize};
 use crate::mesh::Mesh;
-
+use log::{info, debug, warn};
 
 fn remove_comments(line: &str) -> String {
     match line.find('#') {
@@ -25,10 +25,9 @@ pub struct Keyword {
 
 impl Keyword {
     pub fn print(&self) {
-        println!("{:}={:?}", self.keyword, self.values);
+        debug!("{:}={:?}", self.keyword, self.values);
     }
 }
-
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Keywords {
@@ -41,25 +40,30 @@ impl Keywords {
             values: Vec::new()
         }
     }
+    /// add a keyword to the keywords
     pub fn add_keyword(&mut self, keyword: String, values: Vec<String>) {
         self.values.push(Keyword { keyword: keyword.to_uppercase(), values });
     }
+    /// get the values of the first instance of a keyword
     pub fn get_keyword(&self, keyword: &str) -> Option<&Keyword> {
         self.values.iter().find(|k| k.keyword == keyword.to_uppercase())
     }
+    /// Checks if a keyword exists in the keywords.
     pub fn keyword_exists(&self, keyword: &str) -> bool {
         self.values.iter().any(|k| k.keyword == keyword.to_uppercase())
     }   
+    /// Retrieves a single value from the keywords. Will join the values with a space.
     pub fn get_single_value(&self, keyword: &str) -> Option<String> {
         if let Some(keyword) = self.values.iter().find(|k| k.keyword == keyword.to_uppercase()) {
             return Some(keyword.values.join(" "));
         }
         None
     }
+    /// Retrieves all keywords with the specified keyword.
     pub fn get_keywords(&self, keyword: &str) -> Vec<&Keyword> { //some keywords may have multiple values or instances
         self.values.iter().filter(|k| k.keyword == keyword.to_uppercase()).collect()
     }
-    
+    /// Retrieves a single float value from the keywords. Will get the first value and try to parse it as a float.'
     pub fn get_single_float(&self, keyword: &str) -> Option<f64> {
         if let Some(keyword) = self.values.iter().find(|k| k.keyword == keyword.to_uppercase()) {
             if keyword.values[0].parse::<f64>().is_ok() {
@@ -85,16 +89,29 @@ impl Keywords {
     }
 
     pub fn print(&self) {
-        println!("Keywords ({}):", self.values.len());
+        debug!("Keywords ({}):", self.values.len());
         for keyword in &self.values {
             keyword.print();
         }
     }
 }
 
-
+/// Reads a simulation file and returns the keywords, simulations, and meshes.
+/// 
+/// This function reads a simulation file, processes its content, and extracts relevant information such as material, solver, output, mesh file, name, version, fixed boundary conditions, load boundary conditions, degrees of freedom, and output VTK settings.
+/// It also handles the mesh file, reading it from the specified path and converting it into nodes and elements.
+/// The function then creates a simulation object with the extracted data and adds the necessary boundary conditions.
+/// Finally, it returns the keywords, a single simulation, and the mesh.
+///
+/// # Arguments
+/// * `file_path`: The path to the simulation file. .sim
+/// 
+/// # Returns
+/// A tuple containing the keywords, a single simulation, and the mesh.
 pub fn read_simulation_file(file_path: &str) -> Result<(Keywords, Vec<Simulation>, Vec<Mesh>), Box<dyn Error>> {
+    info!("Reading simulation file: {}", file_path);
     if !file_path.ends_with(".sim") {
+        warn!("File does not have a .sim extension");
         return Err("File must have a .sim extension".into());
     }
     let file = File::open(file_path)?;
@@ -114,7 +131,7 @@ pub fn read_simulation_file(file_path: &str) -> Result<(Keywords, Vec<Simulation
                 keywords.add(keyword, parts[1..].to_vec());
             },
             _ => {
-                println!("Found Unknown keyword: {}", parts[0]);
+                debug!("Found Unknown keyword: {}", parts[0]);
                 keywords.add(parts[0].to_uppercase().as_str(), parts[1..].to_vec());
             }
         }
@@ -145,7 +162,7 @@ pub fn read_simulation_file(file_path: &str) -> Result<(Keywords, Vec<Simulation
             }
         }).collect();
         let fixed_condition: FixedCondition = FixedCondition::new(node_ids, fixed_values);
-        println!("Fixed condition: {:?}", fixed_condition);
+        // println!("Fixed condition: {:?}", fixed_condition);
         simulation.add_boundary_condition(Box::new(fixed_condition));
     }
 
@@ -156,10 +173,11 @@ pub fn read_simulation_file(file_path: &str) -> Result<(Keywords, Vec<Simulation
         let node_ids = mesh.get_nodes_in_group(&node_group_name);
         let load_values: Vec<f64> = load_bc_value.values[1..].iter().map(|s| s.parse::<f64>().unwrap()).collect();
         let load_condition: LoadCondition = LoadCondition::new_from_vec(node_ids, load_values);
-        println!("Load condition: {:?}", load_condition);
+        // println!("Load condition: {:?}", load_condition);
         simulation.add_boundary_condition(Box::new(load_condition));
     }
     simulation.set_keywords(keywords.clone()); //duplicate keywords for the simulation okay for now. Small and easily compressed
+    debug!("Finished reading simulation file");
     Ok((keywords, vec![simulation], vec![mesh]))
 }
 

@@ -8,6 +8,7 @@ use std::path::Path;
 use serde::{Serialize, Deserialize};
 use bincode;
 use serde::de::DeserializeOwned;
+use log::{debug, error};
 
 /// Returns a writer for the specified file.
 /// Supports `.json`, `.bin`, and `.xz` (compressed) file extensions.
@@ -64,12 +65,14 @@ fn get_reader(filename: &str) -> Box<dyn Read> {
 ///
 /// Panics if the file extension is unsupported or if deserialization fails.
 pub fn seralized_read<T: DeserializeOwned>(filename: &str) -> T {
+    debug!("Reading serialized data from file: {}", filename);
     let mut reader: Box<dyn Read> = get_reader(filename);
     if filename.contains(".json") {
         serde_json::from_reader(&mut reader).expect("Failed to deserialize data from JSON")
     } else if filename.contains(".bin") {
         bincode::deserialize_from(&mut reader).expect("Failed to deserialize data from Bincode")
     } else {
+        error!("Unsupported file extension for: {}", filename);
         panic!("Unsupported file extension for: {}", filename)
     }
 }
@@ -86,11 +89,13 @@ pub fn seralized_read<T: DeserializeOwned>(filename: &str) -> T {
 ///
 /// Panics if the file extension is unsupported or if serialization fails.
 pub fn seralized_write<T: Serialize>(filename: &str, data: &T) {
+    debug!("Writing serialized data to file: {}", filename);
     if filename.contains(".json") {
         serde_json::to_writer(&mut get_writer(filename), &data).expect("Failed to serialize data to JSON")
     } else if filename.contains(".bin") {
         bincode::serialize_into(&mut get_writer(filename), &data).expect("Failed to serialize data to Bincode")
     } else {
+        error!("Unsupported file extension for: {}", filename);
         panic!("Unsupported file extension for: {}", filename)
     }
 }

@@ -5,6 +5,7 @@ use nalgebra as na;
 use na::{DMatrix, DVector};
 use crate::utilities::{compute_von_mises};
 use serde::{Serialize, Deserialize};
+use log::{debug, trace};
 
 
 #[derive(Serialize, Deserialize, Debug)] 
@@ -12,8 +13,14 @@ pub struct BrickElement {
     id: usize,
     connectivity: Vec<usize>,
     material: Material,
+    #[serde(skip, default = "default_deformation_gradient")]
     deformation_gradient: DMatrix<f64>, // ... other properties specific to the 8-node brick element
-    //nodal_properties is a array of properties and for each a value for each node; The properties can be added as needed by string idetifiers
+    #[serde(skip, default = "default_stiffness")]
+    stiffness: DMatrix<f64>,
+}
+
+fn default_deformation_gradient() -> DMatrix<f64> {
+    DMatrix::<f64>::identity(3, 3)
 }
 
 impl BrickElement {
@@ -28,10 +35,12 @@ impl BrickElement {
             connectivity,
             material,
             deformation_gradient: DMatrix::<f64>::identity(3, 3),
+            stiffness: default_stiffness(),
         }
     }
 
     fn get_gauss_points() -> Vec<(f64, f64, f64, f64)> { //xi, eta, zeta, weight
+        trace!("Generating Gauss points for brick element");
         //compute and return the gauss points here
         //assume 2x2x2 gauss points for now
         let mut gauss_points: Vec<(f64, f64, f64, f64)> = Vec::new();
@@ -195,7 +204,7 @@ impl BaseElement for BrickElement {
 
     
     fn compute_stiffness(&self, simulation: &Simulation) -> DMatrix<f64> {
-        
+        trace!("Computing stiffness matrix for brick element");
         let mut K = DMatrix::<f64>::zeros(24, 24);
         let gauss_points = BrickElement::get_gauss_points();
         for (xi, eta, zeta, weight) in gauss_points {
@@ -209,6 +218,13 @@ impl BaseElement for BrickElement {
         }
         //use the gauss quadrature to compute the stiffness matrix
         K
+    }
+    fn get_stiffness(&self) -> &DMatrix<f64> {
+        &self.stiffness
+    }
+
+    fn set_stiffness(&mut self, stiffness: DMatrix<f64>) {
+        self.stiffness = stiffness;
     }
 
     fn compute_force(&self, _simulation: &Simulation) -> DVector<f64> {
@@ -237,6 +253,7 @@ impl BaseElement for BrickElement {
     }
 
     fn compute_element_nodal_properties(&self, simulation: &Simulation) -> ElementFields {
+        trace!("Computing element nodal properties for brick element");
         //compute the nodal properties for each node
         let mut element_feilds = ElementFields::new(self.get_connectivity().to_vec());
         let gauss_points = BrickElement::get_gauss_points();
@@ -268,4 +285,9 @@ impl BaseElement for BrickElement {
     fn type_name(&self) -> &'static str {
         "BrickElement"
     }
+}
+
+// Add this function outside the struct
+fn default_stiffness() -> DMatrix<f64> {
+    DMatrix::zeros(24, 24)
 }

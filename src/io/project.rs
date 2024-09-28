@@ -9,6 +9,7 @@ use crate::io::input_reader::{Keywords, read_simulation_file};
 use crate::io::file::{seralized_write, seralized_read};
 
 use super::vtk_writer::write_vtk;
+use log::{info, debug};
 
 #[derive(Serialize, Deserialize)]
 pub struct Project {
@@ -25,26 +26,31 @@ impl Project {
             keywords: Keywords::new(),
         }
     }
+    /// Creates a new project from an input file (.sim file)
     pub fn from_input_file(file_path: &str) -> Self {
         let (keywords, simulations, meshes) = read_simulation_file(file_path).unwrap();
         Project { keywords, simulations, meshes }
     }
+    /// Saves the project to a file via serialization.
     pub fn save(&self) -> String {
         let output = self.keywords.get_single_value("OUTPUT").expect("No output file specified");
-        println!("Saving project to {}", output);
+        info!("Saving project to {}", output);
         seralized_write(&output, self);
-        return output;
+        output
     }
+    /// Loads a project from a file and deserializes it to a Project struct.
     pub fn load(file_path: &str) -> Self {
+        info!("Loading project from {}", file_path);
         seralized_read(file_path)
     }
     pub fn print(&self) {
+        debug!("Printing project information");
         self.keywords.print();
         for mesh in &self.meshes {
-            mesh.print_info();
+            debug!("{}", mesh);
         }
         for simulation in &self.simulations {
-            simulation.print();
+            debug!("{}", simulation);
         }
     }
 
@@ -55,6 +61,7 @@ impl Project {
     pub fn export_vtk(&self) {
        let simulation = &self.simulations[0];
        let output_vtk = self.keywords.get_single_value("OUTPUT_VTK").expect("No output vtk specified");
+       info!("Exporting VTK to {}", output_vtk);
        write_vtk(output_vtk.as_str(), &simulation);
     }
 }

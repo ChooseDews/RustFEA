@@ -4,9 +4,17 @@ use nalgebra as na;
 use na::{DMatrix, DVector, Vector3};
 use nalgebra_sparse::ops::Op;
 use serde::{Serialize, Deserialize};
+use std::fmt;
 
 
-#[derive(Serialize, Deserialize, Debug)] 
+/// Represents a fixed boundary condition
+/// # Mathematical Formulation
+/// A fixed condition is an essential boundary condition, where the nodes are fixed to a specific value.
+/// This feild can be applied to some or all nodes in the mesh.
+/// # Fields
+/// * `nodes`: The nodes to apply the fixed condition to.
+/// * `fixed_values`: The fixed values for each node. This is an optional field as some dof may be free
+#[derive(Serialize, Deserialize, Debug)]
 pub struct FixedCondition {
     nodes: Vec<usize>,
     fixed_values: Vec<Option<f64>>
@@ -43,5 +51,11 @@ impl BoundaryCondition for FixedCondition {
 
     fn type_name(&self) -> &str {
         "FixedCondition"
+    }
+}
+
+impl fmt::Display for FixedCondition {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "FixedCondition: {} nodes, {} fixed values", self.nodes.len(), self.fixed_values.len())
     }
 }

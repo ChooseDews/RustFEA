@@ -1,9 +1,19 @@
 use std::fs::File;
 use std::io::{Write, BufWriter};
 use crate::simulation::Simulation;
+//logging
+use log::{info, debug, trace};
 
+/// Writes a VTK file for a given simulation.
+/// 
+/// # Arguments
+/// * `filename`: The path to the file where the VTK data will be written.
+/// * `simulation`: The simulation data to be written to the VTK file.
+/// 
+/// # Returns
+/// A `std::io::Result<()>` indicating the success or failure of the operation.
 pub fn write_vtk(filename: &str, simulation: &Simulation) -> std::io::Result<()> {
-    println!("Writing VTK file: {}", filename);
+    info!("Writing VTK file: {}", filename);
 
     let file = File::create(filename)?;
     let mut file = BufWriter::new(file);

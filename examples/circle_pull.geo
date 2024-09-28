@@ -30,3 +30,5 @@ Physical Surface("side2", 14) = {3};
 Physical Surface("inside", 15) = {4};
 //+
 Physical Surface("outside", 16) = {2};
+//+
+Physical Surface("top", 17) = {1};

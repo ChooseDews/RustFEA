@@ -1,6 +1,7 @@
 use crate::simulation::Simulation;
 
 
+/// Represents a boundary condition
 #[typetag::serde]
 pub trait BoundaryCondition {
     fn apply(&self, simulation: &mut Simulation);

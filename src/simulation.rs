@@ -1,6 +1,8 @@
+use nalgebra::DMatrix;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
+use log::{info, debug, trace};
 
 use crate::bc::condition::BoundaryCondition;
 use crate::elements::base_element::{BaseElement, ElementFields};
@@ -19,7 +21,9 @@ pub struct Simulation {
     //boundary conditions
     pub boundary_conditions: Vec<Box<dyn BoundaryCondition>>,
     //simulation data
+    #[serde(skip, default = "Vec::new")]
     pub load_vector: Vec<f64>, //global force vector
+    #[serde(skip, default = "HashMap::new")]
     pub fixed_global_nodal_values: HashMap<usize, f64>,
     pub dofs: usize,
     pub keywords: Keywords
@@ -28,13 +32,8 @@ pub struct Simulation {
 
 impl fmt::Display for Simulation {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // Customize the output format as needed
-        write!(
-            f,
-            "Simulation [NodeCount: {}, ElementCount: {}]",
-            self.nodes.len(),
-            self.elements.len()
-        )
+        write!(f, "Simulation [NodeCount: {}, ElementCount: {}, DOFs: {}]", 
+               self.nodes.len(), self.elements.len(), self.dofs)
     }
 }
 
@@ -120,6 +119,10 @@ impl Simulation {
         self.elements.get(id)
     }
 
+    pub fn get_element_mut(&mut self, id: usize) -> Option<&mut Box<dyn BaseElement>> {
+        self.elements.get_mut(id)
+    }
+
     pub fn nodes(&self) -> &Vec<Node> {
         &self.nodes
     }
@@ -161,18 +164,35 @@ impl Simulation {
         self.handle_bc();
     }
 
+    pub fn set_element_stiffness(&mut self, id: usize, stiffness: DMatrix<f64>) {
+        self.get_element_mut(id).unwrap().set_stiffness(stiffness);
+    }
+
+    pub fn compute_element_stiffness(&self, id: usize) -> DMatrix<f64> {
+        self.get_element(id).unwrap().compute_stiffness(&self)
+    }
+
+    pub fn compute_all_element_stiffness(&mut self){
+        for i in 0..self.elements.len() {
+            self.set_element_stiffness(i, self.compute_element_stiffness(i));
+        }
+    }
+
     pub fn assemble(&mut self) -> (HashMap<(usize, usize), f64>, Vec<f64>) {
+        debug!("Starting assembly process");
         let mut global_stiffness_matrix = HashMap::new();
         let dof = 3;
         self.assemble_global_force(); //populates global force and fixed global nodal values
         let mut global_force = self.get_global_force();
         let specified_bc = self.get_specified_bc();
+        self.compute_all_element_stiffness();
 
-        for element in &self.elements {
-            let element_stiffness_matrix = element.compute_stiffness(&self);
+        trace!("Assembling global stiffness matrix");
+        for i in 0..self.elements.len() {
+            let element = self.get_element(i).unwrap();
+            let element_stiffness_matrix = element.get_stiffness();
             let element_connectivity = element.get_connectivity();
             let node_count = element_connectivity.len();
-
             for i in 0..node_count {
                 for j in 0..node_count {
                     for k in 0..dof {
@@ -197,22 +217,29 @@ impl Simulation {
             }
         }
 
+        debug!("Assembly process completed");
         (global_stiffness_matrix, global_force)
     }
 
+    pub fn solve_explicit(&mut self) {
+        let dt = self.keywords.get_single_float("TIMESTEP").unwrap_or(1.0);
+        let total_time = self.keywords.get_single_float("TOTAL_TIME").unwrap_or(1.0);
+        let time_steps = (total_time / dt) as usize;
+
+        for step in 0..time_steps {
+            println!("Time Step: {}", step);
+        }
+    }
+
     pub fn solve(&mut self) {
-        //assemble global stiffness matrix and force vector
+        info!("Starting simulation solve process");
+        debug!("Assembling system");
         let (mut global_stiffness_matrix, mut global_force) = self.assemble();
 
-        println!("Solving System...");
-
+        info!("Solving system");
         let u = direct_solve(&global_stiffness_matrix, &global_force);
-        //let u = direct_choslky(&global_stiffness_matrix, global_force);
-        // write_hashmap_sparse_matrix("temp/big.matrix", &global_stiffness_matrix).unwrap();
-        // write_vector("temp/big.force", &global_force).unwrap();
-
-        println!("Post Solve Computation...");
-
+        
+        info!("Performing post-solve computations");
         //populate node displacements
         for node in self.nodes_mut() {
             let node_id = node.id;
@@ -283,26 +310,19 @@ impl Simulation {
     }
 
     pub fn print(&self) {
-        println!("Simulation Summary:");
-        println!("-------------------");
-        println!("DOFs: {}", self.dofs);
-        println!("Nodes: {}", self.nodes.len());
-        println!("Elements: {}", self.elements.len());
-        println!("Boundary Conditions: {}", self.boundary_conditions.len());
-        println!("Node Fields: {}", self.node_feilds.len());
+        debug!("{}", self);
+        debug!("Boundary Conditions: {}", self.boundary_conditions.len());
+        debug!("Node Fields: {}", self.node_feilds.len());
 
         if !self.node_feilds.is_empty() {
-            println!("  Field names:");
+            debug!("Field names:");
             for field_name in self.node_feilds.keys() {
-                println!("    - {}", field_name);
+                debug!("  - {}", field_name);
             }
         }
 
-        println!("Load Vector Size: {}", self.load_vector.len());
-        println!(
-            "Fixed Nodal Values: {}",
-            self.fixed_global_nodal_values.len()
-        );
+        debug!("Load Vector Size: {}", self.load_vector.len());
+        debug!("Fixed Nodal Values: {}", self.fixed_global_nodal_values.len());
 
         // Print element types and counts
         let mut element_types = std::collections::HashMap::new();
@@ -310,9 +330,9 @@ impl Simulation {
             let type_name = element.type_name();
             *element_types.entry(type_name).or_insert(0) += 1;
         }
-        println!("Element Types:");
+        debug!("Element Types:");
         for (type_name, count) in element_types {
-            println!("  - {}: {}", type_name, count);
+            debug!("  - {}: {}", type_name, count);
         }
 
         // Print boundary condition types and counts
@@ -321,11 +341,9 @@ impl Simulation {
             let type_name = bc.type_name();
             *bc_types.entry(type_name).or_insert(0) += 1;
         }
-        println!("Boundary Condition Types:");
+        debug!("Boundary Condition Types:");
         for (type_name, count) in bc_types {
-            println!("  - {}: {}", type_name, count);
+            debug!("  - {}: {}", type_name, count);
         }
-
-        // println!("Load Vector: {:?}", self.load_vector);
     }
 }

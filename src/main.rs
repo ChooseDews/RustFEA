@@ -9,9 +9,9 @@ mod mesh;
 mod solver;
 mod bc;
 
-
 use std::time::{SystemTime, UNIX_EPOCH};
 use io::file::seralized_write;
+use log::{info, debug, error};
 
 fn main() {
     // Example usage
@@ -39,7 +39,7 @@ fn main() {
     let modulus = material.youngs_modulus;
     let I = (1.0/12.0) * base * height.powi(3);
     let disp_max = length.powi(3) * load / (3.0 * modulus * I);
-    println!("Analytical displacement: {}", disp_max);
+    info!("Analytical displacement: {}", disp_max);
 
     //find node with max displacement and print it
     let mut max_disp = 0.0;
@@ -52,9 +52,9 @@ fn main() {
         }
     }
 
-    println!("Max displacement: {} at node {}", max_disp, max_node);
+    info!("Max displacement: {} at node {}", max_disp, max_node);
     let error = (disp_max - max_disp).abs() / disp_max;
-    println!("Error: {}", error);
+    info!("Error: {}", error);
 
     //println!("K_global: {:?}", K_global);
     // let (global_stiffness_matrix, global_force, specified_bc) = simulation.assemble();
@@ -68,18 +68,17 @@ fn main() {
     let current_epoch = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
     let filename = format!("temp/{:?}_mesh.vtk", current_epoch);
     match io::vtk_writer::write_vtk(filename.as_str(), &simulation) {
-        Ok(()) => println!("VTK file written successfully!"),
-        Err(e) => println!("Error writing VTK file: {}", e),
+        Ok(()) => info!("VTK file written successfully!"),
+        Err(e) => error!("Error writing VTK file: {}", e),
     }    
 
-
     //save project
+    debug!("Saving simulation data");
     seralized_write("temp/simulation_run.json", &simulation);
     seralized_write("temp/simulation_run.json.xz", &simulation);
-
     seralized_write("temp/simulation_run.bin", &simulation);
     seralized_write("temp/simulation_run.bin.xz", &simulation);
-
+    info!("Simulation data saved successfully");
 }
 
 

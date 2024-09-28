@@ -3,8 +3,8 @@ use crate::node::Node;
 use crate::elements::{ BaseElement, BrickElement, Material };
 use serde::{Serialize, Deserialize};
 use crate::io::file::seralized_read;
-
-
+use std::fmt;
+use log::{debug, info, trace};
 #[derive(Debug, Serialize, Deserialize)]
 
 pub struct MeshNode {
@@ -88,6 +88,15 @@ impl Mesh {
         }
     }
 
+    /// Loads a mesh from a file.
+    /// 
+    /// This function reads a serialized mesh from the specified file and returns a new `Mesh` instance.
+    /// 
+    /// # Arguments
+    /// * `filename`: The path to the file containing the serialized mesh.
+    /// 
+    /// # Returns
+    /// A new `Mesh` instance.
     pub fn load(filename: &str) -> Self {
         let mesh: Mesh = seralized_read(filename);
         mesh
@@ -118,23 +127,21 @@ impl Mesh {
     }
 
     pub fn print_info(&self) {
-        println!("Mesh: {}", self.name);
-        println!("Number of nodes: {}", self.nodes.len());
-        println!("Number of elements: {}", self.elements.len());
-        println!("Number of element groups: {}", self.element_groups.len());
-        let group_names = self.element_groups.keys();
-        for name in group_names {
-            let group = self.element_groups.get(name).unwrap();
-            println!("  -> {} - {} - {} elements", group.name, group.el_type, group.elements.len());
+        debug!("{}", self);
+        for (name, group) in &self.element_groups {
+            debug!("  -> {} - {} - {} elements", group.name, group.el_type, group.elements.len());
         }
-        println!("Number of node groups: {}", self.node_groups.len());
-        let group_names = self.node_groups.keys();
-        for name in group_names {
-            let group = self.node_groups.get(name).unwrap();
-            println!("  -> {} - {} nodes", group.name, group.nodes.len());
+        for (name, group) in &self.node_groups {
+            debug!("  -> {} - {} nodes", group.name, group.nodes.len());
         }
     }
-
+    /// Converts the mesh nodes to a vector of nodes.
+    /// 
+    /// This function iterates through the nodes in the mesh, converts each mesh node to a `Node` object,
+    /// and adds them to the `nodes` vector.
+    /// 
+    /// # Returns
+    /// A vector of `Node` objects.
     pub fn convert_to_nodes(&self) -> Vec<Node> {
         let mut nodes = Vec::new();
         let n = self.nodes.len();
@@ -144,7 +151,13 @@ impl Mesh {
         }
         nodes
     }
-
+    /// Converts the mesh elements to a vector of elements.
+    /// 
+    /// This function iterates through the elements in the mesh, converts each mesh element to a `BaseElement` object,
+    /// and adds them to the `elements` vector.
+    /// 
+    /// # Returns
+    /// A vector of `BaseElement` objects.
     pub fn convert_to_elements(&self) -> Vec<Box<dyn BaseElement>> {
         let mut elements = Vec::new();
         let mut i = 0;
@@ -168,7 +181,12 @@ impl Mesh {
         elements
     }
 
-    
+}
 
-
+impl fmt::Display for Mesh {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Mesh: {} [Nodes: {}, Elements: {}, Element Groups: {}, Node Groups: {}]", 
+               self.name, self.nodes.len(), self.elements.len(), 
+               self.element_groups.len(), self.node_groups.len())
+    }
 }

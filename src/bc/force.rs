@@ -4,6 +4,15 @@ use nalgebra as na;
 use na::DVector;
 use serde::{Serialize, Deserialize};
 
+
+/// Represents a load boundary condition
+/// # Mathematical Formulation
+/// A load condition is a natural boundary condition, where the nodes are loaded with a specific force.
+/// This feild can be applied to some or all nodes in the mesh.
+/// Here we are applying a condition on the derivative of the field, in the case of solid mechanics this would be a force,
+/// # Fields
+/// * `nodes`: The nodes to apply the load condition to.
+/// * `force`: The force to apply to the nodes.
 #[derive(Serialize, Deserialize, Debug)] 
 pub struct LoadCondition {
     nodes: Vec<usize>,

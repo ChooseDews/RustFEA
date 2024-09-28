@@ -2,6 +2,7 @@
 use std::fs::{read_to_string, canonicalize};
 use std::collections::HashMap;
 use crate::mesh::{ElementGroup, Mesh, MeshElement, MeshNode, NodeGroup};
+use log::{info, debug, trace, error};
 
 //naive method but okay for the size of meshes
 fn read_lines(filename: &str) -> Vec<String> {
@@ -14,18 +15,30 @@ fn read_lines(filename: &str) -> Vec<String> {
     result
 }
 
+/// Reads a mesh from a file.
+/// 
+/// This function reads a mesh from a file and returns a new `Mesh` instance.
+/// It supports reading from both serialized mesh files (with .mesh extension) and INP files.
+/// 
+/// # Arguments
+/// * `filename`: The path to the file containing the mesh data. .mesh or .inp
+/// 
+/// # Returns
+/// A new `Mesh` instance.
+pub fn read_file(filename: &str) -> Mesh {
 
-pub fn read_file(filename: &str) -> Mesh { //read mesh from .inp file re-index from zero
-
-    //if it contains .mesh then use seralized read
     if filename.contains(".mesh") {
+        info!("Reading mesh from serialized file: {}", filename);
         return Mesh::load(filename);
     }
 
     //panic of .inp or empty
-    if filename.is_empty() { panic!("No mesh file specified"); }
+    if filename.is_empty() { 
+        error!("No mesh file specified");
+        panic!("No mesh file specified"); 
+    }
 
-    println!("🕸️  Reading mesh from file : {} 🕸️", filename);
+    info!("Reading mesh from file: {}", filename);
 
     let mut mesh = Mesh::empty();
     let lines = read_lines(filename);
@@ -148,5 +161,6 @@ pub fn read_file(filename: &str) -> Mesh { //read mesh from .inp file re-index f
             _ => continue,
         }
     }
+    debug!("Finished reading mesh file");
     mesh
 }
