@@ -1,12 +1,13 @@
+use log::{debug, info, trace};
 use nalgebra::DMatrix;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
-use log::{info, debug, trace};
 
 use crate::bc::condition::BoundaryCondition;
 use crate::elements::base_element::{BaseElement, ElementFields};
 use crate::io::matrix_writer::{write_hashmap_sparse_matrix, write_vector};
+use crate::mesh::Mesh;
 use crate::node::Node;
 use crate::solver::{direct_choslky, direct_solve};
 
@@ -26,14 +27,18 @@ pub struct Simulation {
     #[serde(skip, default = "HashMap::new")]
     pub fixed_global_nodal_values: HashMap<usize, f64>,
     pub dofs: usize,
-    pub keywords: Keywords
+    pub keywords: Keywords,
 }
-
 
 impl fmt::Display for Simulation {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Simulation [NodeCount: {}, ElementCount: {}, DOFs: {}]", 
-               self.nodes.len(), self.elements.len(), self.dofs)
+        write!(
+            f,
+            "Simulation [NodeCount: {}, ElementCount: {}, DOFs: {}]",
+            self.nodes.len(),
+            self.elements.len(),
+            self.dofs
+        )
     }
 }
 
@@ -73,6 +78,23 @@ impl Simulation {
         }
     }
 
+    //create from array of nodes and elements
+    pub fn from_arrays(nodes: Vec<Node>, elements: Vec<Box<dyn BaseElement>>, dofs: usize) -> Self {
+        let mut simulation = Simulation::new();
+        simulation.set_dofs(dofs);
+        for node in nodes {
+            simulation.add_node(node);
+        }
+        for element in elements {
+            simulation.add_element(element);
+        }
+        simulation
+    }
+    pub fn from_mesh(mesh: &Mesh, dofs: usize) -> Self {
+        let elements = mesh.convert_to_elements();
+        let nodes = mesh.convert_to_nodes();
+        Simulation::from_arrays(nodes, elements, dofs)
+    }
     pub fn get_global_index(&self, node_id: usize, dof: usize) -> usize {
         node_id * self.dofs + dof
     }
@@ -172,7 +194,7 @@ impl Simulation {
         self.get_element(id).unwrap().compute_stiffness(&self)
     }
 
-    pub fn compute_all_element_stiffness(&mut self){
+    pub fn compute_all_element_stiffness(&mut self) {
         for i in 0..self.elements.len() {
             self.set_element_stiffness(i, self.compute_element_stiffness(i));
         }
@@ -207,7 +229,10 @@ impl Simulation {
                 }
             }
         }
-        let extra_stiffness = self.keywords.get_single_float("EXTRA_STIFFNESS").unwrap_or(1e12);
+        let extra_stiffness = self
+            .keywords
+            .get_single_float("EXTRA_STIFFNESS")
+            .unwrap_or(1e12);
         for (g_index, value) in specified_bc {
             let mut v = global_stiffness_matrix[&(g_index, g_index)];
             v += extra_stiffness;
@@ -238,7 +263,7 @@ impl Simulation {
 
         info!("Solving system");
         let u = direct_solve(&global_stiffness_matrix, &global_force);
-        
+
         info!("Performing post-solve computations");
         //populate node displacements
         for node in self.nodes_mut() {
@@ -291,19 +316,6 @@ impl Simulation {
         // println!("{:?}", self.node_feilds);
     }
 
-    //create from array of nodes and elements
-    pub fn from_arrays(nodes: Vec<Node>, elements: Vec<Box<dyn BaseElement>>, dofs: usize) -> Self {
-        let mut simulation = Simulation::new();
-        simulation.set_dofs(dofs);
-        for node in nodes {
-            simulation.add_node(node);
-        }
-        for element in elements {
-            simulation.add_element(element);
-        }
-        simulation
-    }
-
     pub fn compute_element_properties(&self, id: usize) -> ElementFields {
         let element = self.get_element(id).unwrap();
         element.compute_element_nodal_properties(&self)
@@ -322,7 +334,10 @@ impl Simulation {
         }
 
         debug!("Load Vector Size: {}", self.load_vector.len());
-        debug!("Fixed Nodal Values: {}", self.fixed_global_nodal_values.len());
+        debug!(
+            "Fixed Nodal Values: {}",
+            self.fixed_global_nodal_values.len()
+        );
 
         // Print element types and counts
         let mut element_types = std::collections::HashMap::new();

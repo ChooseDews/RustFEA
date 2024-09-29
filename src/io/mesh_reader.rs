@@ -3,14 +3,30 @@ use std::fs::{read_to_string, canonicalize};
 use std::collections::HashMap;
 use crate::mesh::{ElementGroup, Mesh, MeshElement, MeshNode, NodeGroup};
 use log::{info, debug, trace, error};
+use std::io::{BufReader, Read, BufRead};
+use std::path::Path;
+use std::fs::File;
+use xz2::read::XzDecoder;
+
+fn get_reader(filename: &str) -> BufReader<Box<dyn Read>>{
+    let file_extension = Path::new(filename).extension().expect("Issue parsing file extension").to_str().unwrap();
+    let file = File::open(filename).unwrap();
+    let reader: Box<dyn Read> = match file_extension {
+        "inp" => Box::new(file),
+        "xz" => Box::new(XzDecoder::new(file)),
+        _ => panic!("Unsupported file extension: {}", file_extension),
+    };
+    BufReader::new(reader)
+}
 
 //naive method but okay for the size of meshes
 fn read_lines(filename: &str) -> Vec<String> {
     let abs_path = canonicalize(filename).unwrap();
     let abs_path = abs_path.to_str().unwrap();
     let mut result = Vec::new();
-    for line in read_to_string(abs_path).unwrap().lines() {
-        result.push(line.to_string())
+    let reader = get_reader(filename);
+    for line in reader.lines() {
+        result.push(line.unwrap());
     }
     result
 }

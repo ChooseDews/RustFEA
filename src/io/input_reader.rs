@@ -40,11 +40,9 @@ impl Keywords {
             values: Vec::new()
         }
     }
-    /// add a keyword to the keywords
     pub fn add_keyword(&mut self, keyword: String, values: Vec<String>) {
         self.values.push(Keyword { keyword: keyword.to_uppercase(), values });
     }
-    /// get the values of the first instance of a keyword
     pub fn get_keyword(&self, keyword: &str) -> Option<&Keyword> {
         self.values.iter().find(|k| k.keyword == keyword.to_uppercase())
     }

@@ -31,12 +31,20 @@ impl Project {
         let (keywords, simulations, meshes) = read_simulation_file(file_path).unwrap();
         Project { keywords, simulations, meshes }
     }
+
+    pub fn new(simulation: Simulation, mesh: Mesh) -> Self {
+        Project { keywords: Keywords::new(), simulations: vec![simulation], meshes: vec![mesh] }
+    }
     /// Saves the project to a file via serialization.
     pub fn save(&self) -> String {
         let output = self.keywords.get_single_value("OUTPUT").expect("No output file specified");
-        info!("Saving project to {}", output);
-        seralized_write(&output, self);
+        self.save_to_file(output.as_str());
         output
+    }
+
+    pub fn save_to_file(&self, file_path: &str) {
+        info!("Saving project to {}", file_path);
+        seralized_write(file_path, self);
     }
     /// Loads a project from a file and deserializes it to a Project struct.
     pub fn load(file_path: &str) -> Self {

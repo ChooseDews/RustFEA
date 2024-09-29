@@ -28,3 +28,8 @@ opt-level = 3
 [lints.rust]
 unused = "allow"
 non_snake_case = "allow" #nice for fea vars
+
+
+[[test]]
+name = "integration_tests"
+path = "test/main.rs"
