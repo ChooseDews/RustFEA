@@ -5,3 +5,4 @@
 - [ ] add an explict solving scheme
 - [ ] Shell elements
 - [ ] contact xD
+- [ ] Switch config file to use toml format
