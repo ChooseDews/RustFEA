@@ -91,6 +91,10 @@ impl Material {
         C
     }
 
+    pub fn get_density(&self) -> f64 {
+        self.density
+    }
+
     //Aluminum 6061-T6
     pub fn aluminum() -> Self {
         Material {
@@ -111,10 +115,19 @@ pub trait BaseElement {
     fn get_shape_functions(&self, xi: f64, eta: f64, zeta: f64) -> DVector<f64>;
     fn get_shape_derivatives(&self, xi: f64, eta: f64, zeta: f64) -> DMatrix<f64>;
     fn get_global_position(&self, n: &DVector<f64>, simulation: &Simulation) -> na::Vector3<f64>;
+
+
     fn compute_stiffness(&self, simulation: &Simulation) -> DMatrix<f64>;
     fn get_stiffness(&self) -> &DMatrix<f64>;
     fn set_stiffness(&mut self, stiffness: DMatrix<f64>);
-    fn compute_force(&self, simulation: &Simulation) -> DVector<f64>;
+
+    fn compute_mass(&self, simulation: &Simulation) -> DMatrix<f64>;
+    fn get_mass(&self) -> &DMatrix<f64>;
+    fn set_mass(&mut self, mass: DMatrix<f64>);
+    fn set_lumped_mass(&mut self, mass: &DMatrix<f64>) -> f64;
+    fn get_lumped_mass(&self) -> &Vec<f64>;
+
+
     fn compute_jacobian_matrix(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DMatrix<f64>;
     fn get_x(&self, simulation: &Simulation) -> DMatrix<f64>;
     fn get_u(&self, simulation: &Simulation) -> DVector<f64>;
@@ -124,4 +137,10 @@ pub trait BaseElement {
     // fn compute_volume(&self, simulation: &Simulation) -> f64;
     fn compute_element_nodal_properties(&self, simulation: &Simulation) -> ElementFields;
     fn type_name(&self) -> &'static str;
+
+    //explicit stuff
+    fn compute_force(&self, simulation: &Simulation) -> DVector<f64>;
+    // fn step_explicit(&mut self, simulation: &Simulation, force: DVector<f64>, dt: f64); //self modification
+
+
 }

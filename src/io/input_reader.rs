@@ -71,6 +71,15 @@ impl Keywords {
         None
     }
 
+    pub fn get_single_int(&self, keyword: &str) -> Option<i32> {
+        if let Some(keyword) = self.values.iter().find(|k| k.keyword == keyword.to_uppercase()) {
+            if keyword.values[0].parse::<i32>().is_ok() {
+                return Some(keyword.values[0].parse::<i32>().unwrap());
+            }
+        }
+        None
+    }
+
     pub fn get_keyword_values_as_floats(&self, keyword: &str) -> Option<Vec<f64>> {
         if let Some(keyword) = self.values.iter().find(|k| k.keyword == keyword.to_uppercase()) {
             return Some(keyword.values.iter().map(|s| s.parse::<f64>().unwrap()).collect());

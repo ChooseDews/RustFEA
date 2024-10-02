@@ -1,16 +1,19 @@
-
-
-
-
 NAME BAR Simulation
-MESH_FILE ./example_input_bar.inp #example comment
+MESH_FILE ./meshes/bar.inp
+
+SOLVE_METHOD explicit
+TIME_STEP 0.00001
+TIME_STEPS 20000
+#PRINT_STEPS 10000000
+VTK_SAVE_STEPS 500
+OUTPUT_VTK ./temp/bar/bar.vtk
+
 #DOF 3
 #Boundary Conditions
-fixed_bc free_end -0.2 _ _
+load_bc free_end -1000.0 0 0
 fixed_bc fixed_end 0 0 0
 #Material
 MATERIAL 1 200000 0.3
 #Output
 OUTPUT ./temp/simple_bar_3d.json.xz
-OUTPUT_VTK ./temp/simple_bar_3d.vtk
 

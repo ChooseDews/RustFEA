@@ -11,9 +11,12 @@ mod bc;
 
 use std::time::{SystemTime, UNIX_EPOCH};
 use io::file::seralized_write;
+use env_logger::Env;
 use log::{info, debug, error};
 
 fn main() {
+    env_logger::init_from_env(Env::default().default_filter_or("info"));
+    println!("Hello, world!");  
     // Example usage
     // let mut node_instance = node::Node::new(1, 0.0, 0.0, 0.0);
     // println!("Node before displacement: {:?}", node_instance);

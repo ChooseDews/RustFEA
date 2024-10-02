@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use crate::node::Node;
 use crate::elements::{ BaseElement, BrickElement, Material };
 use serde::{Serialize, Deserialize};
-use crate::io::file::seralized_read;
+use crate::io::file::{seralized_read, seralized_write};
 use std::fmt;
 use log::{debug, info, trace};
 #[derive(Debug, Serialize, Deserialize)]
@@ -102,28 +102,32 @@ impl Mesh {
         mesh
     }
 
+    pub fn save(&self, filename: &str) {
+        seralized_write(filename, &self);
+    }
+
     pub fn get_nodes_in_group(&self, group_name: &str) -> Vec<usize> {
         let group = self.node_groups.get(group_name).expect(&format!("Node group: {} not found in mesh", group_name));
         group.nodes.clone()
     }
 
     //curve with sin(x) for fun
-    pub fn curve_func(node: &MeshNode) -> Vec<f64> {
-        let x = node.coordinates[0];
-        let y = node.coordinates[1];
-        let z = node.coordinates[2];
+    pub fn half_sine_func(node: &Vec<f64>) -> Vec<f64> {
+        let x = node[0];
+        let y = node[1];
+        let z = node[2];
         vec![x, y + 0.5 * z.sin(), z]
     }
 
-    pub fn apply_func_to_nodel_positions(&mut self, func: &dyn Fn(&MeshNode) -> Vec<f64>) {
+    pub fn apply_func_to_nodel_positions(&mut self, func: &dyn Fn(&Vec<f64>) -> Vec<f64>) {
         for node in self.nodes.values_mut() {
-            let new_pos = func(&node);
+            let new_pos = func(&node.coordinates);
             node.coordinates = new_pos;
         }
     }
 
     pub fn apply_func(&mut self) {
-        self.apply_func_to_nodel_positions(&Mesh::curve_func);
+        self.apply_func_to_nodel_positions(&Mesh::half_sine_func);
     }
 
     pub fn print_info(&self) {

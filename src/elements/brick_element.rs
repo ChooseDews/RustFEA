@@ -15,12 +15,20 @@ pub struct BrickElement {
     material: Material,
     #[serde(skip, default = "default_deformation_gradient")]
     deformation_gradient: DMatrix<f64>, // ... other properties specific to the 8-node brick element
-    #[serde(skip, default = "default_stiffness")]
+    #[serde(skip, default = "default_zero_matrix")]
     stiffness: DMatrix<f64>,
+    #[serde(skip, default = "default_zero_matrix")]
+    mass: DMatrix<f64>,
+    #[serde(skip, default = "Vec::new")]//lumped mass matrix
+    lumped_mass: Vec<f64>
 }
 
 fn default_deformation_gradient() -> DMatrix<f64> {
     DMatrix::<f64>::identity(3, 3)
+}
+// Add this function outside the struct
+fn default_zero_matrix() -> DMatrix<f64> {
+    DMatrix::zeros(24, 24)
 }
 
 impl BrickElement {
@@ -35,7 +43,9 @@ impl BrickElement {
             connectivity,
             material,
             deformation_gradient: DMatrix::<f64>::identity(3, 3),
-            stiffness: default_stiffness(),
+            stiffness: default_zero_matrix(),
+            mass: default_zero_matrix(),
+            lumped_mass: Vec::new(),
         }
     }
 
@@ -219,6 +229,8 @@ impl BaseElement for BrickElement {
         //use the gauss quadrature to compute the stiffness matrix
         K
     }
+
+
     fn get_stiffness(&self) -> &DMatrix<f64> {
         &self.stiffness
     }
@@ -227,11 +239,55 @@ impl BaseElement for BrickElement {
         self.stiffness = stiffness;
     }
 
-    fn compute_force(&self, _simulation: &Simulation) -> DVector<f64> {
-        //return 8*3 zero vector
-        let f = DVector::<f64>::zeros(24);
-        return f;
+    fn compute_mass(&self, simulation: &Simulation) -> DMatrix<f64> {
+        //compute the mass matrix [M] = intergrate(density * N^T * N * detJ * weight)
+        let mut M = DMatrix::<f64>::zeros(8, 8);
+        let gauss_points = BrickElement::get_gauss_points();
+        let density = self.material.density;
+        for (xi, eta, zeta, weight) in gauss_points {
+            let J = self.compute_jacobian_matrix(xi, eta, zeta, &simulation);
+            let detJ: f64 = J.determinant();
+            let N = self.get_shape_functions(xi, eta, zeta);
+            let N_T = N.transpose();
+            let M_point = density * N * N_T * detJ * weight;
+            M += M_point;
+        }
+        M
     }
+
+    fn set_lumped_mass(&mut self, mass: &DMatrix<f64>) -> f64 {
+        //sum rows and save to lumped_mass
+        let mut total_mass = 0.0;
+        for i in 0..8 {
+            let row_sum: f64 = mass.row(i).sum();
+            self.lumped_mass.push(row_sum);
+            total_mass += row_sum;
+        }
+        total_mass
+    }
+
+    fn get_lumped_mass(&self) -> &Vec<f64> {
+        &self.lumped_mass
+    }
+
+    fn get_mass(&self) -> &DMatrix<f64> {
+        &self.mass  
+    }
+
+    fn set_mass(&mut self, mass: DMatrix<f64>) {
+        self.mass = mass;
+    }
+
+
+
+
+
+
+
+
+
+
+
 
 
     //TODO: test and implement:
@@ -251,6 +307,15 @@ impl BaseElement for BrickElement {
         let strain = B * u;
         strain
     }
+
+    fn compute_force(&self, simulation: &Simulation) -> DVector<f64> {
+        //internal forces are [K_e]{u_e} 
+        let K_e = self.get_stiffness();
+        let u_e = self.get_u(simulation);
+        let f_e = K_e * u_e;
+        f_e //expect [24x1]
+    }
+
 
     fn compute_element_nodal_properties(&self, simulation: &Simulation) -> ElementFields {
         trace!("Computing element nodal properties for brick element");
@@ -285,9 +350,4 @@ impl BaseElement for BrickElement {
     fn type_name(&self) -> &'static str {
         "BrickElement"
     }
-}
-
-// Add this function outside the struct
-fn default_stiffness() -> DMatrix<f64> {
-    DMatrix::zeros(24, 24)
 }

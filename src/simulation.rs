@@ -1,8 +1,9 @@
 use log::{debug, info, trace};
-use nalgebra::DMatrix;
+use nalgebra::{DMatrix, DVector};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
+use std::path::Path;
 
 use crate::bc::condition::BoundaryCondition;
 use crate::elements::base_element::{BaseElement, ElementFields};
@@ -12,6 +13,7 @@ use crate::node::Node;
 use crate::solver::{direct_choslky, direct_solve};
 
 use crate::io::input_reader::Keywords;
+use crate::io::vtk_writer::write_vtk;
 
 #[derive(Serialize, Deserialize)]
 pub struct Simulation {
@@ -95,7 +97,12 @@ impl Simulation {
         let nodes = mesh.convert_to_nodes();
         Simulation::from_arrays(nodes, elements, dofs)
     }
+
     pub fn get_global_index(&self, node_id: usize, dof: usize) -> usize {
+        node_id * self.dofs + dof
+    }
+
+    pub fn get_global_index_mut(&mut self, node_id: usize, dof: usize) -> usize {
         node_id * self.dofs + dof
     }
 
@@ -200,6 +207,25 @@ impl Simulation {
         }
     }
 
+    pub fn compute_element_mass(&self, id: usize) -> DMatrix<f64> {
+        self.get_element(id).unwrap().compute_mass(&self)
+    }
+
+    pub fn set_element_mass(&mut self, id: usize, mass: DMatrix<f64>) {
+        self.get_element_mut(id).unwrap().set_mass(mass);
+    }
+
+    pub fn compute_all_element_mass(&mut self) {
+        let mut total_mass = 0.0;
+        for i in 0..self.elements.len() {
+            let mass = self.compute_element_mass(i);
+            let element = self.get_element_mut(i).unwrap();
+            total_mass += element.set_lumped_mass(&mass);
+            element.set_mass(mass);
+        }
+        println!("Total mass: {}", total_mass);
+    }
+
     pub fn assemble(&mut self) -> (HashMap<(usize, usize), f64>, Vec<f64>) {
         debug!("Starting assembly process");
         let mut global_stiffness_matrix = HashMap::new();
@@ -208,6 +234,7 @@ impl Simulation {
         let mut global_force = self.get_global_force();
         let specified_bc = self.get_specified_bc();
         self.compute_all_element_stiffness();
+        self.compute_all_element_mass();
 
         trace!("Assembling global stiffness matrix");
         for i in 0..self.elements.len() {
@@ -246,31 +273,159 @@ impl Simulation {
         (global_stiffness_matrix, global_force)
     }
 
-    pub fn solve_explicit(&mut self) {
-        let dt = self.keywords.get_single_float("TIMESTEP").unwrap_or(1.0);
-        let total_time = self.keywords.get_single_float("TOTAL_TIME").unwrap_or(1.0);
-        let time_steps = (total_time / dt) as usize;
-
-        for step in 0..time_steps {
-            println!("Time Step: {}", step);
+    pub fn compute_global_mass_matrix_diagonal(&self) -> DVector<f64> {
+        let total_dofs = self.nodes.len() * self.dofs;
+        let mut global_mass_diagonal = DVector::zeros(total_dofs);
+        for element in &self.elements {
+            let element_mass = element.get_lumped_mass();
+            let connectivity = element.get_connectivity();
+            for (local_index, &node_id) in connectivity.iter().enumerate() {
+                for dof in 0..self.dofs {
+                    let global_index = self.get_global_index(node_id, dof);
+                    global_mass_diagonal[global_index] += element_mass[local_index];
+                }
+            }
         }
+        global_mass_diagonal
+    }
+
+    pub fn compute_force_vector(&self) -> DVector<f64> {
+        let mut force_vector = DVector::zeros(self.nodes.len() * self.dofs);
+        for element in &self.elements {
+            let force = element.compute_force(&self);
+            let connectivity = element.get_connectivity();
+            for (local_index, &node_id) in connectivity.iter().enumerate() {
+                for dof in 0..self.dofs {
+                    let global_index = self.get_global_index(node_id, dof);
+                    force_vector[global_index] += force[local_index * self.dofs + dof];
+                }
+            }
+        }
+        force_vector
+    }
+
+
+    pub fn displacement_vector(&mut self) -> DVector<f64> {
+        let dofs = self.dofs;
+        let mut displacement_vector = DVector::zeros(self.nodes.len() * dofs);
+        for node in self.nodes.iter() {
+            for dof in 0..dofs {
+                let global_index = self.get_global_index(node.id, dof);
+                displacement_vector[global_index] = node.displacement[dof];
+            }
+        }
+        displacement_vector
+    }
+
+    pub fn solve_explicit(&mut self) {
+
+        let output_vtk = self.keywords.get_single_value("OUTPUT_VTK").expect("No output vtk specified");
+        let output_vtk_dir = Path::new(&output_vtk).parent().unwrap();
+        if !output_vtk_dir.exists() {
+            std::fs::create_dir_all(output_vtk_dir).expect("Failed to create output directory");
+        }
+
+        let dt = self.keywords.get_single_float("TIME_STEP").unwrap_or(1.0);
+        let time_steps = self.keywords.get_single_int("TIME_STEPS").unwrap_or(100);
+        let print_steps = self.keywords.get_single_int("PRINT_STEPS").unwrap_or(0);
+        let vtk_save_steps = self.keywords.get_single_int("VTK_SAVE_STEPS").unwrap_or(0); //0 means no vtk saving
+
+        //we will not assemble the global stiffness matrix
+        let dof = 3;
+        self.assemble_global_force(); //populates global force and fixed global nodal values
+        let specified_bc = self.get_specified_bc();
+        self.compute_all_element_stiffness();
+        self.compute_all_element_mass();
+        let global_mass_matrix_diagonal = self.compute_global_mass_matrix_diagonal();
+        for i in 0..self.nodes.len() {
+            self.get_node_mut(i)
+                .expect("Node not found")
+                .set_mass(global_mass_matrix_diagonal[i]);
+        }
+        //start doing the time marching
+        let external_force = DVector::from_vec(self.load_vector.clone());
+        let mut u = self.displacement_vector();
+        let mut u_dot = DVector::zeros(self.nodes.len() * self.dofs);
+        let mut u_half_dot = DVector::zeros(self.nodes.len() * self.dofs);
+
+        let mut i = 0;
+        let mut t = 0.0;
+        while i < time_steps {
+            // Compute forces
+            let internal_force = self.compute_force_vector();
+            let residual_force = &external_force - &internal_force;
+
+            // Update velocity and position
+            let u_dotdot = residual_force.component_div(&global_mass_matrix_diagonal);
+            u_half_dot = &u_dot + 0.5 * dt * &u_dotdot;
+            u += dt * &u_half_dot;
+
+            // Apply boundary conditions
+            for (global_index, value) in &specified_bc {
+                u[*global_index] = *value;
+                u_dot[*global_index] = 0.0;
+                u_half_dot[*global_index] = 0.0;
+            }
+
+            // Update nodal displacements
+            for node in self.nodes_mut() {
+                let node_id = node.id;
+                node.set_displacement(u[node_id * 3], u[node_id * 3 + 1], u[node_id * 3 + 2]);
+            }
+
+            // Compute new forces and update velocity
+            let new_internal_force = self.compute_force_vector();
+            let new_residual_force = &external_force - &new_internal_force;
+            let new_u_dotdot = new_residual_force.component_div(&global_mass_matrix_diagonal);
+            u_dot = &u_half_dot + 0.5 * dt * &new_u_dotdot;
+            u_dot *= 0.9995;
+
+            
+            if vtk_save_steps > 0 && i % vtk_save_steps == 0 {
+                self.compute_result_feilds();
+                let output_vtk = output_vtk.replace(".vtk", &format!("_step_{}.vtk", i));
+                write_vtk(output_vtk.as_str(), &self);
+            }
+            if print_steps > 0 && i % print_steps == 0 {
+                println!("[{}] Time: {}", i, t);
+                let res_vals: Vec<String> = residual_force.iter().map(|x| x.to_string()).collect();
+                println!("Residual force: {}", res_vals.join(", "));
+                let u_vals: Vec<String> = u.iter().map(|x| x.to_string()).collect();
+                println!("\n Displacment: {}", u_vals.join(", "));
+            }
+            i += 1;
+            t += dt;
+        }
+
+        self.compute_result_feilds();
     }
 
     pub fn solve(&mut self) {
+        let method = self.keywords.get_single_value("SOLVE_METHOD").unwrap_or("direct".to_string());
+        match method.as_str() {
+            "direct" => self.solve_direct(),
+            "explicit" => self.solve_explicit(),
+            _ => panic!("Invalid solve method"),
+        }
+    }
+
+    pub fn solve_direct(&mut self) {
+        //direct solve
         info!("Starting simulation solve process");
         debug!("Assembling system");
         let (mut global_stiffness_matrix, mut global_force) = self.assemble();
-
         info!("Solving system");
         let u = direct_solve(&global_stiffness_matrix, &global_force);
-
         info!("Performing post-solve computations");
         //populate node displacements
         for node in self.nodes_mut() {
             let node_id = node.id;
             node.set_displacement(u[node_id * 3], u[node_id * 3 + 1], u[node_id * 3 + 2])
         }
+        self.compute_result_feilds();
+    }
 
+    pub fn compute_result_feilds(&mut self) {
         let element_count = self.elements.len();
 
         //average element feilds for each node
@@ -301,7 +456,6 @@ impl Simulation {
         }
 
         self.node_feilds = HashMap::new();
-
         //avg node_feilds
         for feild in &feilds {
             let node_avg_values = node_feilds.get_mut(feild).unwrap();
@@ -312,8 +466,6 @@ impl Simulation {
             self.node_feilds
                 .insert(feild.to_string(), node_feilds_value);
         }
-
-        // println!("{:?}", self.node_feilds);
     }
 
     pub fn compute_element_properties(&self, id: usize) -> ElementFields {

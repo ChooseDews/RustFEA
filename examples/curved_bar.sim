@@ -2,11 +2,11 @@ NAME BAR Simulation
 DOF 3
 
 #MESH
-MESH_FILE ./curved_bar_big.inp #example comment
+MESH_FILE ./meshes/curved_bar_big.inp #example comment
 
 #Boundary Conditions
-fixed_bc end1 -0.1 -0.1 _
-fixed_bc end2 0 0 0
+fixed_bc side1 -0.1 -0.1 _
+fixed_bc side2 0 0 0
 
 #Material
 MATERIAL 1 200000 0.3

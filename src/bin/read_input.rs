@@ -8,9 +8,8 @@ use env_logger::Builder;
 #[derive(Parser, Debug)]
 #[command(about="Import a .sim file", long_about=None)]
 struct Args {
-    #[arg(short, long, help="Input file name (.sim file)", required=true)]
+    #[arg(value_name = "Input file name (.sim file)")]
     input: String,
-
     #[arg(short, long, help="Verbose output", action = clap::ArgAction::Count)]
     verbose: u8,
 }
@@ -31,4 +30,8 @@ fn main() {
     project.get_simulation().solve();
     project.export_vtk();
     project.save();
+
+
+
+    
 }

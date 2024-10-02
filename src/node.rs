@@ -12,7 +12,8 @@ pub struct Node {
     #[serde(skip, default = "Vector3::zeros")]
     pub velocity: Vector3<f64>,
     #[serde(skip, default = "Vector3::zeros")]
-    pub acceleration: Vector3<f64>
+    pub acceleration: Vector3<f64>,
+    pub mass: f64,
 }
 
 /// Implementation of the `Node` struct.
@@ -33,6 +34,7 @@ impl Node {
             displacement: Vector3::new(0.0, 0.0, 0.0),
             velocity: Vector3::new(0.0, 0.0, 0.0),
             acceleration: Vector3::new(0.0, 0.0, 0.0),
+            mass: 1.0,
         }
     }
 
@@ -46,6 +48,10 @@ impl Node {
     /// * `uz`: The displacement in the z-direction.
     pub fn set_displacement(&mut self, ux: f64, uy: f64, uz: f64) {
         self.displacement = Vector3::new(ux, uy, uz);
+    }
+
+    pub fn set_mass(&mut self, mass: f64) {
+        self.mass = mass;
     }
 
     /// This function calculates the norm of the displacement vector to get the total displacement.

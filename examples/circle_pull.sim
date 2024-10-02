@@ -2,7 +2,7 @@ NAME BAR Simulation
 DOF 3
 
 #MESH
-MESH_FILE ./circle_pull.inp #example comment
+MESH_FILE meshes/circle_pull.inp #example comment
 
 #Boundary Conditions
 fixed_bc side1 0.05 0 _
@@ -13,8 +13,8 @@ fixed_bc top _ _ 0
 MATERIAL 1 200000 0.3
 
 #Output
-OUTPUT ./temp/circle_pull.bin.xz
-OUTPUT_VTK ./temp/circle_pull.vtk
+OUTPUT temp/circle_pull.bin.xz
+OUTPUT_VTK temp/circle_pull.vtk
 
 
 #SOLVER SETTINGS

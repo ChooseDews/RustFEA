@@ -2,18 +2,25 @@ NAME BAR Simulation
 DOF 3
 
 #MESH
-MESH_FILE ./tube.inp #example comment
+MESH_FILE ./meshes/tube.inp #example comment
+
+SOLVE_METHOD explicit
+TIME_STEP 0.00001
+TIME_STEPS 100000
+#PRINT_STEPS 10000000
+VTK_SAVE_STEPS 500
+OUTPUT_VTK ./temp/tube/tube_explicit.vtk
+
 
 #Boundary Conditions
-fixed_bc end1 _ 0.1 0.1
-fixed_bc end2 _ 0 0
+load_bc end1 10000 10000 0
+fixed_bc end2 0 0 0
 
 #Material
 MATERIAL 1 200000 0.3
 
 #Output
 OUTPUT ./temp/tube.json.xz
-OUTPUT_VTK ./temp/tube.vtk
 
 
 #SOLVER SETTINGS

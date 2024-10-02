@@ -2,7 +2,7 @@ NAME BAR Simulation
 DOF 3
 
 #MESH
-MESH_FILE ./tube_curved.mesh.json.xz
+MESH_FILE ./meshes/tube_curved.mesh.bin.xz
 
 #Boundary Conditions
 fixed_bc end1 0.1 0.1 0.05
