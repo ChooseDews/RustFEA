@@ -27,7 +27,7 @@ fn main() {
     Builder::new().filter_level(log_level).init();
 
     let mut project = Project::from_input_file(&args.input);
-    project.get_simulation().solve();
+    project.solve();
     project.export_vtk();
     project.save();
 

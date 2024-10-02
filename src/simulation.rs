@@ -12,24 +12,24 @@ use crate::mesh::Mesh;
 use crate::node::Node;
 use crate::solver::{direct_choslky, direct_solve};
 
-use crate::io::input_reader::Keywords;
 use crate::io::vtk_writer::write_vtk;
-
+use crate::utilities::Keywords;
 #[derive(Serialize, Deserialize)]
 pub struct Simulation {
-    //mesh data
     pub nodes: Vec<Node>,
-    elements: Vec<Box<dyn BaseElement>>,
     pub node_feilds: HashMap<String, Vec<f64>>,
-    //boundary conditions
+    elements: Vec<Box<dyn BaseElement>>,
+
+    pub dofs: usize,
+    pub keywords: Keywords,
+    pub mesh: Mesh,
     pub boundary_conditions: Vec<Box<dyn BoundaryCondition>>,
-    //simulation data
+
     #[serde(skip, default = "Vec::new")]
     pub load_vector: Vec<f64>, //global force vector
     #[serde(skip, default = "HashMap::new")]
     pub fixed_global_nodal_values: HashMap<usize, f64>,
-    pub dofs: usize,
-    pub keywords: Keywords,
+
 }
 
 impl fmt::Display for Simulation {
@@ -77,6 +77,7 @@ impl Simulation {
             fixed_global_nodal_values: HashMap::new(),
             keywords: Keywords::new(),
             dofs: 3,
+            mesh: Mesh::empty(),
         }
     }
 
@@ -92,10 +93,18 @@ impl Simulation {
         }
         simulation
     }
-    pub fn from_mesh(mesh: &Mesh, dofs: usize) -> Self {
+
+
+    pub fn set_mesh(&mut self, mesh: Mesh) {
+        self.mesh = mesh;
+    }
+    
+    pub fn from_mesh(mesh: Mesh, dofs: usize) -> Self {
         let elements = mesh.convert_to_elements();
         let nodes = mesh.convert_to_nodes();
-        Simulation::from_arrays(nodes, elements, dofs)
+        let mut simulation = Simulation::from_arrays(nodes, elements, dofs);
+        simulation.set_mesh(mesh);
+        simulation
     }
 
     pub fn get_global_index(&self, node_id: usize, dof: usize) -> usize {
@@ -223,7 +232,7 @@ impl Simulation {
             total_mass += element.set_lumped_mass(&mass);
             element.set_mass(mass);
         }
-        println!("Total mass: {}", total_mass);
+        debug!("Total mass: {}", total_mass);
     }
 
     pub fn assemble(&mut self) -> (HashMap<(usize, usize), f64>, Vec<f64>) {
@@ -258,7 +267,7 @@ impl Simulation {
         }
         let extra_stiffness = self
             .keywords
-            .get_single_float("EXTRA_STIFFNESS")
+            .get_float("SOLVER_EXTRA_STIFFNESS")
             .unwrap_or(1e12);
         for (g_index, value) in specified_bc {
             let mut v = global_stiffness_matrix[&(g_index, g_index)];
@@ -319,16 +328,16 @@ impl Simulation {
 
     pub fn solve_explicit(&mut self) {
 
-        let output_vtk = self.keywords.get_single_value("OUTPUT_VTK").expect("No output vtk specified");
+        let output_vtk = self.keywords.get_string("OUTPUT_VTK").expect("No output vtk specified");
         let output_vtk_dir = Path::new(&output_vtk).parent().unwrap();
         if !output_vtk_dir.exists() {
             std::fs::create_dir_all(output_vtk_dir).expect("Failed to create output directory");
         }
 
-        let dt = self.keywords.get_single_float("TIME_STEP").unwrap_or(1.0);
-        let time_steps = self.keywords.get_single_int("TIME_STEPS").unwrap_or(100);
-        let print_steps = self.keywords.get_single_int("PRINT_STEPS").unwrap_or(0);
-        let vtk_save_steps = self.keywords.get_single_int("VTK_SAVE_STEPS").unwrap_or(0); //0 means no vtk saving
+        let dt = self.keywords.get_float("SOLVER_TIME_STEP").unwrap_or(1.0);
+        let time_steps = self.keywords.get_int("SOLVER_TIME_STEPS").unwrap_or(100);
+        let print_steps = self.keywords.get_int("SOLVER_PRINT_STEPS").unwrap_or(0);
+        let vtk_save_steps = self.keywords.get_int("SOLVER_VTK_SAVE_STEPS").unwrap_or(0); //0 means no vtk saving
 
         //we will not assemble the global stiffness matrix
         let dof = 3;
@@ -401,7 +410,7 @@ impl Simulation {
     }
 
     pub fn solve(&mut self) {
-        let method = self.keywords.get_single_value("SOLVE_METHOD").unwrap_or("direct".to_string());
+        let method = self.keywords.get_string("SOLVER_METHOD").unwrap_or("direct".to_string());
         match method.as_str() {
             "direct" => self.solve_direct(),
             "explicit" => self.solve_explicit(),

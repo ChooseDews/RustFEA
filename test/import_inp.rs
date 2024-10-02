@@ -2,6 +2,7 @@ use rust_fea::io::mesh_reader;
 use rust_fea::simulation::Simulation;
 use rust_fea::io::project::Project;
 use rust_fea::io::vtk_writer;
+use rust_fea::utilities::Keywords;
 
 #[test]
 fn import_inp() {
@@ -15,8 +16,8 @@ fn import_inp() {
 #[test]
 fn import_compressed_inp_save() {
     let mesh = mesh_reader::read_file("examples/meshes/example_tube.inp.xz");
-    let sim = Simulation::from_mesh(&mesh, 3);
-    let project = Project::new(sim, mesh);
+    let sim = Simulation::from_mesh(mesh, 3);
+    let project = Project::new(vec![sim], Keywords::new());
     let output_file = "examples/output/test_tube_out.bin.xz";
     project.save_to_file(output_file);
     assert!(std::path::Path::new(output_file).exists(), "Expected file to exist");
@@ -25,8 +26,8 @@ fn import_compressed_inp_save() {
 #[test]
 fn import_save_and_load() {
     let mesh = mesh_reader::read_file("examples/meshes/example_tube.inp.xz");
-    let sim = Simulation::from_mesh(&mesh, 3);
-    let mut project = Project::new(sim, mesh);
+    let sim = Simulation::from_mesh(mesh, 3);
+    let mut project = Project::new(vec![sim], Keywords::new());
     let output_file = "examples/output/test_tube_out_2.bin.xz";
     project.save_to_file(output_file);
     assert!(std::path::Path::new(output_file).exists(), "Expected file to exist");
@@ -41,7 +42,7 @@ fn import_save_and_load() {
 #[test]
 fn write_vtk() {
     let mesh = mesh_reader::read_file("examples/meshes/example_tube.inp.xz");
-    let sim = Simulation::from_mesh(&mesh, 3);
+    let sim = Simulation::from_mesh(mesh, 3);
     vtk_writer::write_vtk("examples/output/test_tube_out.vtk", &sim);
     assert!(std::path::Path::new("examples/output/test_tube_out.vtk").exists(), "Expected file to exist");
 }
