@@ -32,12 +32,13 @@ dof = 3
 
 [sim.solver]
 method = "explicit"
-time_step = 0.00001
+# time_step = 0.000011
 time_steps = 20000
 vtk_save_steps = 500
 
 [sim.output]
 vtk = "examples/output/tube/tube_explicit.vtk"
+clear_directory = true
 
 [[sim.boundary_conditions]]
 type = "load"
@@ -48,8 +49,3 @@ values = [20000, 20000, 0]
 type = "fixed"
 name = "end2"
 values = [0, 0, 0]
-
-[[sim.materials]]
-id = 1
-youngs_modulus = 200000
-poissons_ratio = 0.3

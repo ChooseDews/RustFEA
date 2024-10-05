@@ -60,7 +60,12 @@ impl Keywords {
     }
     pub fn get_float(&self, keyword: &str) -> Option<f64> {
         if let Some(keyword) = self.values.iter().find(|k| k.keyword == keyword.to_uppercase()) {
-            return Some(keyword.value.as_float().unwrap());
+            //if int convert to float
+            if keyword.value.is_integer() {
+                return Some(keyword.value.as_integer().unwrap() as f64);
+            }else if keyword.value.is_float() {
+                return Some(keyword.value.as_float().unwrap());
+            }
         }
         None
     }
@@ -73,6 +78,12 @@ impl Keywords {
     pub fn get_string(&self, keyword: &str) -> Option<String> {
         if let Some(keyword) = self.values.iter().find(|k| k.keyword == keyword.to_uppercase()) {
             return Some(keyword.value.as_str().unwrap().to_string());
+        }
+        None
+    }
+    pub fn get_bool(&self, keyword: &str) -> Option<bool> {
+        if let Some(keyword) = self.values.iter().find(|k| k.keyword == keyword.to_uppercase()) {
+            return Some(keyword.value.as_bool().unwrap());
         }
         None
     }

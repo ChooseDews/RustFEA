@@ -95,6 +95,10 @@ impl Material {
         self.density
     }
 
+    pub fn get_wave_speed(&self) -> f64 {
+        (self.youngs_modulus / self.density).sqrt()
+    }
+
     //Aluminum 6061-T6
     pub fn aluminum() -> Self {
         Material {

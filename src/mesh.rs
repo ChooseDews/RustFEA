@@ -20,6 +20,12 @@ impl MeshNode {
         }
         Node::new(n_id, self.coordinates[0], self.coordinates[1], self.coordinates[2])
     }
+    pub fn distance(&self, other: &MeshNode) -> f64 {
+        let dx = self.coordinates[0] - other.coordinates[0];
+        let dy = self.coordinates[1] - other.coordinates[1];
+        let dz = self.coordinates[2] - other.coordinates[2];
+        (dx * dx + dy * dy + dz * dz).sqrt()
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -139,6 +145,33 @@ impl Mesh {
             debug!("  -> {} - {} nodes", group.name, group.nodes.len());
         }
     }
+
+    //get closest pair of nodes
+    pub fn get_closest_nodes(&self) -> (usize, usize, f64) {
+        let mut min_dist = std::f64::MAX;
+        let mut closest_nodes = (0, 0, 0.0);
+        let nodes: Vec<(&usize, &MeshNode)> = self.nodes.iter().collect();
+        for (i, (&id1, node1)) in nodes.iter().enumerate() {
+            for (&id2, node2) in nodes[i+1..].iter() { //avoid duplicate pairs
+                let dist = node1.distance(node2);
+                if dist < min_dist {
+                    min_dist = dist;
+                    closest_nodes = (id1, id2, dist);
+                }
+            }
+        }
+        closest_nodes
+    }
+
+    //compute fundumental dt
+    pub fn compute_dt(&self, wave_speed: f64) -> f64 {
+        let (node1, node2, dist) = self.get_closest_nodes();
+        let dt = dist / wave_speed;
+        debug!("Closest nodes: {} and {} with distance {} and dt: {}", node1, node2, dist, dt);
+        dt
+    }
+
+
     /// Converts the mesh nodes to a vector of nodes.
     /// 
     /// This function iterates through the nodes in the mesh, converts each mesh node to a `Node` object,

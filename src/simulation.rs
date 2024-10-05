@@ -1,4 +1,4 @@
-use log::{debug, info, trace};
+use log::{debug, info, trace, warn};
 use nalgebra::{DMatrix, DVector};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -326,15 +326,33 @@ impl Simulation {
         displacement_vector
     }
 
-    pub fn solve_explicit(&mut self) {
-
+    pub fn prep_output_directory(&self) {
+        let clear_directory = self.keywords.get_bool("OUTPUT_CLEAR_DIRECTORY").unwrap_or(false);
         let output_vtk = self.keywords.get_string("OUTPUT_VTK").expect("No output vtk specified");
         let output_vtk_dir = Path::new(&output_vtk).parent().unwrap();
-        if !output_vtk_dir.exists() {
-            std::fs::create_dir_all(output_vtk_dir).expect("Failed to create output directory");
+        if !output_vtk_dir.exists(){
+            info!("Creating output directory: {}", output_vtk_dir.display());
+            std::fs::create_dir_all(output_vtk_dir).expect("Failed to create output directory")
         }
+        if clear_directory {
+            info!("Clearing output directory: {}", output_vtk_dir.display());
+            std::fs::remove_dir_all(output_vtk_dir).expect("Failed to clear output directory");
+            std::fs::create_dir_all(output_vtk_dir).expect("Failed to create output directory")
+        }
+    }
 
-        let dt = self.keywords.get_float("SOLVER_TIME_STEP").unwrap_or(1.0);
+    pub fn solve_explicit(&mut self) {
+
+        self.prep_output_directory();
+        let output_vtk = self.keywords.get_string("OUTPUT_VTK").expect("No output vtk specified");
+
+        //compute fundumental dt
+        let vel = self.get_element(0).unwrap().get_material().get_wave_speed();
+        let fundumental_dt = self.mesh.compute_dt(vel);
+        let dt = self.keywords.get_float("SOLVER_TIME_STEP").unwrap_or(fundumental_dt*0.75);
+        if dt > fundumental_dt {
+            warn!("Time step is greater than the fundumental dt: {} > {}", dt, fundumental_dt);
+        }
         let time_steps = self.keywords.get_int("SOLVER_TIME_STEPS").unwrap_or(100);
         let print_steps = self.keywords.get_int("SOLVER_PRINT_STEPS").unwrap_or(0);
         let vtk_save_steps = self.keywords.get_int("SOLVER_VTK_SAVE_STEPS").unwrap_or(0); //0 means no vtk saving
@@ -351,6 +369,8 @@ impl Simulation {
                 .expect("Node not found")
                 .set_mass(global_mass_matrix_diagonal[i]);
         }
+        let n = self.nodes.len() * self.dofs;
+        debug!("Steps: {}; dt: {}; DOF: {}", time_steps, dt, n);
         //start doing the time marching
         let external_force = DVector::from_vec(self.load_vector.clone());
         let mut u = self.displacement_vector();
@@ -372,8 +392,8 @@ impl Simulation {
             // Apply boundary conditions
             for (global_index, value) in &specified_bc {
                 u[*global_index] = *value;
-                u_dot[*global_index] = 0.0;
-                u_half_dot[*global_index] = 0.0;
+                u_dot[*global_index] = (value - u[*global_index]) / dt;
+                u_half_dot[*global_index] = u_dot[*global_index];
             }
 
             // Update nodal displacements
@@ -410,12 +430,15 @@ impl Simulation {
     }
 
     pub fn solve(&mut self) {
+        let start_time = std::time::Instant::now();
         let method = self.keywords.get_string("SOLVER_METHOD").unwrap_or("direct".to_string());
         match method.as_str() {
             "direct" => self.solve_direct(),
             "explicit" => self.solve_explicit(),
             _ => panic!("Invalid solve method"),
-        }
+        };
+        let duration = start_time.elapsed();
+        debug!("Finished Simulation Solve. Took: {:?}", duration);
     }
 
     pub fn solve_direct(&mut self) {

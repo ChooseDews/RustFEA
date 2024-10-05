@@ -1,8 +1,18 @@
 - [~] add tests for common elements and assemblies
 - [x] add nodal property outputs
-- [ ] Use better solver for Ax=b 
+- [ ] Use better solver for Ax=b. Upgrade to newest russell library
 - [ ] add intergrations with paraview?
-- [ ] add an explict solving scheme
-- [ ] Shell elements
-- [ ] contact xD
-- [ ] Switch config file to use toml format
+- [x] add an explict solving scheme
+- [ ] contact
+    - [ ] Multi-body handling -> Multi-body mesh -> some way to merge meshes together
+- [x] Switch config file to use toml format
+- [ ] New Boundary Conditions
+    - [ ] Pressure / Normal vector based BC
+    - [ ] Shear / Tangential vector based BC
+- [ ] New Element Types
+    - [ ] 3D 4 node tetrahedra
+    - [ ] Shell element
+- [ ] Generalized field handling
+- [ ] Body forces
+- [ ] Simple material input handling
+- [ ] Non-linear material handling
