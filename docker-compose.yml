@@ -1,0 +1,11 @@
+version: "3.8"
+
+services:
+  rust-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./src:/app/src    # Mount the local ./src directory to /app/src inside the container
+    ports:
+      - "8080:8080"       # If your app exposes ports, bind them here (adjust as necessary)
