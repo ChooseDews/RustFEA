@@ -1,7 +1,7 @@
 // written with gmsh with an export to .inp in mind
 use std::fs::{read_to_string, canonicalize};
 use std::collections::HashMap;
-use crate::mesh::{ElementGroup, Mesh, MeshElement, MeshNode, NodeGroup};
+use crate::mesh::{ElementGroup, MeshAssembly, MeshElement, MeshNode, NodeGroup};
 use log::{info, debug, trace, error};
 use std::io::{BufReader, Read, BufRead};
 use std::path::Path;
@@ -41,11 +41,11 @@ fn read_lines(filename: &str) -> Vec<String> {
 /// 
 /// # Returns
 /// A new `Mesh` instance.
-pub fn read_file(filename: &str) -> Mesh {
+pub fn read_file(filename: &str) -> MeshAssembly {
 
     if filename.contains(".mesh") {
         info!("Reading mesh from serialized file: {}", filename);
-        return Mesh::load(filename);
+        return MeshAssembly::load(filename);
     }
 
     //panic of .inp or empty
@@ -56,7 +56,7 @@ pub fn read_file(filename: &str) -> Mesh {
 
     info!("Reading mesh from file: {}", filename);
 
-    let mut mesh = Mesh::empty();
+    let mut mesh = MeshAssembly::empty();
     let lines = read_lines(filename);
 
     let mut current_block = -1; //0 = *NODE, 1 = *ELEMENT, 2 = *ELSET, 3 = *NSET
@@ -180,3 +180,17 @@ pub fn read_file(filename: &str) -> Mesh {
     debug!("Finished reading mesh file");
     mesh
 }
+
+
+pub fn read_file_single_body(filename: &str) -> MeshAssembly {
+    let mut mesh = read_file(filename);
+    mesh.single_body();
+    mesh
+}
+
+pub fn read_file_multiple_bodies(filename: &str, bodies: Vec<String>) -> MeshAssembly {
+    let mut mesh = read_file(filename);
+    mesh.multiple_bodies(bodies);
+    mesh
+}
+

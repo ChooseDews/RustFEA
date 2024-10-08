@@ -5,11 +5,11 @@ use std::collections::HashMap;
 use crate::io::file;
 use crate::simulation::Simulation;
 use crate::bc::{BoundaryCondition, FixedCondition, LoadCondition};
-use crate::io::mesh_reader::read_file;
+use crate::io::mesh_reader::{read_file_single_body, read_file_multiple_bodies};
 use std::error::Error;
 use nalgebra::DVector;
 use serde::{Serialize, Deserialize};
-use crate::mesh::Mesh;
+use crate::mesh::MeshAssembly;
 use crate::io::project::Project;
 use crate::utilities::Keywords;
 
@@ -97,9 +97,65 @@ pub fn read_toml_file(file_path: &str) -> Project {
         let sim_table = sim.as_table().unwrap();
         let mut simulation_keywords = table_to_keywords(sim_table.clone());
         simulation_keywords.print();
-        let mesh_file = simulation_keywords.get_string("MESH").unwrap();
-        let mesh_path = format_path(&mesh_file, file_path);
-        let mesh = read_file(&mesh_path);
+        //handle single or multiple meshes
+        let mut mesh_list: Vec<MeshAssembly> = Vec::new();
+        //check if meshes is a array in the sim table
+        if sim_table.get("meshes").is_some() {
+            let meshes = sim_table.get("meshes").unwrap().as_array().unwrap();
+            for mesh in meshes.iter() {
+                let mesh_table = mesh.as_table().unwrap();
+                let mesh_file = mesh_table.get("file").unwrap().as_str().unwrap();
+                let mesh_path = format_path(&mesh_file, file_path);
+
+                //get array of bodies corresponding to the mesh node_sets
+                let volumes = {
+                    if mesh_table.get("volumes").is_some() {    
+                        mesh_table.get("volumes").unwrap().as_array().unwrap().clone()
+                    } else {
+                        vec![]
+                    }
+                };
+                let mut bodies: Vec<String> = Vec::new();
+                for volume in volumes.iter() {
+                    let volume_name = volume.as_str().unwrap();
+                    bodies.push(volume_name.to_string());
+                }
+                let mut mesh = if bodies.is_empty() {  
+                    let mesh_name = {
+                        if mesh_table.get("name").is_some() {
+                            mesh_table.get("name").unwrap().as_str().unwrap().to_string()
+                        } else {
+                            let name = Path::new(&mesh_file).file_name().unwrap().to_str().unwrap();
+                            let name = name.split('.').next().unwrap();
+                            format!("{}_body", name)
+                        }
+                    };
+                    let mut mesh = read_file_single_body(&mesh_path);
+                    mesh.set_body_name(mesh_name.as_str());
+                    mesh
+                }else{
+                    read_file_multiple_bodies(&mesh_path, bodies)
+                };
+                mesh_list.push(mesh);
+            }
+        }else{
+            let mesh_file = simulation_keywords.get_string("MESH").unwrap();
+            let mesh_path = format_path(&mesh_file, file_path);
+            let mesh = read_file_single_body(&mesh_path);
+            mesh_list.push(mesh);
+        }
+
+        let mut mesh = mesh_list.remove(0);
+        for m in mesh_list {
+            mesh += m;
+        }
+
+        mesh.print_info();
+
+
+
+
+
         let mesh_nodes = mesh.convert_to_nodes();
         let mesh_elements = mesh.convert_to_elements();
         let dofs = simulation_keywords.get_int("DOF").unwrap_or(3) as usize;

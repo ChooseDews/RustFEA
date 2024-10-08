@@ -3,11 +3,18 @@ output = "examples/output/tube.json.xz"
 
 [[sim]]
 name = "BAR Simulation"
-mesh = "meshes/example_tube.inp.xz"
 dof = 3
 
+[[sim.meshes]]
+file = "meshes/example_tube.inp.xz"
+name= "tube_body"
+
+[[sim.meshes]]
+file = "meshes/example_tube.inp.xz"
+name= "tube_body_2"
+
 [sim.output]
-vtk = "examples/output/tube/tube_direct.vtk"
+vtk = "examples/output/tube/tube_direct_2.vtk"
 
 [[sim.boundary_conditions]]
 type = "load"
@@ -25,27 +32,27 @@ youngs_modulus = 200000
 poissons_ratio = 0.3
 
 
-[[sim]]
-name = "BAR Simulation 2"
-mesh = "meshes/example_tube.inp.xz"
-dof = 3
+# [[sim]]
+# name = "BAR Simulation 2"
+# mesh = "meshes/example_tube.inp.xz"
+# dof = 3
 
-[sim.solver]
-method = "explicit"
-# time_step = 0.000011
-time_steps = 20000
-vtk_save_steps = 500
+# [sim.solver]
+# method = "explicit"
+# # time_step = 0.000011
+# time_steps = 20000
+# vtk_save_steps = 500
 
-[sim.output]
-vtk = "examples/output/tube/tube_explicit.vtk"
-clear_directory = true
+# [sim.output]
+# vtk = "examples/output/tube/tube_explicit.vtk"
+# clear_directory = true
 
-[[sim.boundary_conditions]]
-type = "load"
-name = "end1"
-values = [20000, 20000, 0]
+# [[sim.boundary_conditions]]
+# type = "load"
+# name = "end1"
+# values = [20000, 20000, 0]
 
-[[sim.boundary_conditions]]
-type = "fixed"
-name = "end2"
-values = [0, 0, 0]
+# [[sim.boundary_conditions]]
+# type = "fixed"
+# name = "end2"
+# values = [0, 0, 0]

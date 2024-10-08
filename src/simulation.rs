@@ -8,7 +8,7 @@ use std::path::Path;
 use crate::bc::condition::BoundaryCondition;
 use crate::elements::base_element::{BaseElement, ElementFields};
 use crate::io::matrix_writer::{write_hashmap_sparse_matrix, write_vector};
-use crate::mesh::Mesh;
+use crate::mesh::MeshAssembly;
 use crate::node::Node;
 use crate::solver::{direct_choslky, direct_solve};
 
@@ -22,13 +22,16 @@ pub struct Simulation {
 
     pub dofs: usize,
     pub keywords: Keywords,
-    pub mesh: Mesh,
+    pub mesh: MeshAssembly,
     pub boundary_conditions: Vec<Box<dyn BoundaryCondition>>,
 
     #[serde(skip, default = "Vec::new")]
     pub load_vector: Vec<f64>, //global force vector
     #[serde(skip, default = "HashMap::new")]
     pub fixed_global_nodal_values: HashMap<usize, f64>,
+
+    #[serde(skip, default = "Vec::new")]
+    pub active_elements: Vec<usize>,
 
 }
 
@@ -77,7 +80,8 @@ impl Simulation {
             fixed_global_nodal_values: HashMap::new(),
             keywords: Keywords::new(),
             dofs: 3,
-            mesh: Mesh::empty(),
+            mesh: MeshAssembly::empty(),
+            active_elements: Vec::new(),
         }
     }
 
@@ -95,11 +99,11 @@ impl Simulation {
     }
 
 
-    pub fn set_mesh(&mut self, mesh: Mesh) {
+    pub fn set_mesh(&mut self, mesh: MeshAssembly) {
         self.mesh = mesh;
     }
     
-    pub fn from_mesh(mesh: Mesh, dofs: usize) -> Self {
+    pub fn from_mesh(mesh: MeshAssembly, dofs: usize) -> Self {
         let elements = mesh.convert_to_elements();
         let nodes = mesh.convert_to_nodes();
         let mut simulation = Simulation::from_arrays(nodes, elements, dofs);
@@ -127,6 +131,7 @@ impl Simulation {
     pub fn initialize(&mut self) {
         let n = self.nodes.len() * self.dofs;
         self.load_vector = vec![0.0; n];
+        self.set_active_elements();
     }
 
     pub fn add_node(&mut self, node: Node) {
@@ -210,8 +215,16 @@ impl Simulation {
         self.get_element(id).unwrap().compute_stiffness(&self)
     }
 
+    pub fn set_active_elements(&mut self) {
+        self.active_elements = self.elements.iter().enumerate().filter(|(_, element)| element.is_active()).map(|(i, _)| i).collect();
+    }
+
+    pub fn active_elements(&self) -> Vec<usize> {
+        self.active_elements.clone()
+    }
+
     pub fn compute_all_element_stiffness(&mut self) {
-        for i in 0..self.elements.len() {
+        for i in self.active_elements() {
             self.set_element_stiffness(i, self.compute_element_stiffness(i));
         }
     }
@@ -226,7 +239,7 @@ impl Simulation {
 
     pub fn compute_all_element_mass(&mut self) {
         let mut total_mass = 0.0;
-        for i in 0..self.elements.len() {
+        for i in self.active_elements() {
             let mass = self.compute_element_mass(i);
             let element = self.get_element_mut(i).unwrap();
             total_mass += element.set_lumped_mass(&mass);
@@ -246,7 +259,7 @@ impl Simulation {
         self.compute_all_element_mass();
 
         trace!("Assembling global stiffness matrix");
-        for i in 0..self.elements.len() {
+        for i in self.active_elements() {
             let element = self.get_element(i).unwrap();
             let element_stiffness_matrix = element.get_stiffness();
             let element_connectivity = element.get_connectivity();
@@ -286,6 +299,9 @@ impl Simulation {
         let total_dofs = self.nodes.len() * self.dofs;
         let mut global_mass_diagonal = DVector::zeros(total_dofs);
         for element in &self.elements {
+            if !element.is_active() {
+                continue;
+            }
             let element_mass = element.get_lumped_mass();
             let connectivity = element.get_connectivity();
             for (local_index, &node_id) in connectivity.iter().enumerate() {
@@ -301,6 +317,9 @@ impl Simulation {
     pub fn compute_force_vector(&self) -> DVector<f64> {
         let mut force_vector = DVector::zeros(self.nodes.len() * self.dofs);
         for element in &self.elements {
+            if !element.is_active() {
+                continue;
+            }
             let force = element.compute_force(&self);
             let connectivity = element.get_connectivity();
             for (local_index, &node_id) in connectivity.iter().enumerate() {
@@ -473,7 +492,7 @@ impl Simulation {
             node_feilds.insert(feild.to_string(), node_avg_values);
         }
 
-        for i in 0..element_count {
+        for i in self.active_elements() {
             let element = self.get_element(i).unwrap();
             let element_props = element.compute_element_nodal_properties(&self);
             let connectivity = element.get_connectivity();
@@ -531,7 +550,7 @@ impl Simulation {
         }
         debug!("Element Types:");
         for (type_name, count) in element_types {
-            debug!("  - {}: {}", type_name, count);
+            debug!("  - {:?}: {}", type_name, count);
         }
 
         // Print boundary condition types and counts

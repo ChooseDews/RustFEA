@@ -1,6 +1,9 @@
 use std::fs::File;
 use std::io::{Write, BufWriter};
 use crate::simulation::Simulation;
+use crate::elements::{BrickElement, BaseElement, ElementType};
+
+
 //logging
 use log::{info, debug, trace};
 
@@ -28,8 +31,10 @@ pub fn write_vtk(filename: &str, simulation: &Simulation) -> std::io::Result<()>
         writeln!(file, "{} {} {}", node.position.x, node.position.y, node.position.z)?;
     }
 
-    let elements = simulation.elements();
-    // Write cells (elements)
+    let all_elements: &Vec<Box<dyn BaseElement>> = simulation.elements();
+    let elements: Vec<&Box<dyn BaseElement>> = all_elements.iter().filter(|element: &&Box<dyn BaseElement>| element.type_name() == ElementType::Brick).collect();
+
+    let elements_size = elements.len();    // Write cells (elements)
     let elements_size = elements.len();
     let total_list_entries = elements_size * 9; // 8 nodes per element + 1 value for the number of points in the cell
     writeln!(file, "CELLS {} {}", elements_size, total_list_entries)?;

@@ -1,6 +1,6 @@
 // src/elements/brick_element.rs
 use crate::simulation::{Simulation};
-use super::base_element::{BaseElement, Material, ElementFields};
+use super::base_element::{BaseElement, Material, ElementFields, ElementType};
 use nalgebra as na;
 use na::{DMatrix, DVector};
 use crate::utilities::{compute_von_mises};
@@ -20,7 +20,8 @@ pub struct BrickElement {
     #[serde(skip, default = "default_zero_matrix")]
     mass: DMatrix<f64>,
     #[serde(skip, default = "Vec::new")]//lumped mass matrix
-    lumped_mass: Vec<f64>
+    lumped_mass: Vec<f64>,
+    active: bool,
 }
 
 fn default_deformation_gradient() -> DMatrix<f64> {
@@ -46,6 +47,7 @@ impl BrickElement {
             stiffness: default_zero_matrix(),
             mass: default_zero_matrix(),
             lumped_mass: Vec::new(),
+            active: true,
         }
     }
 
@@ -278,16 +280,13 @@ impl BaseElement for BrickElement {
         self.mass = mass;
     }
 
+    fn is_active(&self) -> bool {
+        self.active
+    }
 
-
-
-
-
-
-
-
-
-
+    fn set_active(&mut self, active: bool) {
+        self.active = active;
+    }
 
 
     //TODO: test and implement:
@@ -347,7 +346,7 @@ impl BaseElement for BrickElement {
         return element_feilds;
     }
 
-    fn type_name(&self) -> &'static str {
-        "BrickElement"
+    fn type_name(&self) -> ElementType {
+        ElementType::Brick 
     }
 }

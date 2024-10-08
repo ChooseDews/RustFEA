@@ -1,11 +1,16 @@
 use std::collections::HashMap;
 use crate::node::Node;
-use crate::elements::{ BaseElement, BrickElement, Material };
+use crate::elements::{ BaseElement, BrickElement, Material, FourNodeElement};
 use serde::{Serialize, Deserialize};
 use crate::io::file::{seralized_read, seralized_write};
 use std::fmt;
 use log::{debug, info, trace};
-#[derive(Debug, Serialize, Deserialize)]
+use std::ops::AddAssign;
+use std::collections::HashSet;
+
+
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 
 pub struct MeshNode {
     pub coordinates: Vec<f64>,
@@ -26,6 +31,13 @@ impl MeshNode {
         let dz = self.coordinates[2] - other.coordinates[2];
         (dx * dx + dy * dy + dz * dz).sqrt()
     }
+
+    pub fn offset(&self, offset: &HashMap<usize, usize>) -> MeshNode {
+        MeshNode {
+            coordinates: self.coordinates.clone(),
+            id: offset.get(&self.id).unwrap().clone()
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -38,7 +50,7 @@ pub struct MeshElement {
 
 
 impl MeshElement {
-    pub fn to_element(&self, id: isize) -> Box<dyn BaseElement> {
+    pub fn to_element(&self) -> Box<dyn BaseElement> {
         match self.el_type.as_str() {
             "C3D8" => {
                 let mut connectivity = Vec::new();
@@ -46,14 +58,32 @@ impl MeshElement {
                     connectivity.push(*node_id);
                 }
                 let mut el_id = self.id;
-                if id > -1{
-                    el_id = id as usize;
-                }
                 Box::new(BrickElement::new(el_id, self.connectivity.clone(), Material::aluminum()))
+            }
+            "CPS4" => {
+                let mut connectivity = Vec::new();
+                for node_id in &self.connectivity {
+                    connectivity.push(*node_id);
+                }
+                let mut el_id = self.id;
+                Box::new(FourNodeElement::new(el_id, self.connectivity.clone(), Material::empty()))
             }
             _ => {
                 panic!("Element type not supported: {}", self.el_type);
             }
+        }
+    }
+
+    pub fn offset(&self, el_offset: &HashMap<usize, usize>, node_offset: &HashMap<usize, usize>) -> MeshElement {
+        let mut connectivity = Vec::new();
+        for node_id in &self.connectivity {
+            connectivity.push(node_offset.get(node_id).unwrap().clone());
+        }
+        MeshElement {
+            connectivity: connectivity,
+            name: self.name.clone(),
+            el_type: self.el_type.clone(),
+            id: el_offset.get(&self.id).unwrap().clone(),
         }
     }
 }
@@ -68,29 +98,67 @@ pub struct ElementGroup {
     pub el_type: String,
 }
 
+impl ElementGroup {
+    pub fn offset(&self, el_offset: &HashMap<usize, usize>) -> ElementGroup {
+        ElementGroup {
+            elements: self.elements.iter().map(|e| el_offset.get(e).unwrap().clone()).collect(),
+            name: self.name.clone(),
+            el_type: self.el_type.clone(),
+        }
+    }
+}
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NodeGroup {
     pub nodes: Vec<usize>, //indices of nodes in the mesh
     pub name: String,
 }
 
+impl NodeGroup {
+    pub fn offset(&self, node_offset: &HashMap<usize, usize>) -> NodeGroup {
+        NodeGroup {
+            nodes: self.nodes.iter().map(|n| node_offset.get(n).unwrap().clone()).collect(),
+            name: self.name.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Mesh {
+pub struct Body {
+    pub elements: Vec<usize>,
+    pub nodes: Vec<usize>,
+    pub name: String
+}
+
+impl Body {
+    pub fn offset(&self, el_offset: &HashMap<usize, usize>, node_offset: &HashMap<usize, usize> ) -> Body {
+        Body {
+            elements: self.elements.iter().map(|e| el_offset.get(e).unwrap().clone()).collect(),
+            nodes: self.nodes.iter().map(|n| node_offset.get(n).unwrap().clone()).collect(),
+            name: self.name.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MeshAssembly {
     pub nodes: HashMap<usize, MeshNode>,
     pub elements: HashMap<usize, MeshElement>,
     pub element_groups: HashMap<String, ElementGroup>,
     pub node_groups: HashMap<String, NodeGroup>,
+    pub bodies: Vec<Body>,
     pub name: String,
 }
 
-impl Mesh {
+
+impl MeshAssembly {
     pub fn empty() -> Self {
-        Mesh {
+        MeshAssembly {
             nodes: HashMap::new(),
             elements: HashMap::new(),
             element_groups: HashMap::new(),
             node_groups: HashMap::new(),
-            name: "None".to_string(),
+            bodies: Vec::new(),
+            name: "Unamed".to_string(),
         }
     }
 
@@ -104,8 +172,36 @@ impl Mesh {
     /// # Returns
     /// A new `Mesh` instance.
     pub fn load(filename: &str) -> Self {
-        let mesh: Mesh = seralized_read(filename);
+        let mesh: MeshAssembly = seralized_read(filename);
         mesh
+    }
+
+    pub fn single_body(&mut self) {
+        let element_ids = self.elements.keys().cloned().collect::<Vec<usize>>();
+        let node_ids = self.nodes.keys().cloned().collect::<Vec<usize>>();
+        let mut body = Body {
+            elements: element_ids,
+            nodes: node_ids,
+            name: "Body".to_string(),
+        };
+        self.bodies.push(body);
+    }
+
+    pub fn multiple_bodies(&mut self, bodies: Vec<String>) {
+        for body_name in bodies {
+            let el_group = self.element_groups.get(&body_name).expect(&format!("Element group: {} not found in mesh", body_name));
+            let node_group = self.node_groups.get(&body_name).expect(&format!("Node group: {} not found in mesh", body_name));
+            let body = Body {
+                elements: el_group.elements.clone(),
+                nodes: node_group.nodes.clone(),
+                name: body_name.clone(),
+            };
+            self.bodies.push(body);
+        }
+    }
+
+    pub fn set_body_name(&mut self, name: &str) {
+        self.bodies[0].name = name.to_string();
     }
 
     pub fn save(&self, filename: &str) {
@@ -133,16 +229,22 @@ impl Mesh {
     }
 
     pub fn apply_func(&mut self) {
-        self.apply_func_to_nodel_positions(&Mesh::half_sine_func);
+        self.apply_func_to_nodel_positions(&MeshAssembly::half_sine_func);
     }
 
     pub fn print_info(&self) {
         debug!("{}", self);
+        debug!("Element groups: ");
         for (name, group) in &self.element_groups {
-            debug!("  -> {} - {} - {} elements", group.name, group.el_type, group.elements.len());
+            debug!("  -> {} - {} - {} elements", name, group.el_type, group.elements.len());
         }
+        debug!("Node groups: ");
         for (name, group) in &self.node_groups {
-            debug!("  -> {} - {} nodes", group.name, group.nodes.len());
+            debug!("  -> {} - {} nodes", name, group.nodes.len());
+        }
+        debug!("Bodies: ");
+        for body in &self.bodies {
+            debug!("  -> {} - {} elements, {} nodes", body.name, body.elements.len(), body.nodes.len());
         }
     }
 
@@ -195,32 +297,157 @@ impl Mesh {
     /// 
     /// # Returns
     /// A vector of `BaseElement` objects.
-    pub fn convert_to_elements(&self) -> Vec<Box<dyn BaseElement>> {
+    pub fn convert_to_brick_elements(&self) -> Vec<Box<dyn BaseElement>> {
         let mut elements = Vec::new();
-        let mut i = 0;
-        //find element group that contains volume elements
-        let mut volume_group = None;
-        for group in self.element_groups.values() {
-            if group.el_type == "C3D8" {
-                volume_group = Some(group);
-                break;
+        let mut element_index = 0;
+
+        // Collect all C3D8 element groups
+        let volume_groups: Vec<&ElementGroup> = self.element_groups.values()
+            .filter(|group| group.el_type == "C3D8")
+            .collect();
+
+        if volume_groups.is_empty() {
+            panic!("No volume elements (C3D8) found in mesh!");
+        }
+
+        // Process all C3D8 elements from all relevant groups
+        for group in volume_groups {
+            for element_id in &group.elements {
+                if let Some(mesh_element) = self.elements.get(element_id) {
+                    elements.push(mesh_element.to_element());
+                    element_index += 1;
+                } else {
+                    debug!("Element with id {} not found in mesh", element_id);
+                }
             }
         }
-        if volume_group.is_none() {
-            panic!("No volume elements found in mesh!");
-        }
-        let volume_group = volume_group.unwrap();
-        for element_id in &volume_group.elements {
-            let mesh_element = self.elements.get(element_id).unwrap();
-            elements.push(mesh_element.to_element(i));
-            i += 1;
-        }
+
+        debug!("Converted {} C3D8 elements", elements.len());
         elements
     }
 
+
+    pub fn convert_to_four_node_elements(&self) -> Vec<Box<dyn BaseElement>> {
+        let mut elements = Vec::new();
+        let mut element_index = 0;
+
+        // Collect all CPS4 element groups
+        let volume_groups: Vec<&ElementGroup> = self.element_groups.values()
+            .filter(|group| group.el_type == "CPS4")
+            .collect();
+
+        if volume_groups.is_empty() {
+            return vec![];
+        }
+
+        for group in volume_groups {
+            for element_id in &group.elements {
+                if let Some(mesh_element) = self.elements.get(element_id) {
+                    elements.push(mesh_element.to_element());
+                } else {
+                    debug!("Element with id {} not found in mesh", element_id);
+                }
+            }
+        }
+
+        debug!("Converted {} CPS4 elements", elements.len());
+        elements
+    }
+
+
+    pub fn convert_to_elements(&self) -> Vec<Box<dyn BaseElement>> {
+        let mut elements = Vec::new();
+        elements.extend(self.convert_to_brick_elements());
+        elements.extend(self.convert_to_four_node_elements());
+        elements
+    }
+
+
+    
+    //handle a RHS add of another mesh. Other mesh assumed to start from 0 node id and 0 element id
+    pub fn add_mesh(&mut self, other: &MeshAssembly) {
+        let min_node_id = other.nodes.keys().min().unwrap();
+        let max_node_id = other.nodes.keys().max().unwrap();
+        let max_current_id = self.nodes.keys().max().unwrap();
+        let node_offset = *max_current_id + 1;
+
+        let min_element_id = other.elements.keys().min().unwrap();
+        let max_element_id = other.elements.keys().max().unwrap();
+        let max_el_current_id = self.elements.keys().max().unwrap();
+        let element_offset = *max_el_current_id + 1;
+
+        //create element_id and node_id maps
+        let mut element_id_map = HashMap::new();
+        let mut node_id_map = HashMap::new();
+
+        //for nodes and elements its (key) -> (node_offset+i)
+        for (i, element) in other.elements.iter() {
+            element_id_map.insert(element.id, element_offset + i);
+        }
+        for (i, node) in other.nodes.iter() {
+            node_id_map.insert(node.id, node_offset + i);
+        }
+        
+        for node in other.nodes.values() {
+            let new_node: MeshNode = node.offset(&node_id_map);
+            self.nodes.insert(new_node.id, new_node);
+        }
+
+        for element in other.elements.values() {
+            let new_element: MeshElement = element.offset(&element_id_map, &node_id_map);
+            self.elements.insert(new_element.id, new_element);
+        }
+
+        let mut existing_group_names: HashSet<String> = self.element_groups.keys().cloned().collect();
+        existing_group_names.extend(self.node_groups.keys().cloned());
+
+        for group in other.element_groups.values() {
+            let new_group = group.offset(&element_id_map);
+            let unique_name = self.generate_unique_name(&new_group.name, &existing_group_names);
+            self.element_groups.insert(unique_name.clone(), new_group);
+            existing_group_names.insert(unique_name);
+        }
+
+        for group in other.node_groups.values() {
+            let new_group = group.offset(&node_id_map);
+            let unique_name = self.generate_unique_name(&new_group.name, &existing_group_names);
+            self.node_groups.insert(unique_name.clone(), new_group);
+            existing_group_names.insert(unique_name);
+        }
+
+        for body in other.bodies.iter() {
+            let new_body = body.offset(&element_id_map, &node_id_map);
+            self.bodies.push(new_body);
+        }
+    }
+
+    fn generate_unique_name(&self, base_name: &str, existing_names: &HashSet<String>) -> String {
+        if !existing_names.contains(base_name) {
+            return base_name.to_string();
+        }
+
+        let mut counter = 1;
+        loop {
+            let new_name = format!("{}_{}", base_name, counter);
+            if !existing_names.contains(&new_name) {
+                return new_name;
+            }
+            counter += 1;
+        }
+    }
+
+
 }
 
-impl fmt::Display for Mesh {
+
+impl AddAssign for MeshAssembly {
+    fn add_assign(&mut self, other: Self) {
+        self.add_mesh(&other);
+    }
+}
+
+
+impl fmt::Display for MeshAssembly {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Mesh: {} [Nodes: {}, Elements: {}, Element Groups: {}, Node Groups: {}]", 
                self.name, self.nodes.len(), self.elements.len(), 

@@ -12,3 +12,7 @@ Extrude {0, 0, 10} {
 Physical Surface("free_end", 13) = {6};
 //+
 Physical Surface("fixed_end", 14) = {1};
+//+
+Box(2) = {-1.02, -0.55, 3.5, 1, 1.5, 1};
+//+
+Transfinite Surface {11} = {14, 16, 12, 10};

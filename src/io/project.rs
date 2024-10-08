@@ -2,7 +2,7 @@
 use serde_json::Value;
 use std::fs::File;
 use std::io::BufReader;
-use crate::mesh::Mesh;
+use crate::mesh::MeshAssembly;
 use crate::simulation::Simulation; 
 use serde::{Serialize, Deserialize};
 use crate::io::input_reader::read_simulation_file;

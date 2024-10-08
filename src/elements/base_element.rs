@@ -4,6 +4,15 @@ use crate::simulation::Simulation;
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 use typetag;
+use log::{debug, trace};
+
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub enum ElementType {
+    Brick,
+    Quad
+}
+
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ElementFields { //hashmap containing
@@ -108,7 +117,16 @@ impl Material {
         }
     }
 
+    pub fn empty() -> Self {
+        Material {
+            youngs_modulus: 0.0,
+            poisson_ratio: 0.0,
+            density: 0.0
+        }
+    }
+
 }
+
 
 #[typetag::serde]
 pub trait BaseElement {
@@ -120,11 +138,12 @@ pub trait BaseElement {
     fn get_shape_derivatives(&self, xi: f64, eta: f64, zeta: f64) -> DMatrix<f64>;
     fn get_global_position(&self, n: &DVector<f64>, simulation: &Simulation) -> na::Vector3<f64>;
 
+    fn is_active(&self) -> bool;
+    fn set_active(&mut self, active: bool);
 
     fn compute_stiffness(&self, simulation: &Simulation) -> DMatrix<f64>;
     fn get_stiffness(&self) -> &DMatrix<f64>;
     fn set_stiffness(&mut self, stiffness: DMatrix<f64>);
-
     fn compute_mass(&self, simulation: &Simulation) -> DMatrix<f64>;
     fn get_mass(&self) -> &DMatrix<f64>;
     fn set_mass(&mut self, mass: DMatrix<f64>);
@@ -140,7 +159,7 @@ pub trait BaseElement {
     fn compute_strain(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DVector<f64>;
     // fn compute_volume(&self, simulation: &Simulation) -> f64;
     fn compute_element_nodal_properties(&self, simulation: &Simulation) -> ElementFields;
-    fn type_name(&self) -> &'static str;
+    fn type_name(&self) -> ElementType;
 
     //explicit stuff
     fn compute_force(&self, simulation: &Simulation) -> DVector<f64>;
