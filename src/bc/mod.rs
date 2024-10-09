@@ -5,4 +5,4 @@ pub mod contact;
 pub use condition::BoundaryCondition;
 pub use fixed::FixedCondition;
 pub use force::LoadCondition;
-pub use contact::ContactCondition;
+pub use contact::NormalContact;

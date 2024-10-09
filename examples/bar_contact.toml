@@ -10,16 +10,30 @@ dof = 3
 [[sim.meshes]]
 file = "meshes/bar_block.inp"
 volumes = ["bar_body" , "block_body"]
-
-[[sim.boundary_conditions]]
-type = "fixed"
-name = "free_end"
-values = [0.05, 0, false]
+active_volumes = ["bar_body"]
 
 [[sim.boundary_conditions]]
 type = "fixed"
 name = "fixed_end"
-values = [0, 0.05, false]
+values = [0.0, 0.0, 0.0]
+
+[[sim.boundary_conditions]]
+type = "fixed"
+name = "block_top"
+values = [0.0, 0.0, 0.0]
+
+
+[[sim.boundary_conditions]]
+type = "contact"
+name = "bar_bottom"
+secondary = "block_top"
+
+
+
+[[sim.boundary_conditions]]
+type = "load"
+name = "free_end"
+values = [-1000.0, 0, 0]
 
 [sim.output]
 file = "examples/output/bar_contact/bar_contact.bin.xz"
@@ -30,5 +44,5 @@ clear_directory = true
 extra_stiffness = 1e13
 method = "explicit"
 # time_step = 0.000001
-time_steps = 1000
-vtk_save_steps = 1000
+time_steps = 100000
+vtk_save_steps = 10000

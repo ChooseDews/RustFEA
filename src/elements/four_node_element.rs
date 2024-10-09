@@ -6,6 +6,7 @@ use crate::utilities::{compute_von_mises};
 use serde::{Serialize, Deserialize};
 use log::{debug, trace};
 
+const TOLERANCE: f64 = 1e-10;
 
 #[derive(Serialize, Deserialize, Debug)] 
 pub struct FourNodeElement {
@@ -57,6 +58,12 @@ impl FourNodeElement {
         }
     }
 
+    fn center(&self, simulation: &Simulation) -> na::Vector3<f64> {
+        let x_pos = self.get_x_vector(simulation);
+        let center = (x_pos[0] + x_pos[1] + x_pos[2] + x_pos[3]) / 4.0;
+        center  
+    }
+
     fn get_gauss_points() -> Vec<(f64, f64, f64)> { // xi, eta, weight
         trace!("Generating Gauss points for four-node element");
         let mut gauss_points: Vec<(f64, f64, f64)> = Vec::new();
@@ -79,27 +86,7 @@ impl FourNodeElement {
         normal
     }
 
-    fn get_signed_distance(&self, point: na::Vector3<f64>, simulation: &Simulation) -> f64 {
-        // Get the plane normal
-        let normal = self.get_plane_normal(simulation).normalize();
-        
-        // Get a point on the plane (we'll use the first node)
-        let node1 = simulation.get_node(self.connectivity[0]).unwrap();
-        let plane_point = node1.position;
-        
-        // Calculate the signed distance from the point to the plane
-        let signed_distance = normal.dot(&(point - plane_point));
-        
-        // Project the point onto the plane
-        let projected_point = point - normal * signed_distance;
-        
-        // Check if the projected point is within the element
-        if self.is_point_inside(projected_point, simulation) {
-            signed_distance
-        } else {
-            f64::INFINITY // Point is outside the element
-        }
-    }
+
 
     fn is_point_inside(&self, point: na::Vector3<f64>, simulation: &Simulation) -> bool {
         let nodes = self.get_x_vector(simulation);
@@ -127,7 +114,7 @@ impl FourNodeElement {
         let u = (dot11 * dot02 - dot01 * dot12) * inv_denom;
         let v = (dot00 * dot12 - dot01 * dot02) * inv_denom;
 
-        (u >= 0.0) && (v >= 0.0) && (u + v < 1.0)
+        (u >= -TOLERANCE) && (v >= -TOLERANCE) && (u + v <= 1.0 + TOLERANCE)
     }
 
     fn get_area(&self, simulation: &Simulation) -> f64 {
@@ -152,6 +139,29 @@ impl FourNodeElement {
 
 #[typetag::serde]
 impl BaseElement for FourNodeElement {
+
+    fn get_signed_distance_vector(&self, point: na::Vector3<f64>, simulation: &Simulation) -> Option<na::Vector3<f64>> {
+        // Get the plane normal
+        let normal = self.get_plane_normal(simulation).normalize();
+        let nodes = self.get_x_vector(simulation);
+        let center = self.center(simulation);
+        let signed_distance = normal.dot(&(center - point));
+
+        if signed_distance > 0.0 {
+            return None;
+        }
+
+        let projected_point = point - normal * signed_distance;
+        
+        // Check if the projected point is within the element
+        if self.is_point_inside(projected_point, simulation) {
+            Some(signed_distance * normal)
+        } else {
+            None
+        }
+    }
+
+
     fn get_id(&self) -> usize {
         self.id
     }
@@ -176,22 +186,6 @@ impl BaseElement for FourNodeElement {
         shape_functions[2] = 0.25 * (1.0 + xi) * (1.0 + eta);
         shape_functions[3] = 0.25 * (1.0 - xi) * (1.0 + eta);
         shape_functions
-    }
-
-    fn get_global_position(
-        &self,
-        N: &DVector<f64>,
-        simulation: &Simulation,
-    ) -> na::Vector3<f64> {
-        todo!()
-    }
-
-    fn is_active(&self) -> bool {
-        self.active
-    }
-
-    fn set_active(&mut self, active: bool) {
-        self.active = active;
     }
 
     fn get_x(&self, simulation: &Simulation) -> DMatrix<f64> {
@@ -242,17 +236,11 @@ impl BaseElement for FourNodeElement {
     fn get_stiffness(&self) -> &DMatrix<f64> {
         &self.stiffness
     }
-    fn set_stiffness(&mut self, stiffness: DMatrix<f64>) {
-        self.stiffness = stiffness;
-    }
     fn compute_mass(&self, simulation: &Simulation) -> DMatrix<f64> {
         todo!()
     }   
     fn get_mass(&self) -> &DMatrix<f64> {
         &self.mass
-    }
-    fn set_mass(&mut self, mass: DMatrix<f64>) {
-        self.mass = mass;
     }
     fn set_lumped_mass(&mut self, lumped_mass: &DMatrix<f64>) -> f64 {
         todo!()
@@ -263,15 +251,11 @@ impl BaseElement for FourNodeElement {
     fn compute_strain(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DVector<f64> {
         todo!()
     }
-    fn compute_element_nodal_properties(&self, simulation: &Simulation) -> ElementFields {
-        todo!()
-    }   
-    fn compute_force(&self, simulation: &Simulation) -> DVector<f64> {
-        todo!()
-    }
+
     fn get_lumped_mass(&self) -> &Vec<f64> {
         &self.lumped_mass
     }
+
     fn type_name(&self) -> ElementType {
         ElementType::Quad
     }           

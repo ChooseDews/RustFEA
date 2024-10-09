@@ -30,6 +30,8 @@ fn main() {
     project.solve();
     project.export_vtk();
     project.save();
+    project.print();
+    
 
 
 

@@ -119,9 +119,9 @@ impl Material {
 
     pub fn empty() -> Self {
         Material {
-            youngs_modulus: 0.0,
-            poisson_ratio: 0.0,
-            density: 0.0
+            youngs_modulus: 1.0,
+            poisson_ratio: 0.2,
+            density: 1.0
         }
     }
 
@@ -130,26 +130,35 @@ impl Material {
 
 #[typetag::serde]
 pub trait BaseElement {
+
+    fn dofs(&self) -> usize { 3 }
     fn get_id(&self) -> usize;
     fn get_connectivity(&self) -> &Vec<usize>;
     fn get_material(&self) -> &Material;
     fn get_deformation_gradient(&self) -> &DMatrix<f64>;
     fn get_shape_functions(&self, xi: f64, eta: f64, zeta: f64) -> DVector<f64>;
     fn get_shape_derivatives(&self, xi: f64, eta: f64, zeta: f64) -> DMatrix<f64>;
-    fn get_global_position(&self, n: &DVector<f64>, simulation: &Simulation) -> na::Vector3<f64>;
+    fn get_global_position(&self, n: &DVector<f64>, simulation: &Simulation) -> na::Vector3<f64> {
+        na::Vector3::zeros()
+    }
 
-    fn is_active(&self) -> bool;
-    fn set_active(&mut self, active: bool);
+    fn get_signed_distance_vector(&self, point: na::Vector3<f64>, simulation: &Simulation) -> Option<na::Vector3<f64>> {
+        None
+    }
+
+    fn is_active(&self) -> bool {false}
+    fn set_active(&mut self, active: bool){}
 
     fn compute_stiffness(&self, simulation: &Simulation) -> DMatrix<f64>;
     fn get_stiffness(&self) -> &DMatrix<f64>;
-    fn set_stiffness(&mut self, stiffness: DMatrix<f64>);
-    fn compute_mass(&self, simulation: &Simulation) -> DMatrix<f64>;
+    fn set_stiffness(&mut self, stiffness: DMatrix<f64>){}
+    fn compute_mass(&self, simulation: &Simulation) -> DMatrix<f64>{
+        DMatrix::<f64>::zeros(self.get_connectivity().len(), self.get_connectivity().len())
+    }
     fn get_mass(&self) -> &DMatrix<f64>;
-    fn set_mass(&mut self, mass: DMatrix<f64>);
+    fn set_mass(&mut self, mass: DMatrix<f64>){}
     fn set_lumped_mass(&mut self, mass: &DMatrix<f64>) -> f64;
     fn get_lumped_mass(&self) -> &Vec<f64>;
-
 
     fn compute_jacobian_matrix(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DMatrix<f64>;
     fn get_x(&self, simulation: &Simulation) -> DMatrix<f64>;
@@ -158,11 +167,16 @@ pub trait BaseElement {
     fn compute_stress(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DVector<f64>;
     fn compute_strain(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DVector<f64>;
     // fn compute_volume(&self, simulation: &Simulation) -> f64;
-    fn compute_element_nodal_properties(&self, simulation: &Simulation) -> ElementFields;
+    fn compute_element_nodal_properties(&self, simulation: &Simulation) -> ElementFields {
+        ElementFields::new(self.get_connectivity().clone()) 
+    }
+
     fn type_name(&self) -> ElementType;
 
     //explicit stuff
-    fn compute_force(&self, simulation: &Simulation) -> DVector<f64>;
+    fn compute_force(&self, simulation: &Simulation) -> DVector<f64> {
+        DVector::zeros(self.get_connectivity().len() * self.dofs())
+    }
     // fn step_explicit(&mut self, simulation: &Simulation, force: DVector<f64>, dt: f64); //self modification
 
 

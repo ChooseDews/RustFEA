@@ -18,7 +18,7 @@ use crate::utilities::Keywords;
 pub struct Simulation {
     pub nodes: Vec<Node>,
     pub node_feilds: HashMap<String, Vec<f64>>,
-    elements: Vec<Box<dyn BaseElement>>,
+    pub elements: Vec<Box<dyn BaseElement>>,
 
     pub dofs: usize,
     pub keywords: Keywords,
@@ -131,7 +131,20 @@ impl Simulation {
     pub fn initialize(&mut self) {
         let n = self.nodes.len() * self.dofs;
         self.load_vector = vec![0.0; n];
+    }
+
+    pub fn one_time_init(&mut self) {
         self.set_active_elements();
+        self.init_bc();
+    }
+
+    pub fn init_bc(&mut self) {
+        //detach bc from simulation then pass in self to
+        let mut boundary_conditions = std::mem::take(&mut self.boundary_conditions);
+        for bc in &mut boundary_conditions {
+            bc.initalize(self);
+        }
+        self.boundary_conditions = boundary_conditions;
     }
 
     pub fn add_node(&mut self, node: Node) {
@@ -251,7 +264,7 @@ impl Simulation {
     pub fn assemble(&mut self) -> (HashMap<(usize, usize), f64>, Vec<f64>) {
         debug!("Starting assembly process");
         let mut global_stiffness_matrix = HashMap::new();
-        let dof = 3;
+        let dof: usize = 3;
         self.assemble_global_force(); //populates global force and fixed global nodal values
         let mut global_force = self.get_global_force();
         let specified_bc = self.get_specified_bc();
@@ -451,6 +464,10 @@ impl Simulation {
     pub fn solve(&mut self) {
         let start_time = std::time::Instant::now();
         let method = self.keywords.get_string("SOLVER_METHOD").unwrap_or("direct".to_string());
+
+
+
+        self.one_time_init();
         match method.as_str() {
             "direct" => self.solve_direct(),
             "explicit" => self.solve_explicit(),
@@ -474,6 +491,7 @@ impl Simulation {
             node.set_displacement(u[node_id * 3], u[node_id * 3 + 1], u[node_id * 3 + 2])
         }
         self.compute_result_feilds();
+        
     }
 
     pub fn compute_result_feilds(&mut self) {

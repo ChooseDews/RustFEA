@@ -347,6 +347,6 @@ impl BaseElement for BrickElement {
     }
 
     fn type_name(&self) -> ElementType {
-        ElementType::Brick 
+        ElementType::Brick
     }
 }

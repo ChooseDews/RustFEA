@@ -4,7 +4,7 @@ use std::path::Path;
 use std::collections::HashMap;
 use crate::io::file;
 use crate::simulation::Simulation;
-use crate::bc::{BoundaryCondition, FixedCondition, LoadCondition};
+use crate::bc::{BoundaryCondition, NormalContact, FixedCondition, LoadCondition};
 use crate::io::mesh_reader::{read_file_single_body, read_file_multiple_bodies};
 use std::error::Error;
 use nalgebra::DVector;
@@ -166,7 +166,8 @@ pub fn read_toml_file(file_path: &str) -> Project {
             let bc_table = bc.as_table().unwrap();
             let bc_type = bc_table.get("type").unwrap().as_str().unwrap();
             let bc_name = bc_table.get("name").unwrap().as_str().unwrap();
-            let bc_values = bc_table.get("values").unwrap().as_array().unwrap(); //contains a float or false thus option is none
+            let emtpy_values = toml::Value::Array(vec![]);
+            let bc_values = bc_table.get("values").unwrap_or(&emtpy_values).as_array().unwrap(); //contains a float or false thus option is none
             let bc_values_vec: Vec<Option<f64>> = bc_values.iter().map(|v| {
                 if v.is_bool(){
                     if v.as_bool().unwrap() {
@@ -191,6 +192,19 @@ pub fn read_toml_file(file_path: &str) -> Project {
                 "load" => {
                     let force = DVector::from(bc_values_vec.iter().map(|v| v.unwrap()).collect::<Vec<f64>>());
                     let bc = LoadCondition::new(bc_node_ids, force);
+                    simulation.add_boundary_condition(Box::new(bc));
+                }
+                "contact" => {
+                    let secondary_surface = bc_table.get("secondary").unwrap().as_str().unwrap();
+                    let mut bc = NormalContact::new(bc_name.to_string(), secondary_surface.to_string());
+                    debug!("Setting contact surfaces nodes for contact condition: {} total nodes: {}", bc_name, bc_node_ids.len());
+                    let secondary_surface_nodes = simulation.mesh.get_nodes_in_group(secondary_surface);
+                    debug!("Secondary surface nodes: {}", secondary_surface_nodes.len());
+                    bc.set_contact_surfaces_nodes(bc_node_ids, secondary_surface_nodes);
+                    let primary_surface_elements = simulation.mesh.get_elements_in_group(bc_name);
+                    let secondary_surface_elements = simulation.mesh.get_elements_in_group(secondary_surface);
+                    debug!("Primary surface elements: {}", primary_surface_elements.len());
+                    bc.set_contact_surfaces_elements(primary_surface_elements, secondary_surface_elements);
                     simulation.add_boundary_condition(Box::new(bc));
                 }
                 _ => {

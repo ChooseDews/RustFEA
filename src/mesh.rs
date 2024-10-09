@@ -213,6 +213,11 @@ impl MeshAssembly {
         group.nodes.clone()
     }
 
+    pub fn get_elements_in_group(&self, group_name: &str) -> Vec<usize> {
+        let group = self.element_groups.get(group_name).expect(&format!("Element group: {} not found in mesh", group_name));
+        group.elements.clone()
+    }
+
     //curve with sin(x) for fun
     pub fn half_sine_func(node: &Vec<f64>) -> Vec<f64> {
         let x = node[0];

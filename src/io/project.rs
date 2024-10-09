@@ -46,7 +46,7 @@ impl Project {
         debug!("Printing project information");
         self.keywords.print();
         for simulation in &self.simulations {
-            debug!("{}", simulation);
+            simulation.print();
         }
     }
 
