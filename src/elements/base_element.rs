@@ -149,9 +149,10 @@ pub trait BaseElement {
     fn is_active(&self) -> bool {false}
     fn set_active(&mut self, active: bool){}
 
-    fn compute_stiffness(&self, simulation: &Simulation) -> DMatrix<f64>;
-    fn get_stiffness(&self) -> &DMatrix<f64>;
-    fn set_stiffness(&mut self, stiffness: DMatrix<f64>){}
+    fn get_stiffness(&self) -> DMatrix<f64>;
+    fn compute_stiffness(&mut self, simulation: &Simulation){}
+
+
     fn compute_mass(&self, simulation: &Simulation) -> DMatrix<f64>{
         DMatrix::<f64>::zeros(self.get_connectivity().len(), self.get_connectivity().len())
     }

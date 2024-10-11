@@ -230,11 +230,8 @@ impl BaseElement for FourNodeElement {
     fn compute_b(&self, xi: f64, eta: f64, _zeta: f64, simulation: &Simulation) -> DMatrix<f64> {
         todo!()
     }
-    fn compute_stiffness(&self, simulation: &Simulation) -> DMatrix<f64> {
+    fn get_stiffness(&self) -> DMatrix<f64> {
         todo!()
-    }
-    fn get_stiffness(&self) -> &DMatrix<f64> {
-        &self.stiffness
     }
     fn compute_mass(&self, simulation: &Simulation) -> DMatrix<f64> {
         todo!()

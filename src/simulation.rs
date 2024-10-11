@@ -17,7 +17,7 @@ use crate::io::vtk_writer::write_vtk;
 use crate::utilities::Keywords;
 #[derive(Serialize, Deserialize)]
 pub struct Simulation {
-    pub nodes: HashMap<usize, Node>,
+    pub nodes: Vec<Node>,
     pub node_feilds: HashMap<String, Vec<f64>>,
     pub elements: HashMap<usize, Box<dyn BaseElement>>,
 
@@ -72,7 +72,7 @@ impl NodeAvgValue {
 impl Simulation {
     pub fn new() -> Self {
         Simulation {
-            nodes: HashMap::new(),
+            nodes: Vec::new(),
             elements: HashMap::new(),
             node_feilds: HashMap::new(),
             boundary_conditions: Vec::new(),
@@ -171,11 +171,11 @@ impl Simulation {
     }
 
     pub fn get_node(&self, index: usize) -> Option<&Node> {
-        self.nodes.get(&index)
+        self.nodes.get(index)
     }
 
     pub fn get_node_mut(&mut self, index: usize) -> Option<&mut Node> {
-        self.nodes.get_mut(&index)
+        self.nodes.get_mut(index)
     }
 
     pub fn get_nodes(&self, ids: &[usize]) -> Vec<&Node> {
@@ -190,11 +190,11 @@ impl Simulation {
         self.elements.get_mut(&id)
     }
 
-    pub fn nodes(&self) -> &HashMap<usize, Node> {
+    pub fn nodes(&self) -> &Vec<Node> {
         &self.nodes
     }
 
-    pub fn nodes_mut(&mut self) -> &mut HashMap<usize, Node> {
+    pub fn nodes_mut(&mut self) -> &mut Vec<Node> {
         &mut self.nodes
     }
 
@@ -230,15 +230,7 @@ impl Simulation {
         self.initialize();
         self.handle_bc();
     }
-
-    pub fn set_element_stiffness(&mut self, id: usize, stiffness: DMatrix<f64>) {
-        self.get_element_mut(id).unwrap().set_stiffness(stiffness);
-    }
-
-    pub fn compute_element_stiffness(&self, id: usize) -> DMatrix<f64> {
-        self.get_element(id).unwrap().compute_stiffness(&self)
-    }
-
+    
     pub fn set_active_elements(&mut self) {
         //collect element.id that are active
         self.active_elements = Vec::new();
@@ -254,10 +246,13 @@ impl Simulation {
         self.active_elements.clone()
     }
 
+
     pub fn compute_all_element_stiffness(&mut self) {
-        for i in self.active_elements().iter() {
-            self.set_element_stiffness(*i, self.compute_element_stiffness(*i));
+        let mut elements = std::mem::take(&mut self.elements);
+        for (_, element) in &mut elements {
+            element.compute_stiffness(self);
         }
+        self.elements = elements;
     }
 
     pub fn compute_element_mass(&self, id: usize) -> DMatrix<f64> {
@@ -362,9 +357,9 @@ impl Simulation {
     pub fn displacement_vector(&mut self) -> DVector<f64> {
         let dofs = self.dofs;
         let mut displacement_vector = DVector::zeros(self.nodes.len() * dofs);
-        for (node_id, node) in self.nodes.iter() {
+        for (node_id, node) in self.nodes.iter().enumerate() {
             for dof in 0..dofs {
-                let global_index = self.get_global_index(*node_id, dof);
+                let global_index = self.get_global_index(node_id, dof);
                 displacement_vector[global_index] = node.displacement[dof];
             }
         }
@@ -456,7 +451,7 @@ impl Simulation {
             }
 
             // Update nodal displacements
-            for (node_id, node) in self.nodes_mut() {
+            for (node_id, node) in self.nodes_mut().iter_mut().enumerate() {
                 node.set_displacement(u[node_id * 3], u[node_id * 3 + 1], u[node_id * 3 + 2]);
             }
 
@@ -512,7 +507,7 @@ impl Simulation {
         let u = direct_solve(&global_stiffness_matrix, &global_force);
         info!("Performing post-solve computations");
         //populate node displacements
-        for (node_id, node) in self.nodes_mut() {
+        for (node_id, node) in self.nodes_mut().iter_mut().enumerate() {
             node.set_displacement(u[node_id * 3], u[node_id * 3 + 1], u[node_id * 3 + 2])
         }
         self.compute_result_feilds();

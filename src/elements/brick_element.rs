@@ -2,7 +2,7 @@
 use crate::simulation::{Simulation};
 use super::base_element::{BaseElement, Material, ElementFields, ElementType};
 use nalgebra as na;
-use na::{DMatrix, DVector};
+use na::{DMatrix, DVector, SMatrix, SVector};
 use crate::utilities::{compute_von_mises};
 use serde::{Serialize, Deserialize};
 use log::{debug, trace};
@@ -15,8 +15,8 @@ pub struct BrickElement {
     material: Material,
     #[serde(skip, default = "default_deformation_gradient")]
     deformation_gradient: DMatrix<f64>, // ... other properties specific to the 8-node brick element
-    #[serde(skip, default = "default_zero_matrix")]
-    stiffness: DMatrix<f64>,
+    #[serde(skip, default = "empty_element_matrix")]
+    stiffness: SMatrix<f64, 24, 24>,
     #[serde(skip, default = "default_zero_matrix")]
     mass: DMatrix<f64>,
     #[serde(skip, default = "Vec::new")]//lumped mass matrix
@@ -32,6 +32,10 @@ fn default_zero_matrix() -> DMatrix<f64> {
     DMatrix::zeros(24, 24)
 }
 
+fn empty_element_matrix() -> na::SMatrix<f64, 24, 24> {
+    na::SMatrix::zeros()
+}
+
 impl BrickElement {
     pub fn new(id: usize, connectivity: Vec<usize>, material: Material) -> Self {
         assert_eq!(
@@ -44,7 +48,7 @@ impl BrickElement {
             connectivity,
             material,
             deformation_gradient: DMatrix::<f64>::identity(3, 3),
-            stiffness: default_zero_matrix(),
+            stiffness: empty_element_matrix(),
             mass: default_zero_matrix(),
             lumped_mass: Vec::new(),
             active: true,
@@ -67,6 +71,17 @@ impl BrickElement {
         gauss_points.push((a, a, a, 1.0));
         gauss_points.push((-a, a, a, 1.0));
         gauss_points
+    }
+
+    fn get_u_fixed(&self, simulation: &Simulation) -> SVector<f64, 24> {
+        let mut u = SVector::<f64, 24>::zeros();
+        for (i, node_id) in self.connectivity.iter().enumerate() {
+            let node = simulation.get_node(*node_id).unwrap();
+            u[3 * i] = node.displacement[0];
+            u[3 * i + 1] = node.displacement[1];
+            u[3 * i + 2] = node.displacement[2];
+        }
+        u
     }
 
 
@@ -139,8 +154,6 @@ impl BaseElement for BrickElement {
     }
 
     fn get_u(&self, simulation: &Simulation) -> DVector<f64> {
-        //compute u vector
-        //return as a DVector<f64>
         let mut u = DVector::<f64>::zeros(24);
         for (i, node_id) in self.connectivity.iter().enumerate() {
             let node = simulation.get_node(*node_id).unwrap();
@@ -215,9 +228,9 @@ impl BaseElement for BrickElement {
     }
 
     
-    fn compute_stiffness(&self, simulation: &Simulation) -> DMatrix<f64> {
+    fn compute_stiffness(&mut self, simulation: &Simulation){
         trace!("Computing stiffness matrix for brick element");
-        let mut K = DMatrix::<f64>::zeros(24, 24);
+        let mut K = empty_element_matrix();
         let gauss_points = BrickElement::get_gauss_points();
         for (xi, eta, zeta, weight) in gauss_points {
             let B = self.compute_b(xi, eta, zeta, &simulation);
@@ -229,17 +242,21 @@ impl BaseElement for BrickElement {
             K += K_point;
         }
         //use the gauss quadrature to compute the stiffness matrix
-        K
+        self.stiffness = K;
     }
 
 
-    fn get_stiffness(&self) -> &DMatrix<f64> {
-        &self.stiffness
+    fn get_stiffness(&self) -> DMatrix<f64> {
+        //construct dynamic matrix from fixed 24x24 matrix
+        let mut K_dyn =  DMatrix::zeros(24, 24);
+        for i in 0..24 {
+            for j in 0..24 {
+                K_dyn[(i, j)] = self.stiffness[(i, j)];
+            }
+        }
+        K_dyn
     }
 
-    fn set_stiffness(&mut self, stiffness: DMatrix<f64>) {
-        self.stiffness = stiffness;
-    }
 
     fn compute_mass(&self, simulation: &Simulation) -> DMatrix<f64> {
         //compute the mass matrix [M] = intergrate(density * N^T * N * detJ * weight)
@@ -308,13 +325,10 @@ impl BaseElement for BrickElement {
     }
 
     fn compute_force(&self, simulation: &Simulation) -> DVector<f64> {
-        //internal forces are [K_e]{u_e} 
-        let K_e = self.get_stiffness();
-        let u_e = self.get_u(simulation);
-        let f_e = K_e * u_e;
-        f_e //expect [24x1]
+        let u_e = self.get_u_fixed(simulation);
+        let f_e = self.stiffness * u_e;
+        DVector::<f64>::from_column_slice(f_e.as_slice())
     }
-
 
     fn compute_element_nodal_properties(&self, simulation: &Simulation) -> ElementFields {
         trace!("Computing element nodal properties for brick element");

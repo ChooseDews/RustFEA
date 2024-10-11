@@ -16,7 +16,6 @@ use log::{info, debug, trace};
 /// # Returns
 /// A `std::io::Result<()>` indicating the success or failure of the operation.
 pub fn write_vtk(filename: &str, simulation: &Simulation) -> std::io::Result<()> {
-    let start_time = std::time::Instant::now();
     info!("Writing VTK file: {}", filename);
 
     let file = File::create(filename)?;
@@ -28,7 +27,7 @@ pub fn write_vtk(filename: &str, simulation: &Simulation) -> std::io::Result<()>
     let nodes = simulation.nodes();
     // Write points (nodes)
     writeln!(file, "POINTS {} float", nodes.len())?;
-    for (_, node) in nodes.iter() {
+    for node in nodes.iter() {
         writeln!(file, "{} {} {}", node.position.x, node.position.y, node.position.z)?;
     }
 
@@ -55,7 +54,7 @@ pub fn write_vtk(filename: &str, simulation: &Simulation) -> std::io::Result<()>
     // Write point data for nodal displacements
     writeln!(file, "POINT_DATA {}", nodes.len())?;
     writeln!(file, "VECTORS displacement float")?;
-    for (_, node) in nodes.iter() {
+    for node in nodes.iter() {
         writeln!(file, "{} {} {}", node.displacement.x, node.displacement.y, node.displacement.z)?;
     }
 
@@ -68,7 +67,5 @@ pub fn write_vtk(filename: &str, simulation: &Simulation) -> std::io::Result<()>
             writeln!(file, "{}", value)?;
         }
     }
-    let dt = start_time.elapsed();
-    info!("Time taken to write VTK file: {:?}", dt);
     Ok(())
 }

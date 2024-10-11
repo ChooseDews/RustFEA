@@ -5,6 +5,7 @@ use log::{debug, info, warn};
 use toml::Value;
 
 
+
 pub fn compute_von_mises(stress_vector: DVector<f64>) -> f64 {
     //compute and return the von mises stress here
     let s11 = stress_vector[0];
