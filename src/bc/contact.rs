@@ -1,7 +1,7 @@
 use crate::bc::BoundaryCondition;
 use crate::simulation::Simulation;
 use log::debug;
-use nalgebra as na;
+use nalgebra::{self as na, DVector};
 use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ContactType {
@@ -35,7 +35,7 @@ impl NormalContact {
         NormalContact {
             primary_surface,
             secondary_surface,
-            contact_stiffness: 100000000.0,
+            contact_stiffness: 50000000.0,
             max_distance: 0.25,
             active_primary_nodes: Vec::new(),
             contact_type: ContactType::Penalty,
@@ -73,25 +73,38 @@ impl BoundaryCondition for NormalContact {
         //for each active node check signed distance to each secondary element
         //if the distance is less than the max distance then apply the contact condition
         //to the node and the element
-        for primary_node in &self.active_primary_nodes {
-            let primary_node = simulation.get_node(*primary_node).unwrap();
-            let mut min_distance = f64::INFINITY;
-            let mut vector_distance = na::Vector3::new(0.0, 0.0, 0.0);
+        let mut min_dist = f64::INFINITY;
+        let mut active_nodes = 0;
+        for primary_node_index in &self.active_primary_nodes {
+            let primary_node = simulation.get_node(*primary_node_index).unwrap();
+            let mut load_vector = None;
             for secondary_element in &self.active_secondary_elements {
                 let secondary_element = simulation.get_element(*secondary_element).unwrap();
-                let distance = secondary_element.get_signed_distance_vector(primary_node.position, simulation);
+                let point = primary_node.position + primary_node.displacement;
+                let distance = secondary_element.get_signed_distance_vector(point, simulation);
                 if distance.is_some() {
-                    let distance = distance.unwrap();
-                    let distance_norm = distance.norm();
-                    if distance_norm < min_distance {
-                        min_distance = distance_norm;
-                        vector_distance = distance;
+                    let signed_distance = distance.unwrap();
+                    let contact_stiffness = self.contact_stiffness;
+                    let contact_force = contact_stiffness * signed_distance;
+                    load_vector = Some(contact_force);
+                    let magnitude = signed_distance.magnitude();
+                    if magnitude < min_dist {
+                        min_dist = magnitude;
                     }
+                    active_nodes += 1;
+                    break;
                 }
             }
-            println!("Min distance: {}", min_distance);
-            println!("Vector distance: {}", vector_distance);
+            if load_vector.is_some() {
+                for i in 0..3 {
+                    let global_index = simulation.get_global_index(*primary_node_index, i);
+                    simulation.load_vector[global_index] += load_vector.unwrap()[i];
+                }
+            }
+
         }
+
+        // debug!("min distance: {} active nodes: {}", min_dist, active_nodes);
     }
 
     fn get_nodes(&self) -> &Vec<usize> {

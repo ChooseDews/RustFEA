@@ -14,7 +14,7 @@ Physical Surface("free_end", 13) = {6};
 Physical Surface("fixed_end", 14) = {1};
 //+
 //+
-Rectangle(7) = {-1.03, -0.25, 2, 1, 1, 0};
+Rectangle(7) = {-1.01, -0.25, 2, 1, 1, 0};
 //+
 Transfinite Surface {7} = {11, 10, 9, 12};
 //+

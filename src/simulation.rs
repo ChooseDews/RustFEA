@@ -426,7 +426,6 @@ impl Simulation {
         let n = self.nodes.len() * self.dofs;
         debug!("Steps: {}; dt: {}; DOF: {}", time_steps, dt, n);
         //start doing the time marching
-        let external_force = DVector::from_vec(self.load_vector.clone());
         let mut u = self.displacement_vector();
         let mut u_dot = DVector::zeros(self.nodes.len() * self.dofs);
         let mut u_half_dot = DVector::zeros(self.nodes.len() * self.dofs);
@@ -435,6 +434,8 @@ impl Simulation {
         let mut t = 0.0;
         while i < time_steps {
             // Compute forces
+            self.assemble_global_force(); //populates global force and fixed global nodal values
+            let external_force = DVector::from_vec(self.load_vector.clone());
             let internal_force = self.compute_force_vector();
             let residual_force = &external_force - &internal_force;
 
@@ -538,6 +539,8 @@ impl Simulation {
                     continue;
                 }
             }
+
+
 
             let element = self.get_element(*i).unwrap();
             let element_props = element.compute_element_nodal_properties(&self);

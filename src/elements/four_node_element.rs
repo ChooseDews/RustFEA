@@ -143,19 +143,16 @@ impl BaseElement for FourNodeElement {
     fn get_signed_distance_vector(&self, point: na::Vector3<f64>, simulation: &Simulation) -> Option<na::Vector3<f64>> {
         // Get the plane normal
         let normal = self.get_plane_normal(simulation).normalize();
-        let nodes = self.get_x_vector(simulation);
-        let center = self.center(simulation);
-        let signed_distance = normal.dot(&(center - point));
-
+        let center: nalgebra::Matrix<f64, nalgebra::Const<3>, nalgebra::Const<1>, nalgebra::ArrayStorage<f64, 3, 1>> = self.center(simulation);
+        let signed_distance = -normal.dot(&(center - point));
         if signed_distance > 0.0 {
             return None;
         }
-
         let projected_point = point - normal * signed_distance;
         
         // Check if the projected point is within the element
         if self.is_point_inside(projected_point, simulation) {
-            Some(signed_distance * normal)
+            Some(-signed_distance * normal)
         } else {
             None
         }
