@@ -157,7 +157,6 @@ pub fn read_toml_file(file_path: &str) -> Project {
 
 
         let mesh_nodes = mesh.convert_to_nodes();
-        let mesh_elements = mesh.convert_to_elements();
         let dofs = simulation_keywords.get_int("DOF").unwrap_or(3) as usize;
         let mut simulation = Simulation::from_mesh(mesh, dofs);
         simulation.set_keywords(simulation_keywords);

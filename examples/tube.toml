@@ -36,11 +36,12 @@ dof = 3
 [sim.solver]
 method = "explicit"
 # time_step = 0.000011
-time_steps = 20000
-vtk_save_steps = 500
+time_steps = 10000
+vtk_save_steps = 1000
 
 [sim.output]
 vtk = "examples/output/tube/tube_explicit.vtk"
+clear_directory = true
 
 [[sim.boundary_conditions]]
 type = "load"

@@ -47,7 +47,7 @@ fn main() {
     //find node with max displacement and print it
     let mut max_disp = 0.0;
     let mut max_node = 0;
-    for node in simulation.nodes.iter() {
+    for (id, node) in simulation.nodes.iter() {
         let disp = node.displacement.x;
         if disp > max_disp {
             max_disp = disp;

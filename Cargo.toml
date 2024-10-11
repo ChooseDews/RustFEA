@@ -23,7 +23,6 @@ toml = "0.8.19"
 opt-level = 3
 debug = true
 
-
 [profile.dev]
 opt-level = 3
 debug = true

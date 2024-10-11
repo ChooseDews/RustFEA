@@ -74,11 +74,11 @@ impl BoundaryCondition for NormalContact {
         //if the distance is less than the max distance then apply the contact condition
         //to the node and the element
         for primary_node in &self.active_primary_nodes {
-            let primary_node = simulation.nodes[*primary_node];
+            let primary_node = simulation.get_node(*primary_node).unwrap();
             let mut min_distance = f64::INFINITY;
             let mut vector_distance = na::Vector3::new(0.0, 0.0, 0.0);
             for secondary_element in &self.active_secondary_elements {
-                let secondary_element = &simulation.elements[*secondary_element];
+                let secondary_element = simulation.get_element(*secondary_element).unwrap();
                 let distance = secondary_element.get_signed_distance_vector(primary_node.position, simulation);
                 if distance.is_some() {
                     let distance = distance.unwrap();
@@ -115,7 +115,7 @@ impl BoundaryCondition for NormalContact {
             nalgebra::ArrayStorage<f64, 3, 1>,
         > = na::Vector3::new(f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
         for node in &self.secondary_nodes {
-            let node = simulation.nodes[*node];
+            let node = simulation.get_node(*node).unwrap();
             min_point.x = min_point.x.min(node.position.x);
             min_point.y = min_point.y.min(node.position.y);
             min_point.z = min_point.z.min(node.position.z);
@@ -127,7 +127,7 @@ impl BoundaryCondition for NormalContact {
         max_point = max_point.add_scalar(self.max_distance);
 
         for node in &self.primary_nodes {
-            let node = simulation.nodes[*node];
+            let node = simulation.get_node(*node).unwrap();
             if node.position.x >= min_point.x
                 && node.position.x <= max_point.x
                 && node.position.y >= min_point.y

@@ -1,5 +1,6 @@
 use log::{debug, info, trace, warn};
 use nalgebra::{DMatrix, DVector};
+use nalgebra_sparse::ops::Op;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
@@ -16,9 +17,9 @@ use crate::io::vtk_writer::write_vtk;
 use crate::utilities::Keywords;
 #[derive(Serialize, Deserialize)]
 pub struct Simulation {
-    pub nodes: Vec<Node>,
+    pub nodes: HashMap<usize, Node>,
     pub node_feilds: HashMap<String, Vec<f64>>,
-    pub elements: Vec<Box<dyn BaseElement>>,
+    pub elements: HashMap<usize, Box<dyn BaseElement>>,
 
     pub dofs: usize,
     pub keywords: Keywords,
@@ -32,7 +33,6 @@ pub struct Simulation {
 
     #[serde(skip, default = "Vec::new")]
     pub active_elements: Vec<usize>,
-
 }
 
 impl fmt::Display for Simulation {
@@ -72,8 +72,8 @@ impl NodeAvgValue {
 impl Simulation {
     pub fn new() -> Self {
         Simulation {
-            nodes: Vec::new(),
-            elements: Vec::new(),
+            nodes: HashMap::new(),
+            elements: HashMap::new(),
             node_feilds: HashMap::new(),
             boundary_conditions: Vec::new(),
             load_vector: Vec::new(),
@@ -98,11 +98,21 @@ impl Simulation {
         simulation
     }
 
+    pub fn check_node_ordering(&self) { //required for correct assembly. Not required for elements as you never need to assemble by index. TODO: Could be replaced by mapping at solve time
+        debug!("Checking node ordering");
+        let n_count = self.nodes.len();
+        for i in 0..n_count {
+            let node = self.get_node(i).expect(format!("Node {} out of {} not found", i, n_count).as_str());
+            if node.id != i {
+                panic!("Internal Node Id {} is out of order from expected {}", node.id, i);
+            }
+        }
+    }
 
     pub fn set_mesh(&mut self, mesh: MeshAssembly) {
         self.mesh = mesh;
     }
-    
+
     pub fn from_mesh(mesh: MeshAssembly, dofs: usize) -> Self {
         let elements = mesh.convert_to_elements();
         let nodes = mesh.convert_to_nodes();
@@ -136,6 +146,7 @@ impl Simulation {
     pub fn one_time_init(&mut self) {
         self.set_active_elements();
         self.init_bc();
+        self.check_node_ordering();
     }
 
     pub fn init_bc(&mut self) {
@@ -148,7 +159,7 @@ impl Simulation {
     }
 
     pub fn add_node(&mut self, node: Node) {
-        self.nodes.push(node);
+        self.nodes.insert(node.id, node);
     }
 
     pub fn add_boundary_condition(&mut self, bc: Box<dyn BoundaryCondition>) {
@@ -156,42 +167,42 @@ impl Simulation {
     }
 
     pub fn add_element(&mut self, element: Box<dyn BaseElement>) {
-        self.elements.push(element);
+        self.elements.insert(element.get_id(), element);
     }
 
-    pub fn get_node(&self, id: usize) -> Option<&Node> {
-        self.nodes.get(id)
+    pub fn get_node(&self, index: usize) -> Option<&Node> {
+        self.nodes.get(&index)
     }
 
-    pub fn get_node_mut(&mut self, id: usize) -> Option<&mut Node> {
-        self.nodes.get_mut(id)
+    pub fn get_node_mut(&mut self, index: usize) -> Option<&mut Node> {
+        self.nodes.get_mut(&index)
     }
 
     pub fn get_nodes(&self, ids: &[usize]) -> Vec<&Node> {
         ids.iter().filter_map(|&id| self.get_node(id)).collect()
     }
 
-    pub fn get_element(&self, id: usize) -> Option<&Box<dyn BaseElement>> {
-        self.elements.get(id)
+    pub fn get_element(&self, index: usize) -> Option<&Box<dyn BaseElement>> {
+        self.elements.get(&index)
     }
 
     pub fn get_element_mut(&mut self, id: usize) -> Option<&mut Box<dyn BaseElement>> {
-        self.elements.get_mut(id)
+        self.elements.get_mut(&id)
     }
 
-    pub fn nodes(&self) -> &Vec<Node> {
+    pub fn nodes(&self) -> &HashMap<usize, Node> {
         &self.nodes
     }
 
-    pub fn nodes_mut(&mut self) -> &mut Vec<Node> {
+    pub fn nodes_mut(&mut self) -> &mut HashMap<usize, Node> {
         &mut self.nodes
     }
 
-    pub fn elements(&self) -> &Vec<Box<dyn BaseElement>> {
+    pub fn elements(&self) -> &HashMap<usize, Box<dyn BaseElement>> {
         &self.elements
     }
 
-    pub fn elements_mut(&mut self) -> &mut Vec<Box<dyn BaseElement>> {
+    pub fn elements_mut(&mut self) -> &mut HashMap<usize, Box<dyn BaseElement>> {
         &mut self.elements
     }
 
@@ -229,7 +240,14 @@ impl Simulation {
     }
 
     pub fn set_active_elements(&mut self) {
-        self.active_elements = self.elements.iter().enumerate().filter(|(_, element)| element.is_active()).map(|(i, _)| i).collect();
+        //collect element.id that are active
+        self.active_elements = Vec::new();
+        for (id, element) in self.elements.iter() {
+            if element.is_active() {
+                self.active_elements.push(*id);
+            }
+        }
+        debug!("Total Active Elements: {}", self.active_elements.len());
     }
 
     pub fn active_elements(&self) -> Vec<usize> {
@@ -237,8 +255,8 @@ impl Simulation {
     }
 
     pub fn compute_all_element_stiffness(&mut self) {
-        for i in self.active_elements() {
-            self.set_element_stiffness(i, self.compute_element_stiffness(i));
+        for i in self.active_elements().iter() {
+            self.set_element_stiffness(*i, self.compute_element_stiffness(*i));
         }
     }
 
@@ -252,9 +270,9 @@ impl Simulation {
 
     pub fn compute_all_element_mass(&mut self) {
         let mut total_mass = 0.0;
-        for i in self.active_elements() {
-            let mass = self.compute_element_mass(i);
-            let element = self.get_element_mut(i).unwrap();
+        for i in self.active_elements().iter() {
+            let mass = self.compute_element_mass(*i);
+            let element = self.get_element_mut(*i).unwrap();
             total_mass += element.set_lumped_mass(&mass);
             element.set_mass(mass);
         }
@@ -272,8 +290,8 @@ impl Simulation {
         self.compute_all_element_mass();
 
         trace!("Assembling global stiffness matrix");
-        for i in self.active_elements() {
-            let element = self.get_element(i).unwrap();
+        for i in self.active_elements().iter() {
+            let element = self.get_element(*i).unwrap();
             let element_stiffness_matrix = element.get_stiffness();
             let element_connectivity = element.get_connectivity();
             let node_count = element_connectivity.len();
@@ -311,10 +329,8 @@ impl Simulation {
     pub fn compute_global_mass_matrix_diagonal(&self) -> DVector<f64> {
         let total_dofs = self.nodes.len() * self.dofs;
         let mut global_mass_diagonal = DVector::zeros(total_dofs);
-        for element in &self.elements {
-            if !element.is_active() {
-                continue;
-            }
+        for i in self.active_elements().iter() {
+            let element = self.get_element(*i).unwrap();
             let element_mass = element.get_lumped_mass();
             let connectivity = element.get_connectivity();
             for (local_index, &node_id) in connectivity.iter().enumerate() {
@@ -329,10 +345,8 @@ impl Simulation {
 
     pub fn compute_force_vector(&self) -> DVector<f64> {
         let mut force_vector = DVector::zeros(self.nodes.len() * self.dofs);
-        for element in &self.elements {
-            if !element.is_active() {
-                continue;
-            }
+        for i in self.active_elements().iter() {
+            let element = self.get_element(*i).unwrap();
             let force = element.compute_force(&self);
             let connectivity = element.get_connectivity();
             for (local_index, &node_id) in connectivity.iter().enumerate() {
@@ -345,13 +359,12 @@ impl Simulation {
         force_vector
     }
 
-
     pub fn displacement_vector(&mut self) -> DVector<f64> {
         let dofs = self.dofs;
         let mut displacement_vector = DVector::zeros(self.nodes.len() * dofs);
-        for node in self.nodes.iter() {
+        for (node_id, node) in self.nodes.iter() {
             for dof in 0..dofs {
-                let global_index = self.get_global_index(node.id, dof);
+                let global_index = self.get_global_index(*node_id, dof);
                 displacement_vector[global_index] = node.displacement[dof];
             }
         }
@@ -359,10 +372,16 @@ impl Simulation {
     }
 
     pub fn prep_output_directory(&self) {
-        let clear_directory = self.keywords.get_bool("OUTPUT_CLEAR_DIRECTORY").unwrap_or(false);
-        let output_vtk = self.keywords.get_string("OUTPUT_VTK").expect("No output vtk specified");
+        let clear_directory = self
+            .keywords
+            .get_bool("OUTPUT_CLEAR_DIRECTORY")
+            .unwrap_or(false);
+        let output_vtk = self
+            .keywords
+            .get_string("OUTPUT_VTK")
+            .expect("No output vtk specified");
         let output_vtk_dir = Path::new(&output_vtk).parent().unwrap();
-        if !output_vtk_dir.exists(){
+        if !output_vtk_dir.exists() {
             info!("Creating output directory: {}", output_vtk_dir.display());
             std::fs::create_dir_all(output_vtk_dir).expect("Failed to create output directory")
         }
@@ -374,16 +393,24 @@ impl Simulation {
     }
 
     pub fn solve_explicit(&mut self) {
-
         self.prep_output_directory();
-        let output_vtk = self.keywords.get_string("OUTPUT_VTK").expect("No output vtk specified");
+        let output_vtk = self
+            .keywords
+            .get_string("OUTPUT_VTK")
+            .expect("No output vtk specified");
 
         //compute fundumental dt
-        let vel = self.get_element(0).unwrap().get_material().get_wave_speed();
+        let vel = self.get_element(self.active_elements()[0]).unwrap().get_material().get_wave_speed();
         let fundumental_dt = self.mesh.compute_dt(vel);
-        let dt = self.keywords.get_float("SOLVER_TIME_STEP").unwrap_or(fundumental_dt*0.75);
+        let dt = self
+            .keywords
+            .get_float("SOLVER_TIME_STEP")
+            .unwrap_or(fundumental_dt * 0.75);
         if dt > fundumental_dt {
-            warn!("Time step is greater than the fundumental dt: {} > {}", dt, fundumental_dt);
+            warn!(
+                "Time step is greater than the fundumental dt: {} > {}",
+                dt, fundumental_dt
+            );
         }
         let time_steps = self.keywords.get_int("SOLVER_TIME_STEPS").unwrap_or(100);
         let print_steps = self.keywords.get_int("SOLVER_PRINT_STEPS").unwrap_or(0);
@@ -429,8 +456,7 @@ impl Simulation {
             }
 
             // Update nodal displacements
-            for node in self.nodes_mut() {
-                let node_id = node.id;
+            for (node_id, node) in self.nodes_mut() {
                 node.set_displacement(u[node_id * 3], u[node_id * 3 + 1], u[node_id * 3 + 2]);
             }
 
@@ -441,7 +467,6 @@ impl Simulation {
             u_dot = &u_half_dot + 0.5 * dt * &new_u_dotdot;
             u_dot *= 0.9995;
 
-            
             if vtk_save_steps > 0 && i % vtk_save_steps == 0 {
                 self.compute_result_feilds();
                 let output_vtk = output_vtk.replace(".vtk", &format!("_step_{}.vtk", i));
@@ -463,9 +488,10 @@ impl Simulation {
 
     pub fn solve(&mut self) {
         let start_time = std::time::Instant::now();
-        let method = self.keywords.get_string("SOLVER_METHOD").unwrap_or("direct".to_string());
-
-
+        let method = self
+            .keywords
+            .get_string("SOLVER_METHOD")
+            .unwrap_or("direct".to_string());
 
         self.one_time_init();
         match method.as_str() {
@@ -486,32 +512,39 @@ impl Simulation {
         let u = direct_solve(&global_stiffness_matrix, &global_force);
         info!("Performing post-solve computations");
         //populate node displacements
-        for node in self.nodes_mut() {
-            let node_id = node.id;
+        for (node_id, node) in self.nodes_mut() {
             node.set_displacement(u[node_id * 3], u[node_id * 3 + 1], u[node_id * 3 + 2])
         }
         self.compute_result_feilds();
-        
     }
 
     pub fn compute_result_feilds(&mut self) {
         let element_count = self.elements.len();
 
         //average element feilds for each node
-        let feilds = self.compute_element_properties(0).get_feild_names();
-
-        //create hashmap -> [nodes]- > NodeAvgValue
+        let mut feilds: Vec<String> = Vec::new();
         let mut node_feilds: HashMap<String, Vec<NodeAvgValue>> = HashMap::new();
-        for feild in &feilds {
-            let mut node_avg_values: Vec<NodeAvgValue> = Vec::new();
-            for _ in 0..self.nodes.len() {
-                node_avg_values.push(NodeAvgValue::new());
-            }
-            node_feilds.insert(feild.to_string(), node_avg_values);
-        }
 
-        for i in self.active_elements() {
-            let element = self.get_element(i).unwrap();
+
+        for i in self.active_elements().iter() {
+
+            if feilds.is_empty() { //use first element to get & initalize fields
+                feilds = self.compute_element_properties(*i).get_feild_names();
+                if !feilds.is_empty() {
+                    for feild in &feilds {
+                        let mut node_avg_values: Vec<NodeAvgValue> = Vec::new();
+                        for _ in 0..self.nodes.len() {
+                        node_avg_values.push(NodeAvgValue::new());
+                        }
+                        node_feilds.insert(feild.to_string(), node_avg_values);
+                    }
+                }else{
+                    warn!("No feilds found for first element {}", i);
+                    continue;
+                }
+            }
+
+            let element = self.get_element(*i).unwrap();
             let element_props = element.compute_element_nodal_properties(&self);
             let connectivity = element.get_connectivity();
             for feild in &feilds {
@@ -562,7 +595,7 @@ impl Simulation {
 
         // Print element types and counts
         let mut element_types = std::collections::HashMap::new();
-        for element in &self.elements {
+        for (_index, element) in self.elements.iter() {
             let type_name = element.type_name();
             *element_types.entry(type_name).or_insert(0) += 1;
         }

@@ -20,4 +20,5 @@ Cargo.lock
 *.json.xz
 **.msh
 **.hdf
+*.svg
 temp/*

@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::{Write, BufWriter};
 use crate::simulation::Simulation;
 use crate::elements::{BrickElement, BaseElement, ElementType};
-
+use std::collections::HashMap;
 
 //logging
 use log::{info, debug, trace};
@@ -16,6 +16,7 @@ use log::{info, debug, trace};
 /// # Returns
 /// A `std::io::Result<()>` indicating the success or failure of the operation.
 pub fn write_vtk(filename: &str, simulation: &Simulation) -> std::io::Result<()> {
+    let start_time = std::time::Instant::now();
     info!("Writing VTK file: {}", filename);
 
     let file = File::create(filename)?;
@@ -27,15 +28,14 @@ pub fn write_vtk(filename: &str, simulation: &Simulation) -> std::io::Result<()>
     let nodes = simulation.nodes();
     // Write points (nodes)
     writeln!(file, "POINTS {} float", nodes.len())?;
-    for node in nodes.iter() {
+    for (_, node) in nodes.iter() {
         writeln!(file, "{} {} {}", node.position.x, node.position.y, node.position.z)?;
     }
 
-    let all_elements: &Vec<Box<dyn BaseElement>> = simulation.elements();
-    let elements: Vec<&Box<dyn BaseElement>> = all_elements.iter().filter(|element: &&Box<dyn BaseElement>| element.type_name() == ElementType::Brick).collect();
+    let all_elements: &HashMap<usize, Box<dyn BaseElement>> = simulation.elements();
+    let elements: Vec<&Box<dyn BaseElement>> = all_elements.iter().filter(|(_id, element)| element.type_name() == ElementType::Brick).map(|(_, element)| element).collect();
 
     let elements_size = elements.len();    // Write cells (elements)
-    let elements_size = elements.len();
     let total_list_entries = elements_size * 9; // 8 nodes per element + 1 value for the number of points in the cell
     writeln!(file, "CELLS {} {}", elements_size, total_list_entries)?;
     for elem in elements.iter() {
@@ -55,7 +55,7 @@ pub fn write_vtk(filename: &str, simulation: &Simulation) -> std::io::Result<()>
     // Write point data for nodal displacements
     writeln!(file, "POINT_DATA {}", nodes.len())?;
     writeln!(file, "VECTORS displacement float")?;
-    for node in nodes.iter() {
+    for (_, node) in nodes.iter() {
         writeln!(file, "{} {} {}", node.displacement.x, node.displacement.y, node.displacement.z)?;
     }
 
@@ -68,6 +68,7 @@ pub fn write_vtk(filename: &str, simulation: &Simulation) -> std::io::Result<()>
             writeln!(file, "{}", value)?;
         }
     }
-
+    let dt = start_time.elapsed();
+    info!("Time taken to write VTK file: {:?}", dt);
     Ok(())
 }
