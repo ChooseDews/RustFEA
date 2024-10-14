@@ -26,9 +26,8 @@ jobs:
           libmumps-dev
     - name: Build
       run: cargo build --verbose
-
-    - name: Run tests
-      run: cargo test --verbose
+    - name: Run benchmark
+      run: cargo bench | tee output.txt
     - name: Store benchmark result
       uses: benchmark-action/github-action-benchmark@v1
       with:
