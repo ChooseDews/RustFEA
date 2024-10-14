@@ -7,6 +7,7 @@ use std::fmt;
 use std::path::Path;
 
 use crate::bc::condition::BoundaryCondition;
+use crate::bc::BoundaryConditionType;
 use crate::elements::base_element::{BaseElement, ElementFields};
 use crate::io::matrix_writer::{write_hashmap_sparse_matrix, write_vector};
 use crate::mesh::MeshAssembly;
@@ -14,7 +15,7 @@ use crate::node::Node;
 use crate::solver::{direct_choslky, direct_solve};
 
 use crate::io::vtk_writer::write_vtk;
-use crate::utilities::Keywords;
+use crate::utilities::{Keywords, check_for_nans, safe_component_div, print_max_displacement};
 #[derive(Serialize, Deserialize)]
 pub struct Simulation {
     pub nodes: Vec<Node>,
@@ -65,6 +66,9 @@ impl NodeAvgValue {
         self.count += 1;
     }
     pub fn get_avg(&self) -> f64 {
+        if self.count == 0 {
+            return 0.0;
+        }
         self.value / self.count as f64
     }
 }
@@ -342,8 +346,9 @@ impl Simulation {
         let mut force_vector = DVector::zeros(self.nodes.len() * self.dofs);
         for i in self.active_elements().iter() {
             let element = self.get_element(*i).unwrap();
-            let force = element.compute_force(&self);
+            let force: nalgebra::Matrix<f64, nalgebra::Dyn, nalgebra::Const<1>, nalgebra::VecStorage<f64, nalgebra::Dyn, nalgebra::Const<1>>> = element.compute_force(&self);
             let connectivity = element.get_connectivity();
+            // assert!(!check_for_nans(&force), "#1 force vector contains NaNs, element: {} with nodes: {}", *i, connectivity.iter().map(|x| x.to_string()).collect::<Vec<String>>().join(", "));
             for (local_index, &node_id) in connectivity.iter().enumerate() {
                 for dof in 0..self.dofs {
                     let global_index = self.get_global_index(node_id, dof);
@@ -430,17 +435,22 @@ impl Simulation {
         let mut u_dot = DVector::zeros(self.nodes.len() * self.dofs);
         let mut u_half_dot = DVector::zeros(self.nodes.len() * self.dofs);
 
+
         let mut i = 0;
         let mut t = 0.0;
         while i < time_steps {
+
+            assert!(!check_for_nans(&u), "#1 Initial displacement vector contains NaNs, step: {}", i);
+            
             // Compute forces
             self.assemble_global_force(); //populates global force and fixed global nodal values
             let external_force = DVector::from_vec(self.load_vector.clone());
             let internal_force = self.compute_force_vector();
             let residual_force = &external_force - &internal_force;
-
-            // Update velocity and position
-            let u_dotdot = residual_force.component_div(&global_mass_matrix_diagonal);
+            // assert!(!check_for_nans(&internal_force), "#2 internal_force vector contains NaNs, step: {}", i);
+            // assert!(!check_for_nans(&residual_force), "#3 residual_force vector contains NaNs, step: {}", i);
+            // let u_dotdot = residual_force.component_div(&global_mass_matrix_diagonal);
+            let u_dotdot = safe_component_div(&residual_force, &global_mass_matrix_diagonal);
             u_half_dot = &u_dot + 0.5 * dt * &u_dotdot;
             u += dt * &u_half_dot;
 
@@ -459,7 +469,7 @@ impl Simulation {
             // Compute new forces and update velocity
             let new_internal_force = self.compute_force_vector();
             let new_residual_force = &external_force - &new_internal_force;
-            let new_u_dotdot = new_residual_force.component_div(&global_mass_matrix_diagonal);
+            let new_u_dotdot = safe_component_div(&new_residual_force, &global_mass_matrix_diagonal);
             u_dot = &u_half_dot + 0.5 * dt * &new_u_dotdot;
             u_dot *= 0.9995;
 
@@ -467,13 +477,23 @@ impl Simulation {
                 self.compute_result_feilds();
                 let output_vtk = output_vtk.replace(".vtk", &format!("_step_{}.vtk", i));
                 write_vtk(output_vtk.as_str(), &self);
+                print_max_displacement(&u);
+
+                //print contact stats
+                for bc in &self.boundary_conditions {
+                    if let BoundaryConditionType::Contact = bc.type_name() {
+                        bc.print_stats();
+                    }
+                }
+
+
             }
             if print_steps > 0 && i % print_steps == 0 {
-                println!("[{}] Time: {}", i, t);
+                info!("[{}] Time: {}", i, t);
                 let res_vals: Vec<String> = residual_force.iter().map(|x| x.to_string()).collect();
-                println!("Residual force: {}", res_vals.join(", "));
+                info!("Residual force: {}", res_vals.join(", "));
                 let u_vals: Vec<String> = u.iter().map(|x| x.to_string()).collect();
-                println!("\n Displacment: {}", u_vals.join(", "));
+                info!("\n Displacment: {}", u_vals.join(", "));
             }
             i += 1;
             t += dt;
@@ -549,8 +569,7 @@ impl Simulation {
                 let feild_values = element_props.field.get(feild).unwrap();
                 for (j, value) in feild_values.iter().enumerate() {
                     let node_id = connectivity[j];
-                    let node_avg_value = node_feilds.get_mut(feild).unwrap();
-                    node_avg_value[node_id].add_value(*value);
+                    node_feilds.get_mut(feild).unwrap()[node_id].add_value(*value);
                 }
             }
         }
@@ -563,8 +582,7 @@ impl Simulation {
             for node_avg_value in node_avg_values {
                 node_feilds_value.push(node_avg_value.get_avg());
             }
-            self.node_feilds
-                .insert(feild.to_string(), node_feilds_value);
+            self.node_feilds.insert(feild.to_string(), node_feilds_value);
         }
     }
 
@@ -610,7 +628,7 @@ impl Simulation {
         }
         debug!("Boundary Condition Types:");
         for (type_name, count) in bc_types {
-            debug!("  - {}: {}", type_name, count);
+            debug!("  - {:?}: {}", type_name, count);
         }
     }
 }

@@ -1,9 +1,45 @@
+use std::borrow::Borrow;
+
 use nalgebra as na;
 use na::{DVector};
 use serde::{Serialize, Deserialize};
 use log::{debug, info, warn};
 use toml::Value;
 
+pub fn print_max_displacement(displacement: &DVector<f64>) {
+    let max_disp = displacement.iter().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
+    debug!("Max displacement: {}", max_disp);
+}
+
+pub fn check_for_nans<I>(iter: I) -> bool
+where
+    I: IntoIterator,
+    I::Item: std::borrow::Borrow<f64>,
+{
+    for (i, x) in iter.into_iter().enumerate() {
+        if x.borrow().is_nan() {
+            debug!("NaN at index: {}", i);
+            return true;
+        }
+    }
+    false
+}
+
+
+pub fn safe_component_div(a: &DVector<f64>, b: &DVector<f64>) -> DVector<f64> {
+    let mut result = a.clone();
+    for (i, &x) in a.iter().enumerate() {
+        if b[i] != 0.0 {
+            result[i] = x / b[i];
+        }else{
+            if x > 0.0 {
+                warn!("Zero Mass with an applied force at node: {}. What does it mean? zero hopefully.", i);
+            }
+            result[i] = 0.0;
+        }
+    }
+    result
+}
 
 
 pub fn compute_von_mises(stress_vector: DVector<f64>) -> f64 {

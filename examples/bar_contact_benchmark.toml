@@ -1,6 +1,6 @@
 name = "Bar Contact Simulation"
 dof = 3
-OUTPUT = "temp/bar_contact.json.xz"
+OUTPUT = "examples/output/bar_contact.json.xz"
 
 
 [[sim]]

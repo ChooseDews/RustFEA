@@ -1,5 +1,5 @@
 // src/elements/brick_element.rs
-use crate::simulation::{Simulation};
+use crate::{simulation::Simulation, utilities::check_for_nans};
 use super::base_element::{BaseElement, Material, ElementFields, ElementType};
 use nalgebra as na;
 use na::{DMatrix, DVector, SMatrix, SVector};
@@ -71,6 +71,20 @@ impl BrickElement {
         gauss_points.push((a, a, a, 1.0));
         gauss_points.push((-a, a, a, 1.0));
         gauss_points
+    }
+
+    fn get_corner_points() -> Vec<(f64, f64, f64, f64)> {
+        //in local coordinates ie. -1 to 1
+        let mut corner_points: Vec<(f64, f64, f64, f64)> = Vec::new();
+        corner_points.push((-1.0, -1.0, -1.0, 1.0));
+        corner_points.push((1.0, -1.0, -1.0, 1.0));
+        corner_points.push((1.0, 1.0, -1.0, 1.0));
+        corner_points.push((-1.0, 1.0, -1.0, 1.0));
+        corner_points.push((-1.0, -1.0, 1.0, 1.0));
+        corner_points.push((1.0, -1.0, 1.0, 1.0));
+        corner_points.push((1.0, 1.0, 1.0, 1.0));
+        corner_points.push((-1.0, 1.0, 1.0, 1.0));
+        corner_points
     }
 
     fn get_u_fixed(&self, simulation: &Simulation) -> SVector<f64, 24> {
@@ -231,7 +245,7 @@ impl BaseElement for BrickElement {
     fn compute_stiffness(&mut self, simulation: &Simulation){
         trace!("Computing stiffness matrix for brick element");
         let mut K = empty_element_matrix();
-        let gauss_points = BrickElement::get_gauss_points();
+        let gauss_points = BrickElement::get_corner_points();
         for (xi, eta, zeta, weight) in gauss_points {
             let B = self.compute_b(xi, eta, zeta, &simulation);
             let J = self.compute_jacobian_matrix(xi, eta, zeta, &simulation);
@@ -338,7 +352,7 @@ impl BaseElement for BrickElement {
 
         let mut nn = 0; //node number
         for (xi, eta, zeta, _) in gauss_points {
-            let strain = self.compute_strain(xi, eta, zeta, &simulation);
+            let strain: nalgebra::Matrix<f64, nalgebra::Dyn, nalgebra::Const<1>, nalgebra::VecStorage<f64, nalgebra::Dyn, nalgebra::Const<1>>> = self.compute_strain(xi, eta, zeta, &simulation);
             let stress = self.compute_stress(xi, eta, zeta, &simulation);
             element_feilds.append_to_feild("e_xx", nn, strain[0]);
             element_feilds.append_to_feild("e_yy", nn, strain[1]);

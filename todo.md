@@ -3,8 +3,9 @@
 - [ ] Use better solver for Ax=b. Upgrade to newest russell library
 - [ ] add intergrations with paraview?
 - [x] add an explict solving scheme
-- [ ] contact
-    - [ ] Multi-body handling -> Multi-body mesh -> some way to merge meshes together
+- [x] contact
+    - [x] Multi-body handling -> Multi-body mesh -> some way to merge meshes together
+    - [ ] Fix issues with contact on element edges
 - [x] Switch config file to use toml format
 - [ ] New Boundary Conditions
     - [ ] Pressure / Normal vector based BC
@@ -16,3 +17,12 @@
 - [ ] Body forces
 - [ ] Simple material input handling
 - [ ] Non-linear material handling
+
+
+# Validations
+- [ ] Beam problems compared to abaqus and exact solutions
+
+
+
+# Problems
+- [ ] What about nodes that are not part of any element?

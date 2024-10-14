@@ -38,6 +38,9 @@ pub fn write_vtk(filename: &str, simulation: &Simulation) -> std::io::Result<()>
     let total_list_entries = elements_size * 9; // 8 nodes per element + 1 value for the number of points in the cell
     writeln!(file, "CELLS {} {}", elements_size, total_list_entries)?;
     for elem in elements.iter() {
+        if elem.is_active() == false {
+            continue;
+        }
         file.write_all(b"8 ")?; // 8-node brick element
         for &id in elem.get_connectivity() {
             write!(file, "{} ", id)?; // VTK uses 0-based index

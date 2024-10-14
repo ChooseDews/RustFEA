@@ -3,6 +3,7 @@ use crate::bc::BoundaryCondition;
 use nalgebra as na;
 use na::DVector;
 use serde::{Serialize, Deserialize};
+use crate::bc::BoundaryConditionType;
 
 
 /// Represents a load boundary condition
@@ -33,7 +34,7 @@ impl LoadCondition {
 
 #[typetag::serde]
 impl BoundaryCondition for LoadCondition {
-    fn apply(&self, simulation: &mut Simulation) {
+    fn apply(&mut self, simulation: &mut Simulation) {
         for &node_id in &self.nodes {
             for i in 0..self.force.len() {
                 let global_index = simulation.get_global_index(node_id, i);
@@ -46,7 +47,7 @@ impl BoundaryCondition for LoadCondition {
         &self.nodes
     }
 
-    fn type_name(&self) -> &str {
-        "LoadCondition"
+    fn type_name(&self) -> BoundaryConditionType {
+        BoundaryConditionType::Force
     }
 }

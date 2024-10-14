@@ -10,29 +10,33 @@ dof = 3
 [[sim.meshes]]
 file = "meshes/hertz.inp"
 volumes = ["cylinder" , "block"]
-active_volumes = ["cylinder", "block"]
+active_volumes = ["cylinder"]
 
 [[sim.boundary_conditions]]
 type = "fixed"
 name = "top"
-values = [-0.002, 0.0, 0.0]
+values = [ false, 0.0, false]
 
 [[sim.boundary_conditions]]
 type = "fixed"
+name = "back_line"
+values = [ false, false, 0.0]
+
+[[sim.boundary_conditions]]
+type = "load"
+name = "top"
+values = [-1000000, 0.0, 0.0]
+
+[[sim.boundary_conditions]]
+type = "fixed"
+name = "block"
+values = [0.0, 0.0, 0.0]
+
+
+[[sim.boundary_conditions]]
+type = "contact"
 name = "contact_a"
-values = [0.0, 0.0, 0.0]
-
-
-[[sim.boundary_conditions]]
-type = "fixed"
-name = "bottom"
-values = [0.0, 0.0, 0.0]
-
-
-# [[sim.boundary_conditions]]
-# type = "contact"
-# name = "contact_a"
-# secondary = "contact_b"
+secondary = "contact_b"
 
 
 [sim.output]
@@ -43,6 +47,6 @@ clear_directory = true
 [sim.solver]
 extra_stiffness = 1e13
 method = "explicit"
-# time_step = 0.000001
-time_steps = 150000
-vtk_save_steps = 5000
+time_step = 0.0000001
+time_steps = 2000000
+vtk_save_steps = 10000

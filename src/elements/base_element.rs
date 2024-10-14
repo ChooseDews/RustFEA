@@ -113,7 +113,7 @@ impl Material {
         Material {
             youngs_modulus: 68.9e9,
             poisson_ratio: 0.33,
-            density: 2700.0
+            density: 2700.0 //mass scaling
         }
     }
 

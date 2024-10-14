@@ -255,13 +255,14 @@ impl MeshAssembly {
 
     //get closest pair of nodes
     pub fn get_closest_nodes(&self) -> (usize, usize, f64) {
+        let overlap_tol = 1e-6;
         let mut min_dist = std::f64::MAX;
         let mut closest_nodes = (0, 0, 0.0);
         let nodes: Vec<(&usize, &MeshNode)> = self.nodes.iter().collect();
         for (i, (&id1, node1)) in nodes.iter().enumerate() {
             for (&id2, node2) in nodes[i+1..].iter() { //avoid duplicate pairs
                 let dist = node1.distance(node2);
-                if dist < min_dist {
+                if dist < min_dist && dist > overlap_tol {
                     min_dist = dist;
                     closest_nodes = (id1, id2, dist);
                 }

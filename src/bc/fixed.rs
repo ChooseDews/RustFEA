@@ -5,6 +5,7 @@ use na::{DMatrix, DVector, Vector3};
 use nalgebra_sparse::ops::Op;
 use serde::{Serialize, Deserialize};
 use std::fmt;
+use crate::bc::BoundaryConditionType;
 
 
 /// Represents a fixed boundary condition
@@ -35,7 +36,7 @@ impl FixedCondition {
 
 #[typetag::serde]
 impl BoundaryCondition for FixedCondition {
-    fn apply(&self, simulation: &mut Simulation) {
+    fn apply(&mut self, simulation: &mut Simulation) {
         for &node_id in &self.nodes {
             for (i, value) in self.fixed_values.iter().enumerate() {
                 if value.is_none() { continue };
@@ -49,8 +50,8 @@ impl BoundaryCondition for FixedCondition {
         &self.nodes
     }
 
-    fn type_name(&self) -> &str {
-        "FixedCondition"
+    fn type_name(&self) -> BoundaryConditionType {
+        BoundaryConditionType::Fixed
     }
 }
 

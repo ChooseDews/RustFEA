@@ -1,8 +1,11 @@
-use crate::bc::BoundaryCondition;
+use crate::{bc::BoundaryCondition, utilities::check_for_nans};
 use crate::simulation::Simulation;
 use log::debug;
 use nalgebra::{self as na, DVector};
 use serde::{Deserialize, Serialize};
+use crate::bc::BoundaryConditionType;
+
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ContactType {
     Penalty,
@@ -28,6 +31,9 @@ pub struct NormalContact {
     //used for computation
     active_primary_nodes: Vec<usize>,
     active_secondary_elements: Vec<usize>,
+    
+    penetration_count: usize,
+    max_penetration: f64,
 }
 
 impl NormalContact {
@@ -35,7 +41,7 @@ impl NormalContact {
         NormalContact {
             primary_surface,
             secondary_surface,
-            contact_stiffness: 50000000.0,
+            contact_stiffness: 10000000.0,
             max_distance: 0.25,
             active_primary_nodes: Vec::new(),
             contact_type: ContactType::Penalty,
@@ -44,6 +50,8 @@ impl NormalContact {
             primary_elements: Vec::new(),
             secondary_nodes: Vec::new(),
             secondary_elements: Vec::new(),
+            penetration_count: 0,
+            max_penetration: 0.0,
         }
     }
     pub fn set_contact_surfaces_nodes(
@@ -63,17 +71,23 @@ impl NormalContact {
         self.primary_elements = primary_elements;
         self.secondary_elements = secondary_elements;
     }
+    pub fn set_penetration_count(&mut self, count: usize) {
+        self.penetration_count = count;
+    }
+    pub fn set_max_penetration(&mut self, max_penetration: f64) {
+        self.max_penetration = max_penetration;
+    }
 }
 
 #[typetag::serde]
 impl BoundaryCondition for NormalContact {
-    fn apply(&self, simulation: &mut Simulation) {
+    fn apply(&mut self, simulation: &mut Simulation) {
         // Implement the logic to apply the contact condition to the simulation
 
         //for each active node check signed distance to each secondary element
         //if the distance is less than the max distance then apply the contact condition
         //to the node and the element
-        let mut min_dist = f64::INFINITY;
+        let mut max_penetration: f64 = 0.0;
         let mut active_nodes = 0;
         for primary_node_index in &self.active_primary_nodes {
             let primary_node = simulation.get_node(*primary_node_index).unwrap();
@@ -88,8 +102,8 @@ impl BoundaryCondition for NormalContact {
                     let contact_force = contact_stiffness * signed_distance;
                     load_vector = Some(contact_force);
                     let magnitude = signed_distance.magnitude();
-                    if magnitude < min_dist {
-                        min_dist = magnitude;
+                    if magnitude > max_penetration {
+                        max_penetration = magnitude;
                     }
                     active_nodes += 1;
                     break;
@@ -98,20 +112,22 @@ impl BoundaryCondition for NormalContact {
             if load_vector.is_some() {
                 for i in 0..3 {
                     let global_index = simulation.get_global_index(*primary_node_index, i);
+                    // assert!(!check_for_nans(&load_vector.unwrap()), "#2 contactforce vector contains NaNs, node: {} dof: {}", *primary_node_index, i);
                     simulation.load_vector[global_index] += load_vector.unwrap()[i];
                 }
             }
 
         }
-
-        // debug!("min distance: {} active nodes: {}", min_dist, active_nodes);
+        self.set_penetration_count(active_nodes);
+        self.set_max_penetration(max_penetration);
+        //  debug!("max penetration: {} active nodes: {}", max_penetration, active_nodes);
     }
 
     fn get_nodes(&self) -> &Vec<usize> {
         &self.active_primary_nodes
     }
-    fn type_name(&self) -> &str {
-        "ContactCondition"
+    fn type_name(&self) -> BoundaryConditionType {
+        BoundaryConditionType::Contact
     }
     fn initalize(&mut self, simulation: &Simulation) {
         debug!("Initializing contact condition");
@@ -153,7 +169,10 @@ impl BoundaryCondition for NormalContact {
         }
 
         self.active_secondary_elements = self.secondary_elements.clone();
+        debug!("{:?}", self);
+    }
 
-        println!("{:?}", self);
+    fn print_stats(&self){
+        debug!("Contact stats: max penetration: {} active nodes: {}", self.max_penetration, self.penetration_count);
     }
 }

@@ -3,14 +3,14 @@ use rust_fea::simulation::Simulation;
 use rust_fea::io::project::Project;
 use rust_fea::io::vtk_writer;
 use rust_fea::utilities::Keywords;
-
+use log::debug;
 #[test]
 fn import_inp() {
     let mesh = mesh_reader::read_file("examples/meshes/example_tube.inp.xz"); //Expeected: Mesh: None [Nodes: 7790, Elements: 9656, Element Groups: 15, Node Groups: 4]
     assert_eq!(mesh.nodes.len(), 7790, "Expected 7790 nodes, but got {}", mesh.nodes.len());
     assert_eq!(mesh.elements.len(), 9656, "Expected 9656 elements, but got {}", mesh.elements.len());
     assert_eq!(mesh.node_groups.len(), 4, "Expected 4 node groups, but got {}", mesh.node_groups.len());
-    println!("{:}", mesh);
+    debug!("{:}", mesh);
 }
 
 #[test]

@@ -6,3 +6,4 @@ pub use condition::BoundaryCondition;
 pub use fixed::FixedCondition;
 pub use force::LoadCondition;
 pub use contact::NormalContact;
+pub use condition::BoundaryConditionType;
