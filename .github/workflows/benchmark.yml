@@ -24,8 +24,6 @@ jobs:
           libopenblas-dev \
           libsuitesparse-dev \
           libmumps-dev
-    - name: Build
-      run: cargo build --verbose
     - name: Run benchmark
       run: cargo bench | tee output.txt
     - name: Store benchmark result
