@@ -36,7 +36,7 @@ jobs:
         path: ./cache
         key: ${{ runner.os }}-benchmark
     - name: Store benchmark result
-      uses: ChooseDews/github-action-benchmark@v1.1
+      uses: ChooseDews/github-action-benchmark@v1
       with:
           name: Rust Benchmark
           tool: 'cargo'
