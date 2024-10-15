@@ -14,14 +14,14 @@ use std::collections::HashSet;
 
 pub struct MeshNode {
     pub coordinates: Vec<f64>,
-    pub id: usize,
+    pub id: u32,
 }
 
 impl MeshNode {
     pub fn to_node(&self, id: isize) -> Node {
         let mut n_id = self.id;
         if id > -1{
-            n_id = id as usize;
+            n_id = id as u32;
         }
         Node::new(n_id, self.coordinates[0], self.coordinates[1], self.coordinates[2])
     }
@@ -32,7 +32,7 @@ impl MeshNode {
         (dx * dx + dy * dy + dz * dz).sqrt()
     }
 
-    pub fn offset(&self, offset: &HashMap<usize, usize>) -> MeshNode {
+    pub fn offset(&self, offset: &HashMap<u32, u32>) -> MeshNode {
         MeshNode {
             coordinates: self.coordinates.clone(),
             id: offset.get(&self.id).unwrap().clone()
@@ -42,10 +42,10 @@ impl MeshNode {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MeshElement {
-    pub connectivity: Vec<usize>,
+    pub connectivity: Vec<u32>,
     pub name: String,
     pub el_type: String,
-    pub id: usize
+    pub id: u32
 }
 
 
@@ -74,7 +74,7 @@ impl MeshElement {
         }
     }
 
-    pub fn offset(&self, el_offset: &HashMap<usize, usize>, node_offset: &HashMap<usize, usize>) -> MeshElement {
+    pub fn offset(&self, el_offset: &HashMap<u32, u32>, node_offset: &HashMap<u32, u32>) -> MeshElement {
         let mut connectivity = Vec::new();
         for node_id in &self.connectivity {
             connectivity.push(node_offset.get(node_id).unwrap().clone());
@@ -93,13 +93,13 @@ impl MeshElement {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ElementGroup {
-    pub elements: Vec<usize>, //indices of elements in the mesh
+    pub elements: Vec<u32>, //indices of elements in the mesh
     pub name: String,
     pub el_type: String,
 }
 
 impl ElementGroup {
-    pub fn offset(&self, el_offset: &HashMap<usize, usize>) -> ElementGroup {
+    pub fn offset(&self, el_offset: &HashMap<u32, u32>) -> ElementGroup {
         ElementGroup {
             elements: self.elements.iter().map(|e| el_offset.get(e).unwrap().clone()).collect(),
             name: self.name.clone(),
@@ -109,12 +109,12 @@ impl ElementGroup {
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NodeGroup {
-    pub nodes: Vec<usize>, //indices of nodes in the mesh
+    pub nodes: Vec<u32>, //indices of nodes in the mesh
     pub name: String,
 }
 
 impl NodeGroup {
-    pub fn offset(&self, node_offset: &HashMap<usize, usize>) -> NodeGroup {
+    pub fn offset(&self, node_offset: &HashMap<u32, u32>) -> NodeGroup {
         NodeGroup {
             nodes: self.nodes.iter().map(|n| node_offset.get(n).unwrap().clone()).collect(),
             name: self.name.clone(),
@@ -124,13 +124,13 @@ impl NodeGroup {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Body {
-    pub elements: Vec<usize>,
-    pub nodes: Vec<usize>,
+    pub elements: Vec<u32>,
+    pub nodes: Vec<u32>,
     pub name: String
 }
 
 impl Body {
-    pub fn offset(&self, el_offset: &HashMap<usize, usize>, node_offset: &HashMap<usize, usize> ) -> Body {
+    pub fn offset(&self, el_offset: &HashMap<u32, u32>, node_offset: &HashMap<u32, u32> ) -> Body {
         Body {
             elements: self.elements.iter().map(|e| el_offset.get(e).unwrap().clone()).collect(),
             nodes: self.nodes.iter().map(|n| node_offset.get(n).unwrap().clone()).collect(),
@@ -141,8 +141,8 @@ impl Body {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MeshAssembly {
-    pub nodes: HashMap<usize, MeshNode>,
-    pub elements: HashMap<usize, MeshElement>,
+    pub nodes: HashMap<u32, MeshNode>,
+    pub elements: HashMap<u32, MeshElement>,
     pub element_groups: HashMap<String, ElementGroup>,
     pub node_groups: HashMap<String, NodeGroup>,
     pub bodies: Vec<Body>,
@@ -177,8 +177,8 @@ impl MeshAssembly {
     }
 
     pub fn single_body(&mut self) {
-        let element_ids = self.elements.keys().cloned().collect::<Vec<usize>>();
-        let node_ids = self.nodes.keys().cloned().collect::<Vec<usize>>();
+        let element_ids = self.elements.keys().cloned().collect::<Vec<u32>>();
+        let node_ids = self.nodes.keys().cloned().collect::<Vec<u32>>();
         let mut body = Body {
             elements: element_ids,
             nodes: node_ids,
@@ -208,12 +208,12 @@ impl MeshAssembly {
         seralized_write(filename, &self);
     }
 
-    pub fn get_nodes_in_group(&self, group_name: &str) -> Vec<usize> {
+    pub fn get_nodes_in_group(&self, group_name: &str) -> Vec<u32> {
         let group = self.node_groups.get(group_name).expect(&format!("Node group: {} not found in mesh", group_name));
         group.nodes.clone()
     }
 
-    pub fn get_elements_in_group(&self, group_name: &str) -> Vec<usize> {
+    pub fn get_elements_in_group(&self, group_name: &str) -> Vec<u32> {
         let group = self.element_groups.get(group_name).expect(&format!("Element group: {} not found in mesh", group_name));
         group.elements.clone()
     }
@@ -254,11 +254,11 @@ impl MeshAssembly {
     }
 
     //get closest pair of nodes
-    pub fn get_closest_nodes(&self) -> (usize, usize, f64) {
+    pub fn get_closest_nodes(&self) -> (u32, u32, f64) {
         let overlap_tol = 1e-6;
         let mut min_dist = std::f64::MAX;
         let mut closest_nodes = (0, 0, 0.0);
-        let nodes: Vec<(&usize, &MeshNode)> = self.nodes.iter().collect();
+        let nodes: Vec<(&u32, &MeshNode)> = self.nodes.iter().collect();
         for (i, (&id1, node1)) in nodes.iter().enumerate() {
             for (&id2, node2) in nodes[i+1..].iter() { //avoid duplicate pairs
                 let dist = node1.distance(node2);
@@ -291,7 +291,8 @@ impl MeshAssembly {
         let mut nodes = Vec::new();
         let n = self.nodes.len();
         for node_id in 0..n {
-            let mesh_node = self.nodes.get(&node_id).unwrap();
+            let node_id = node_id as u32;
+            let mesh_node: &MeshNode = self.nodes.get(&node_id).unwrap();
             nodes.push(mesh_node.to_node(node_id as isize));
         }
         nodes

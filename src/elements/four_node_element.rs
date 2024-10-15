@@ -10,8 +10,8 @@ const TOLERANCE: f64 = 1e-10;
 
 #[derive(Serialize, Deserialize, Debug)] 
 pub struct FourNodeElement {
-    id: usize,
-    connectivity: Vec<usize>,
+    id: u32,
+    connectivity: Vec<u32>,
     material: Material,
     #[serde(skip, default = "default_deformation_gradient")]
     deformation_gradient: DMatrix<f64>, // 2x2 for 2D elements
@@ -40,7 +40,7 @@ fn get_area_of_triangle(a: &na::Vector3<f64>, b: &na::Vector3<f64>, c: &na::Vect
 }
 
 impl FourNodeElement {
-    pub fn new(id: usize, connectivity: Vec<usize>, material: Material) -> Self {
+    pub fn new(id: u32, connectivity: Vec<u32>, material: Material) -> Self {
         assert_eq!(
             connectivity.len(),
             4,
@@ -133,6 +133,15 @@ impl FourNodeElement {
     }
 
     
+    fn get_shape_functions(&self, xi: f64, eta: f64, _zeta: f64) -> DVector<f64> {
+        // Shape functions for 2D bilinear quadrilateral element
+        let mut shape_functions: DVector<f64> = DVector::<f64>::zeros(4);
+        shape_functions[0] = 0.25 * (1.0 - xi) * (1.0 - eta);
+        shape_functions[1] = 0.25 * (1.0 + xi) * (1.0 - eta);
+        shape_functions[2] = 0.25 * (1.0 + xi) * (1.0 + eta);
+        shape_functions[3] = 0.25 * (1.0 - xi) * (1.0 + eta);
+        shape_functions
+    }
 
 
 }
@@ -159,11 +168,11 @@ impl BaseElement for FourNodeElement {
     }
 
 
-    fn get_id(&self) -> usize {
+    fn get_id(&self) -> u32 {
         self.id
     }
 
-    fn get_connectivity(&self) -> &Vec<usize> {
+    fn get_connectivity(&self) -> &Vec<u32> {
         &self.connectivity
     }
 
@@ -173,16 +182,6 @@ impl BaseElement for FourNodeElement {
 
     fn get_deformation_gradient(&self) -> &DMatrix<f64> {
         &self.deformation_gradient
-    }
-
-    fn get_shape_functions(&self, xi: f64, eta: f64, _zeta: f64) -> DVector<f64> {
-        // Shape functions for 2D bilinear quadrilateral element
-        let mut shape_functions: DVector<f64> = DVector::<f64>::zeros(4);
-        shape_functions[0] = 0.25 * (1.0 - xi) * (1.0 - eta);
-        shape_functions[1] = 0.25 * (1.0 + xi) * (1.0 - eta);
-        shape_functions[2] = 0.25 * (1.0 + xi) * (1.0 + eta);
-        shape_functions[3] = 0.25 * (1.0 - xi) * (1.0 + eta);
-        shape_functions
     }
 
     fn get_x(&self, simulation: &Simulation) -> DMatrix<f64> {

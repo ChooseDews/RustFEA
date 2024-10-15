@@ -92,7 +92,7 @@ pub fn read_file(filename: &str) -> MeshAssembly {
                     println!("Invalid line in *NODE block: {}", line);
                     continue;
                 }
-                let id: usize = line_parts[0].parse::<usize>().unwrap() - 1;
+                let id: u32 = line_parts[0].parse::<u32>().unwrap() - 1;
                 let x = line_parts[1].parse::<f64>().unwrap();
                 let y = line_parts[2].parse::<f64>().unwrap();
                 let z = line_parts[3].parse::<f64>().unwrap();
@@ -111,10 +111,10 @@ pub fn read_file(filename: &str) -> MeshAssembly {
                     println!("Invalid line in *ELEMENT block: {}", line);
                     continue;
                 }
-                let id: usize = line_parts[0].parse::<usize>().unwrap() - 1;
+                let id: u32 = line_parts[0].parse::<u32>().unwrap() - 1;
                 let mut connectivity = Vec::new();
                 for i in 1..n {
-                    let node_id: usize = line_parts[i].parse::<usize>().unwrap() - 1;
+                    let node_id: u32 = line_parts[i].parse::<u32>().unwrap() - 1;
                     connectivity.push(node_id);
                 }
                 let element = MeshElement {
@@ -141,9 +141,9 @@ pub fn read_file(filename: &str) -> MeshAssembly {
                 //handle *ELSET block
                 let el_set = params.get("ELSET").unwrap();
                 let el_nums_parts = line.split(',').map(|s| s.trim());
-                let el_nums = el_nums_parts.filter(|s| !s.is_empty()).map(|s| s.parse::<usize>().unwrap()).collect::<Vec<usize>>();
+                let el_nums = el_nums_parts.filter(|s| !s.is_empty()).map(|s| s.parse::<u32>().unwrap()).collect::<Vec<u32>>();
                 //index from zero
-                let el_nums = el_nums.iter().map(|n| n - 1).collect::<Vec<usize>>();
+                let el_nums = el_nums.iter().map(|n| n - 1).collect::<Vec<u32>>();
                 if mesh.element_groups.contains_key(el_set) {
                     let group = mesh.element_groups.get_mut(el_set).unwrap();
                     group.elements.extend(el_nums);
@@ -160,9 +160,9 @@ pub fn read_file(filename: &str) -> MeshAssembly {
                 //handle *NSET block
                 let n_set = params.get("NSET").unwrap();
                 let node_nums_parts = line.split(',').map(|s| s.trim());
-                let node_nums = node_nums_parts.filter(|s| !s.is_empty()).map(|s| s.parse::<usize>().unwrap()).collect::<Vec<usize>>();
+                let node_nums = node_nums_parts.filter(|s| !s.is_empty()).map(|s| s.parse::<u32>().unwrap()).collect::<Vec<u32>>();
                 //index from zero
-                let node_nums = node_nums.iter().map(|n| n - 1).collect::<Vec<usize>>();
+                let node_nums = node_nums.iter().map(|n| n - 1).collect::<Vec<u32>>();
                 if mesh.node_groups.contains_key(n_set) {
                     let group = mesh.node_groups.get_mut(n_set).unwrap();
                     group.nodes.extend(node_nums);

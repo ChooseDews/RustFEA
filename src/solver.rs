@@ -1,4 +1,4 @@
-//takes in let mut global_stiffness_matrix: HashMap<(usize, usize), f64> = HashMap::new();
+//takes in let mut global_stiffness_matrix: HashMap<(u32, u32), f64> = HashMap::new();
 use russell_lab::{Matrix, Vector};
 use russell_sparse::{ConfigSolver, Solver, SparseTriplet, StrError, LinSolKind};
 use std::collections::HashMap;
@@ -7,7 +7,7 @@ use nalgebra_sparse;
 use std::time::Instant;
 use log::{info, debug, trace};
 
-pub fn get_max_row_col(global_stiffness_matrix: &HashMap<(usize, usize), f64>) -> (usize, usize) {
+pub fn get_max_row_col(global_stiffness_matrix: &HashMap<(u32, u32), f64>) -> (u32, u32) {
     let mut max_row = 0;
     let mut max_col = 0;
     for key in global_stiffness_matrix.keys() {
@@ -22,19 +22,19 @@ pub fn get_max_row_col(global_stiffness_matrix: &HashMap<(usize, usize), f64>) -
     (max_row, max_col)
 }
 
-pub fn direct_solve(global_stiffness_matrix: &HashMap<(usize, usize), f64>, global_force_vector: &Vec<f64>) -> Vec<f64> {
+pub fn direct_solve(global_stiffness_matrix: &HashMap<(u32, u32), f64>, global_force_vector: &Vec<f64>) -> Vec<f64> {
     let (max_row, max_col) = get_max_row_col(global_stiffness_matrix);
     debug!("Allocating matrix of size: {}x{}", max_row+1, max_col+1);
     
     //find max row and col
     let neq = max_row + 1; // number of equations
     let nnz = global_stiffness_matrix.len();
-    let mut trip = SparseTriplet::new(neq, nnz).unwrap();
+    let mut trip = SparseTriplet::new(neq as usize, nnz as usize).unwrap();
     for key in global_stiffness_matrix.keys() {
         let row = key.0;
         let col = key.1;
         let value = global_stiffness_matrix[&key];
-        trip.put(row, col, value).unwrap();
+        trip.put(row as usize, col as usize, value).unwrap();
     }    
     //allocate rhs
     let rhs = Vector::from(global_force_vector);
@@ -49,17 +49,17 @@ pub fn direct_solve(global_stiffness_matrix: &HashMap<(usize, usize), f64>, glob
     x.as_data().to_vec()
 }
 
-pub fn direct_choslky(global_stiffness_matrix: &HashMap<(usize, usize), f64>, global_force: Vec<f64>) -> Vec<f64> {
+pub fn direct_choslky(global_stiffness_matrix: &HashMap<(u32, u32), f64>, global_force: Vec<f64>) -> Vec<f64> {
     let (max_row, max_col) = get_max_row_col(global_stiffness_matrix);
     debug!("Setting up sparse matrix for Cholesky decomposition");
     
-    let mut sparse_matrix: nalgebra_sparse::CooMatrix<f64> = nalgebra_sparse::CooMatrix::new(max_row+1, max_col+1);
+    let mut sparse_matrix: nalgebra_sparse::CooMatrix<f64> = nalgebra_sparse::CooMatrix::new(max_row as usize +1, max_col as usize +1);
     for ((i, j), value) in global_stiffness_matrix.iter(){
         let mut v = *value;
         if i == j{
             v += 0.0001; //add small value to diagonal to avoid singularity
         }
-        sparse_matrix.push(*i, *j, v);
+        sparse_matrix.push(*i as usize, *j as usize, v);
     }
     let csc = nalgebra_sparse::CscMatrix::from(&sparse_matrix);
 

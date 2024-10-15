@@ -18,17 +18,17 @@ pub enum ElementType {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ElementFields { //hashmap containing
     pub field: HashMap<String, Vec<f64>>,
-    size: usize,
-    pub connectivity: Vec<usize>
+    size: u32,
+    pub connectivity: Vec<u32>
 }
 
 
 impl ElementFields {
-    pub fn new(connectivity: Vec<usize>) -> Self {
+    pub fn new(connectivity: Vec<u32>) -> Self {
         let size = connectivity.len();
         ElementFields {
             field: HashMap::new(),
-            size,
+            size: size as u32,
             connectivity
         }
     }
@@ -40,14 +40,14 @@ impl ElementFields {
     pub fn find_field(&mut self, name: &str) -> Option<&mut Vec<f64>> {
         //check if field exists if not create it
         if !self.field.contains_key(name) {
-            self.field.insert(name.to_string(), vec![0.0; self.size]);
+            self.field.insert(name.to_string(), vec![0.0; self.size as usize]);
         }
         self.field.get_mut(name)
     }
 
-    pub fn append_to_feild(&mut self, name: &str, nn: usize, value: f64) {
+    pub fn append_to_feild(&mut self, name: &str, nn: u32, value: f64) {
         let current_field = self.find_field(name).unwrap();
-        current_field[nn] = value;
+        current_field[nn as usize] = value;
     }
 
     pub fn get_feild_names(&self) -> Vec<String> {
@@ -132,12 +132,12 @@ impl Material {
 #[typetag::serde]
 pub trait BaseElement {
 
-    fn dofs(&self) -> usize { 3 }
-    fn get_id(&self) -> usize;
-    fn get_connectivity(&self) -> &Vec<usize>;
+    fn dofs(&self) -> u32 { 3 }
+    fn get_id(&self) -> u32;
+    fn get_connectivity(&self) -> &Vec<u32>;
     fn get_material(&self) -> &Material;
     fn get_deformation_gradient(&self) -> &DMatrix<f64>;
-    fn get_shape_functions(&self, xi: f64, eta: f64, zeta: f64) -> DVector<f64>;
+
     fn get_shape_derivatives(&self, xi: f64, eta: f64, zeta: f64) -> DMatrix<f64>;
     fn get_global_position(&self, n: &DVector<f64>, simulation: &Simulation) -> na::Vector3<f64> {
         na::Vector3::zeros()
@@ -174,7 +174,7 @@ pub trait BaseElement {
 
     //explicit stuff
     fn compute_force(&self, simulation: &Simulation) -> DVector<f64> {
-        DVector::zeros(self.get_connectivity().len() * self.dofs())
+        DVector::zeros(self.get_connectivity().len() * self.dofs() as usize)
     }
     // fn step_explicit(&mut self, simulation: &Simulation, force: DVector<f64>, dt: f64); //self modification
 
