@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use nalgebra as na;
+use nalgebra::{self as na, Vector6};
 use na::{DVector};
 use serde::{Serialize, Deserialize};
 use log::{debug, info, warn};
@@ -42,7 +42,7 @@ pub fn safe_component_div(a: &DVector<f64>, b: &DVector<f64>) -> DVector<f64> {
 }
 
 
-pub fn compute_von_mises(stress_vector: DVector<f64>) -> f64 {
+pub fn compute_von_mises(stress_vector: Vector6<f64>) -> f64 {
     //compute and return the von mises stress here
     let s11 = stress_vector[0];
     let s22 = stress_vector[1];

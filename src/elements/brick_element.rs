@@ -2,7 +2,7 @@
 use crate::{simulation::Simulation, utilities::check_for_nans};
 use super::base_element::{BaseElement, Material, ElementFields, ElementType};
 use nalgebra as na;
-use na::{DMatrix, DVector, SMatrix, SVector};
+use na::{DMatrix, DVector, SMatrix, SVector, Matrix3};
 use crate::utilities::{compute_von_mises};
 use serde::{Serialize, Deserialize};
 use log::{debug, trace};
@@ -55,6 +55,17 @@ impl BrickElement {
         }
     }
 
+    fn get_x_local(&self, simulation: &Simulation) -> SMatrix<f64, 8, 3> { //get global position of each node
+        let mut X = SMatrix::<f64, 8, 3>::zeros();
+        for (i, node_id) in self.connectivity.iter().enumerate() {
+            let node = simulation.get_node(*node_id).unwrap();
+            X[(i, 0)] = node.position[0];
+            X[(i, 1)] = node.position[1];
+            X[(i, 2)] = node.position[2];
+        }
+        X
+    }
+
     fn get_gauss_points() -> Vec<(f64, f64, f64, f64)> { //xi, eta, zeta, weight
         trace!("Generating Gauss points for brick element");
         //compute and return the gauss points here
@@ -87,7 +98,7 @@ impl BrickElement {
         corner_points
     }
 
-    fn get_u_fixed(&self, simulation: &Simulation) -> SVector<f64, 24> {
+    fn get_u_local(&self, simulation: &Simulation) -> SVector<f64, 24> {
         let mut u = SVector::<f64, 24>::zeros();
         for (i, node_id) in self.connectivity.iter().enumerate() {
             let node = simulation.get_node(*node_id).unwrap();
@@ -97,6 +108,83 @@ impl BrickElement {
         }
         u
     }
+
+    fn compute_b(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> SMatrix<f64, 6, 24> {
+        let mut B = SMatrix::<f64, 6, 24>::zeros();
+        let J = self.compute_jacobian_matrix(xi, eta, zeta, &simulation);
+        let J_inv = J.try_inverse().unwrap();
+        let dN = self.get_shape_derivatives_local(xi, eta, zeta);
+        //compute B_i for each node [6x3] 6 strains and 3 displacements per node
+        for i in 0..8 {
+            //Compute N_I for each node N_I,M = (delta_N_I/delta_local_J)*J_inv(j,M)
+            let mut N_I = SVector::<f64, 3>::zeros();
+            for m in 0..3 {
+                 N_I[m] =  J_inv.row(m).dot(&dN.row(i));
+            }
+            //define B_I for each node
+            let mut B_I = SMatrix::<f64, 6, 3>::zeros();
+            B_I[(0, 0)] = N_I[0];
+            B_I[(1, 1)] = N_I[1];
+            B_I[(2, 2)] = N_I[2];
+            B_I[(3, 1)] = N_I[2];
+            B_I[(3, 2)] = N_I[1];
+            B_I[(4, 0)] = N_I[2];
+            B_I[(4, 2)] = N_I[0];
+            B_I[(5, 0)] = N_I[1];
+            B_I[(5, 1)] = N_I[0];
+            
+            for j in 0..6 {
+                for k in 0..3 {
+                    B[(j, 3 * i + k)] = B_I[(j, k)];
+                }
+            }
+        }
+        B
+    }
+
+
+    fn compute_jacobian_matrix(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> Matrix3<f64>  {
+        let x = self.get_x_local(simulation); //[x] 8x3
+        let dn = self.get_shape_derivatives_local(xi, eta, zeta); //[dN] 8x3
+        dn.transpose() * x
+    }
+
+
+
+    fn get_shape_derivatives_local(&self, xi: f64, eta: f64, zeta: f64) -> SMatrix<f64, 8, 3> {
+        //we expect to return a 3x8 matrix of shape derivatives. ie. the derivative of N_i wrt. xi, eta, and zeta for each node i
+        //derived with sympy
+        let matrix_data = vec![
+            [-0.125 * (eta - 1.0) * (zeta - 1.0), -0.125 * (xi - 1.0) * (zeta - 1.0), -0.125 * (eta - 1.0) * (xi - 1.0)],
+            [0.125 * (eta - 1.0) * (zeta - 1.0), 0.125 * (xi + 1.0) * (zeta - 1.0), 0.125 * (eta - 1.0) * (xi + 1.0)],
+            [-0.125 * (eta + 1.0) * (zeta - 1.0), -0.125 * (xi + 1.0) * (zeta - 1.0), -0.125 * (eta + 1.0) * (xi + 1.0)],
+            [0.125 * (eta + 1.0) * (zeta - 1.0), 0.125 * (xi - 1.0) * (zeta - 1.0), 0.125 * (eta + 1.0) * (xi - 1.0)],
+            [0.125 * (eta - 1.0) * (zeta + 1.0), 0.125 * (xi - 1.0) * (zeta + 1.0), 0.125 * (eta - 1.0) * (xi - 1.0)],
+            [-0.125 * (eta - 1.0) * (zeta + 1.0), -0.125 * (xi + 1.0) * (zeta + 1.0), -0.125 * (eta - 1.0) * (xi + 1.0)],
+            [0.125 * (eta + 1.0) * (zeta + 1.0), 0.125 * (xi + 1.0) * (zeta + 1.0), 0.125 * (eta + 1.0) * (xi + 1.0)],
+            [-0.125 * (eta + 1.0) * (zeta + 1.0), -0.125 * (xi - 1.0) * (zeta + 1.0), -0.125 * (eta + 1.0) * (xi - 1.0)]
+        ];
+        na::SMatrix::from_row_slice(&matrix_data.concat())
+    }   
+
+
+    fn compute_stress(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> SVector<f64, 6> {
+        //compute the stress at a given point
+        let B = self.compute_b(xi, eta, zeta, &simulation);
+        let C = self.material.get_3d_matrix();
+        let u = self.get_u(simulation);
+        let stress = C * B * u;
+        stress
+    }
+
+    fn compute_strain(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> SVector<f64, 6> {
+        //compute the strain at a given point
+        let B = self.compute_b(xi, eta, zeta, &simulation);
+        let u = self.get_u_local(simulation);
+        let strain = B * u;
+        strain
+    }
+
 
 
 }
@@ -179,7 +267,7 @@ impl BaseElement for BrickElement {
     }
 
     fn get_shape_derivatives(&self, xi: f64, eta: f64, zeta: f64) -> DMatrix<f64> {
-        //we expect to return a 3x8 matrix of shape derivatives. ie. the derivative of N_i wrt. xi, eta, and zeta for each node i
+        //we expect to return a 8x3 matrix of shape derivatives. ie. the derivative of N_i wrt. xi, eta, and zeta for each node i
         //derived with sympy
         let matrix_data = vec![
             [-0.125 * (eta - 1.0) * (zeta - 1.0), -0.125 * (xi - 1.0) * (zeta - 1.0), -0.125 * (eta - 1.0) * (xi - 1.0)],
@@ -195,50 +283,10 @@ impl BaseElement for BrickElement {
         dmatrix
     }
 
-    fn compute_jacobian_matrix(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DMatrix<f64> {
-        //compute the jacobian matrix
-        //return as a DMatrix<f64>
-        let X = self.get_x(simulation);
-        let dN = self.get_shape_derivatives(xi, eta, zeta);
-        let jacobian_matrix = dN.transpose() * X.transpose();
-        jacobian_matrix
-    }
 
-    fn compute_b(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DMatrix<f64> {
-        let mut B = DMatrix::<f64>::zeros(6, 24);
-        let J = self.compute_jacobian_matrix(xi, eta, zeta, &simulation);
-        let J_inv = J.try_inverse().unwrap();
-        let _N = self.get_shape_functions(xi, eta, zeta);
-        let dN = self.get_shape_derivatives(xi, eta, zeta);
-        //compute B_i for each node [6x3] 6 strains and 3 displacements per node
-        for i in 0..8 {
-            //Compute N_I for each node N_I,M = (delta_N_I/delta_local_J)*J_inv(j,M)
-            let mut N_I = DVector::<f64>::zeros(3);
-            for m in 0..3 {
-                let dN_j = dN.row(i); 
-                let J_inv_j = J_inv.row(m); // TODO: HIGH BUG POTENTIAL
-                 N_I[m] =  J_inv_j.dot(&dN_j);
-            }
-            //define B_I for each node
-            let mut B_I = DMatrix::<f64>::zeros(6, 3);
-            B_I[(0, 0)] = N_I[0];
-            B_I[(1, 1)] = N_I[1];
-            B_I[(2, 2)] = N_I[2];
-            B_I[(3, 1)] = N_I[2];
-            B_I[(3, 2)] = N_I[1];
-            B_I[(4, 0)] = N_I[2];
-            B_I[(4, 2)] = N_I[0];
-            B_I[(5, 0)] = N_I[1];
-            B_I[(5, 1)] = N_I[0];
-            
-            //populate B matrix
-            for j in 0..6 {
-                for k in 0..3 {
-                    B[(j, 3 * i + k)] = B_I[(j, k)];
-                }
-            }
-        }
-        B
+
+    fn get_b(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DMatrix<f64> {
+        todo!()
     }
 
     
@@ -249,11 +297,8 @@ impl BaseElement for BrickElement {
         for (xi, eta, zeta, weight) in gauss_points {
             let B = self.compute_b(xi, eta, zeta, &simulation);
             let J = self.compute_jacobian_matrix(xi, eta, zeta, &simulation);
-            let detJ: f64 = J.determinant();
-            let B_T: na::Matrix<f64, na::Dyn, na::Dyn, na::VecStorage<f64, na::Dyn, na::Dyn>> = B.transpose();
             let C = self.material.get_3d_matrix();
-            let K_point: na::Matrix<f64, na::Dyn, na::Dyn, na::VecStorage<f64, na::Dyn, na::Dyn>> = B_T * C * B * detJ * weight; // HIGH BUG POTENTIAL
-            K += K_point;
+            K +=  B.transpose() * C * B * J.determinant() * weight;
         }
         //use the gauss quadrature to compute the stiffness matrix
         self.stiffness = K;
@@ -262,13 +307,13 @@ impl BaseElement for BrickElement {
 
     fn get_stiffness(&self) -> DMatrix<f64> {
         //construct dynamic matrix from fixed 24x24 matrix
-        let mut K_dyn =  DMatrix::zeros(24, 24);
+        let mut k =  DMatrix::zeros(24, 24);
         for i in 0..24 {
             for j in 0..24 {
-                K_dyn[(i, j)] = self.stiffness[(i, j)];
+                k[(i, j)] = self.stiffness[(i, j)];
             }
         }
-        K_dyn
+        k
     }
 
 
@@ -320,26 +365,8 @@ impl BaseElement for BrickElement {
     }
 
 
-    //TODO: test and implement:
-    fn compute_stress(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DVector<f64> {
-        //compute the stress at a given point
-        let B = self.compute_b(xi, eta, zeta, &simulation);
-        let C = self.material.get_3d_matrix();
-        let u = self.get_u(simulation);
-        let stress = C * B * u;
-        stress
-    }
-
-    fn compute_strain(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DVector<f64> {
-        //compute the strain at a given point
-        let B: na::Matrix<f64, na::Dyn, na::Dyn, na::VecStorage<f64, na::Dyn, na::Dyn>> = self.compute_b(xi, eta, zeta, &simulation);
-        let u = self.get_u(simulation);
-        let strain = B * u;
-        strain
-    }
-
     fn compute_force(&self, simulation: &Simulation) -> DVector<f64> {
-        let u_e = self.get_u_fixed(simulation);
+        let u_e = self.get_u_local(simulation);
         let f_e = self.stiffness * u_e;
         DVector::<f64>::from_column_slice(f_e.as_slice())
     }
@@ -352,7 +379,7 @@ impl BaseElement for BrickElement {
 
         let mut nn = 0; //node number
         for (xi, eta, zeta, _) in gauss_points {
-            let strain: nalgebra::Matrix<f64, nalgebra::Dyn, nalgebra::Const<1>, nalgebra::VecStorage<f64, nalgebra::Dyn, nalgebra::Const<1>>> = self.compute_strain(xi, eta, zeta, &simulation);
+            let strain = self.compute_strain(xi, eta, zeta, &simulation);
             let stress = self.compute_stress(xi, eta, zeta, &simulation);
             element_feilds.append_to_feild("e_xx", nn, strain[0]);
             element_feilds.append_to_feild("e_yy", nn, strain[1]);

@@ -1,5 +1,6 @@
 extern crate nalgebra as na;
 use na::{DVector, DMatrix};
+use nalgebra::{Matrix3, Matrix6};
 use crate::simulation::Simulation;
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
@@ -78,8 +79,8 @@ impl Material {
         }
     }
 
-    pub fn get_3d_matrix(&self) -> DMatrix<f64>{
-        let mut C = DMatrix::<f64>::zeros(6,6);
+    pub fn get_3d_matrix(&self) -> Matrix6<f64>{
+        let mut C = Matrix6::<f64>::zeros();
         let E = self.youngs_modulus;
         let v = self.poisson_ratio;
         let _g = E / (2.0 * (1.0 + v));
@@ -161,12 +162,9 @@ pub trait BaseElement {
     fn set_lumped_mass(&mut self, mass: &DMatrix<f64>) -> f64;
     fn get_lumped_mass(&self) -> &Vec<f64>;
 
-    fn compute_jacobian_matrix(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DMatrix<f64>;
     fn get_x(&self, simulation: &Simulation) -> DMatrix<f64>;
     fn get_u(&self, simulation: &Simulation) -> DVector<f64>;
-    fn compute_b(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DMatrix<f64>;
-    fn compute_stress(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DVector<f64>;
-    fn compute_strain(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DVector<f64>;
+    fn get_b(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DMatrix<f64>; //get the strain displacement matrix
     // fn compute_volume(&self, simulation: &Simulation) -> f64;
     fn compute_element_nodal_properties(&self, simulation: &Simulation) -> ElementFields {
         ElementFields::new(self.get_connectivity().clone()) 
