@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::io::{BufWriter, Write};
 use log::{info, debug, warn};
 
-pub fn write_hashmap_sparse_matrix(filename: &str, sparse_matrix: &HashMap<(u32, u32), f64>) -> std::io::Result<()> {
+pub fn write_hashmap_sparse_matrix(filename: &str, sparse_matrix: &HashMap<(usize, usize), f64>) -> std::io::Result<()> {
     let nzn = sparse_matrix.len();
     info!("Writing Matrix Out - Number of Non Zero Values: {}", nzn);
     

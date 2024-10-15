@@ -1,5 +1,5 @@
 use log::{debug, info, trace, warn};
-use nalgebra::{DMatrix, DVector};
+use nalgebra::{geometry, DMatrix, DVector};
 use nalgebra_sparse::ops::Op;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -20,9 +20,9 @@ use crate::utilities::{Keywords, check_for_nans, safe_component_div, print_max_d
 pub struct Simulation {
     pub nodes: Vec<Node>,
     pub node_feilds: HashMap<String, Vec<f64>>,
-    pub elements: HashMap<u32, Box<dyn BaseElement>>,
+    pub elements: HashMap<usize, Box<dyn BaseElement>>,
 
-    pub dofs: u32,
+    pub dofs: usize,
     pub keywords: Keywords,
     pub mesh: MeshAssembly,
     pub boundary_conditions: Vec<Box<dyn BoundaryCondition>>,
@@ -30,10 +30,10 @@ pub struct Simulation {
     #[serde(skip, default = "Vec::new")]
     pub load_vector: Vec<f64>, //global force vector
     #[serde(skip, default = "HashMap::new")]
-    pub fixed_global_nodal_values: HashMap<u32, f64>,
+    pub fixed_global_nodal_values: HashMap<usize, f64>,
 
     #[serde(skip, default = "Vec::new")]
-    pub active_elements: Vec<u32>,
+    pub active_elements: Vec<usize>,
 }
 
 impl fmt::Display for Simulation {
@@ -51,7 +51,7 @@ impl fmt::Display for Simulation {
 #[derive(Debug)]
 pub struct NodeAvgValue {
     value: f64,
-    count: u32,
+    count: usize,
 }
 
 impl NodeAvgValue {
@@ -90,7 +90,7 @@ impl Simulation {
     }
 
     //create from array of nodes and elements
-    pub fn from_arrays(nodes: Vec<Node>, elements: Vec<Box<dyn BaseElement>>, dofs: u32) -> Self {
+    pub fn from_arrays(nodes: Vec<Node>, elements: Vec<Box<dyn BaseElement>>, dofs: usize) -> Self {
         let mut simulation = Simulation::new();
         simulation.set_dofs(dofs);
         for node in nodes {
@@ -106,8 +106,8 @@ impl Simulation {
         debug!("Checking node ordering");
         let n_count = self.nodes.len();
         for i in 0..n_count {
-            let node = self.get_node(i as u32).expect(format!("Node {} out of {} not found", i, n_count).as_str());
-            if node.id != i as u32 {
+            let node = self.get_node(i ).expect(format!("Node {} out of {} not found", i, n_count).as_str());
+            if node.id != i  {
                 panic!("Internal Node Id {} is out of order from expected {}", node.id, i);
             }
         }
@@ -117,7 +117,7 @@ impl Simulation {
         self.mesh = mesh;
     }
 
-    pub fn from_mesh(mesh: MeshAssembly, dofs: u32) -> Self {
+    pub fn from_mesh(mesh: MeshAssembly, dofs: usize) -> Self {
         let elements = mesh.convert_to_elements();
         let nodes = mesh.convert_to_nodes();
         let mut simulation = Simulation::from_arrays(nodes, elements, dofs);
@@ -125,11 +125,11 @@ impl Simulation {
         simulation
     }
 
-    pub fn get_global_index(&self, node_id: u32, dof: u32) -> u32 {
+    pub fn get_global_index(&self, node_id: usize, dof: usize) -> usize {
         node_id * self.dofs + dof
     }
 
-    pub fn get_global_index_mut(&mut self, node_id: u32, dof: u32) -> u32 {
+    pub fn get_global_index_mut(&mut self, node_id: usize, dof: usize) -> usize {
         node_id * self.dofs + dof
     }
 
@@ -137,20 +137,29 @@ impl Simulation {
         self.keywords = keywords;
     }
 
-    pub fn set_dofs(&mut self, dofs: u32) {
+    pub fn set_dofs(&mut self, dofs: usize) {
         self.dofs = dofs;
     }
 
     //initalize function for once nodes+elements are fixed
     pub fn initialize(&mut self) {
-        let n = self.nodes.len() * self.dofs as usize;
+        let n = self.nodes.len() * self.dofs ;
         self.load_vector = vec![0.0; n];
+    }
+
+    pub fn initialize_elements(&mut self) {
+        let mut elements = std::mem::take(&mut self.elements);
+        for (_, element) in &mut elements {
+            element.initialize(self);
+        }
+        self.elements = elements;
     }
 
     pub fn one_time_init(&mut self) {
         self.set_active_elements();
         self.init_bc();
         self.check_node_ordering();
+        self.initialize_elements();
     }
 
     pub fn init_bc(&mut self) {
@@ -163,7 +172,7 @@ impl Simulation {
     }
 
     pub fn add_node(&mut self, node: Node) {
-        self.nodes.insert(node.id as usize, node);
+        self.nodes.insert(node.id , node);
     }
 
     pub fn add_boundary_condition(&mut self, bc: Box<dyn BoundaryCondition>) {
@@ -174,23 +183,23 @@ impl Simulation {
         self.elements.insert(element.get_id(), element);
     }
 
-    pub fn get_node(&self, index: u32) -> Option<&Node> {
-        self.nodes.get(index as usize)
+    pub fn get_node(&self, index: usize) -> Option<&Node> {
+        self.nodes.get(index )
     }
 
-    pub fn get_node_mut(&mut self, index: u32) -> Option<&mut Node> {
-        self.nodes.get_mut(index as usize)
+    pub fn get_node_mut(&mut self, index: usize) -> Option<&mut Node> {
+        self.nodes.get_mut(index )
     }
 
-    pub fn get_nodes(&self, ids: &[u32]) -> Vec<&Node> {
+    pub fn get_nodes(&self, ids: &[usize]) -> Vec<&Node> {
         ids.iter().filter_map(|&id| self.get_node(id)).collect()
     }
 
-    pub fn get_element(&self, index: u32) -> Option<&Box<dyn BaseElement>> {
+    pub fn get_element(&self, index: usize) -> Option<&Box<dyn BaseElement>> {
         self.elements.get(&index)
     }
 
-    pub fn get_element_mut(&mut self, id: u32) -> Option<&mut Box<dyn BaseElement>> {
+    pub fn get_element_mut(&mut self, id: usize) -> Option<&mut Box<dyn BaseElement>> {
         self.elements.get_mut(&id)
     }
 
@@ -202,11 +211,11 @@ impl Simulation {
         &mut self.nodes
     }
 
-    pub fn elements(&self) -> &HashMap<u32, Box<dyn BaseElement>> {
+    pub fn elements(&self) -> &HashMap<usize, Box<dyn BaseElement>> {
         &self.elements
     }
 
-    pub fn elements_mut(&mut self) -> &mut HashMap<u32, Box<dyn BaseElement>> {
+    pub fn elements_mut(&mut self) -> &mut HashMap<usize, Box<dyn BaseElement>> {
         &mut self.elements
     }
 
@@ -222,7 +231,7 @@ impl Simulation {
         self.boundary_conditions = boundary_conditions;
     }
 
-    pub fn get_specified_bc(&mut self) -> Vec<(u32, f64)> {
+    pub fn get_specified_bc(&mut self) -> Vec<(usize, f64)> {
         let mut specified_bc = Vec::new();
         for (global_index, value) in &self.fixed_global_nodal_values {
             specified_bc.push((*global_index, *value));
@@ -246,7 +255,7 @@ impl Simulation {
         debug!("Total Active Elements: {}", self.active_elements.len());
     }
 
-    pub fn active_elements(&self) -> Vec<u32> {
+    pub fn active_elements(&self) -> Vec<usize> {
         self.active_elements.clone()
     }
 
@@ -259,11 +268,11 @@ impl Simulation {
         self.elements = elements;
     }
 
-    pub fn compute_element_mass(&self, id: u32) -> DMatrix<f64> {
+    pub fn compute_element_mass(&self, id: usize) -> DMatrix<f64> {
         self.get_element(id).unwrap().compute_mass(&self)
     }
 
-    pub fn set_element_mass(&mut self, id: u32, mass: DMatrix<f64>) {
+    pub fn set_element_mass(&mut self, id: usize, mass: DMatrix<f64>) {
         self.get_element_mut(id).unwrap().set_mass(mass);
     }
 
@@ -278,10 +287,10 @@ impl Simulation {
         debug!("Total mass: {}", total_mass);
     }
 
-    pub fn assemble(&mut self) -> (HashMap<(u32, u32), f64>, Vec<f64>) {
+    pub fn assemble(&mut self) -> (HashMap<(usize, usize), f64>, Vec<f64>) {
         debug!("Starting assembly process");
-        let mut global_stiffness_matrix: HashMap<(u32, u32), f64> = HashMap::new();
-        let dof = self.dofs as usize;
+        let mut global_stiffness_matrix: HashMap<(usize, usize), f64> = HashMap::new();
+        let dof = self.dofs ;
         self.assemble_global_force(); //populates global force and fixed global nodal values
         let mut global_force = self.get_global_force();
         let specified_bc = self.get_specified_bc();
@@ -298,9 +307,9 @@ impl Simulation {
                 for j in 0..node_count {
                     for k in 0..dof {
                         for l in 0..dof {
-                            let global_i = element_connectivity[i] as usize * dof + k;
-                            let global_j = element_connectivity[j] as usize * dof + l;
-                            let key = (global_i as u32, global_j as u32);
+                            let global_i = element_connectivity[i]  * dof + k;
+                            let global_j = element_connectivity[j]  * dof + l;
+                            let key = (global_i , global_j );
                             let value = element_stiffness_matrix[(i * dof + k, j * dof + l)];
                             *global_stiffness_matrix.entry(key).or_insert(0.0) += value;
                         }
@@ -317,7 +326,7 @@ impl Simulation {
             v += extra_stiffness;
             global_stiffness_matrix.insert((g_index, g_index), v);
             if value.abs() > 0.0 {
-                global_force[g_index as usize] += value * extra_stiffness; // F = K*u so K_extra*u_extra = -F_extra
+                global_force[g_index ] += value * extra_stiffness; // F = K*u so K_extra*u_extra = -F_extra
             }
         }
 
@@ -326,7 +335,7 @@ impl Simulation {
     }
 
     pub fn compute_global_mass_matrix_diagonal(&self) -> DVector<f64> {
-        let total_dofs = self.nodes.len() * self.dofs as usize;
+        let total_dofs = self.nodes.len() * self.dofs ;
         let mut global_mass_diagonal = DVector::zeros(total_dofs);
         for i in self.active_elements().iter() {
             let element = self.get_element(*i).unwrap();
@@ -335,7 +344,7 @@ impl Simulation {
             for (local_index, &node_id) in connectivity.iter().enumerate() {
                 for dof in 0..self.dofs {
                     let global_index = self.get_global_index(node_id, dof);
-                    global_mass_diagonal[global_index as usize] += element_mass[local_index];
+                    global_mass_diagonal[global_index ] += element_mass[local_index];
                 }
             }
         }
@@ -343,17 +352,17 @@ impl Simulation {
     }
 
     pub fn compute_force_vector(&self) -> DVector<f64> {
-        let mut force_vector = DVector::zeros(self.nodes.len() * self.dofs as usize);
+        let mut force_vector = DVector::zeros(self.nodes.len() * self.dofs );
         for i in self.active_elements().iter() {
             let element = self.get_element(*i).unwrap();
             let force: nalgebra::Matrix<f64, nalgebra::Dyn, nalgebra::Const<1>, nalgebra::VecStorage<f64, nalgebra::Dyn, nalgebra::Const<1>>> = element.compute_force(&self);
             let connectivity = element.get_connectivity();
             // assert!(!check_for_nans(&force), "#1 force vector contains NaNs, element: {} with nodes: {}", *i, connectivity.iter().map(|x| x.to_string()).collect::<Vec<String>>().join(", "));
             for (local_index, &node_id) in connectivity.iter().enumerate() {
-                let dofs = self.dofs as usize;
+                let dofs = self.dofs ;
                 for dof in 0..dofs {
-                    let global_index = self.get_global_index(node_id, dof as u32);
-                    force_vector[global_index as usize] += force[local_index * dofs + dof];
+                    let global_index = self.get_global_index(node_id, dof );
+                    force_vector[global_index ] += force[local_index * dofs + dof];
                 }
             }
         }
@@ -361,12 +370,12 @@ impl Simulation {
     }
 
     pub fn displacement_vector(&mut self) -> DVector<f64> {
-        let dofs = self.dofs as usize;
+        let dofs = self.dofs ;
         let mut displacement_vector = DVector::zeros(self.nodes.len() * dofs);
         for (node_id, node) in self.nodes.iter().enumerate() {
             for dof in 0..dofs {
-                let global_index = self.get_global_index(node_id as u32, dof as u32);
-                displacement_vector[global_index as usize] = node.displacement[dof];
+                let global_index = self.get_global_index(node_id , dof );
+                displacement_vector[global_index ] = node.displacement[dof];
             }
         }
         displacement_vector
@@ -425,16 +434,16 @@ impl Simulation {
         self.compute_all_element_mass();
         let global_mass_matrix_diagonal = self.compute_global_mass_matrix_diagonal();
         for i in 0..self.nodes.len() {
-            self.get_node_mut(i as u32)
+            self.get_node_mut(i )
                 .expect("Node not found")
-                .set_mass(global_mass_matrix_diagonal[i as usize]);
+                .set_mass(global_mass_matrix_diagonal[i ]);
         }
-        let n = self.nodes.len() * self.dofs as usize;
+        let n = self.nodes.len() * self.dofs ;
         debug!("Steps: {}; dt: {}; DOF: {}", time_steps, dt, n);
         //start doing the time marching
         let mut u = self.displacement_vector();
-        let mut u_dot = DVector::zeros(self.nodes.len() * self.dofs as usize);
-        let mut u_half_dot = DVector::zeros(self.nodes.len() * self.dofs as usize);
+        let mut u_dot = DVector::zeros(self.nodes.len() * self.dofs );
+        let mut u_half_dot = DVector::zeros(self.nodes.len() * self.dofs );
 
 
         let mut i = 0;
@@ -457,9 +466,9 @@ impl Simulation {
 
             // Apply boundary conditions
             for (global_index, value) in &specified_bc {
-                u[*global_index as usize] = *value;
-                u_dot[*global_index as usize] = (value - u[*global_index as usize]) / dt;
-                u_half_dot[*global_index as usize] = u_dot[*global_index as usize];
+                u[*global_index ] = *value;
+                u_dot[*global_index ] = (value - u[*global_index ]) / dt;
+                u_half_dot[*global_index ] = u_dot[*global_index ];
             }
 
             // Update nodal displacements
@@ -570,7 +579,7 @@ impl Simulation {
                 let feild_values = element_props.field.get(feild).unwrap();
                 for (j, value) in feild_values.iter().enumerate() {
                     let node_id = connectivity[j];
-                    node_feilds.get_mut(feild).unwrap()[node_id as usize].add_value(*value);
+                    node_feilds.get_mut(feild).unwrap()[node_id ].add_value(*value);
                 }
             }
         }
@@ -587,7 +596,7 @@ impl Simulation {
         }
     }
 
-    pub fn compute_element_properties(&self, id: u32) -> ElementFields {
+    pub fn compute_element_properties(&self, id: usize) -> ElementFields {
         let element = self.get_element(id).unwrap();
         element.compute_element_nodal_properties(&self)
     }

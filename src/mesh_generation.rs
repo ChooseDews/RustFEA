@@ -4,7 +4,7 @@ use crate::elements::brick_element::BrickElement;
 use crate::elements::base_element::Material;
 use crate::node::Node;
 
-pub fn generate_mesh(n_x: u32, n_y: u32, n_z: u32, s_x: f64, s_y: f64, s_z: f64) -> (Vec<Node>, Vec<BrickElement>) {
+pub fn generate_mesh(n_x: usize, n_y: usize, n_z: usize, s_x: f64, s_y: f64, s_z: f64) -> (Vec<Node>, Vec<BrickElement>) {
     let mut nodes = Vec::new();
     let mut elements = Vec::new();
     let dx = s_x / n_x as f64;

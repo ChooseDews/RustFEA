@@ -10,8 +10,8 @@ const TOLERANCE: f64 = 1e-10;
 
 #[derive(Serialize, Deserialize, Debug)] 
 pub struct FourNodeElement {
-    id: u32,
-    connectivity: Vec<u32>,
+    id: usize,
+    connectivity: Vec<usize>,
     material: Material,
     #[serde(skip, default = "default_deformation_gradient")]
     deformation_gradient: DMatrix<f64>, // 2x2 for 2D elements
@@ -40,7 +40,7 @@ fn get_area_of_triangle(a: &na::Vector3<f64>, b: &na::Vector3<f64>, c: &na::Vect
 }
 
 impl FourNodeElement {
-    pub fn new(id: u32, connectivity: Vec<u32>, material: Material) -> Self {
+    pub fn new(id: usize, connectivity: Vec<usize>, material: Material) -> Self {
         assert_eq!(
             connectivity.len(),
             4,
@@ -168,11 +168,11 @@ impl BaseElement for FourNodeElement {
     }
 
 
-    fn get_id(&self) -> u32 {
+    fn get_id(&self) -> usize {
         self.id
     }
 
-    fn get_connectivity(&self) -> &Vec<u32> {
+    fn get_connectivity(&self) -> &Vec<usize> {
         &self.connectivity
     }
 

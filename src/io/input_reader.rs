@@ -157,7 +157,7 @@ pub fn read_toml_file(file_path: &str) -> Project {
 
 
         let mesh_nodes = mesh.convert_to_nodes();
-        let dofs = simulation_keywords.get_int("DOF").unwrap_or(3) as u32;
+        let dofs = simulation_keywords.get_int("DOF").unwrap_or(3) as usize;
         let mut simulation = Simulation::from_mesh(mesh, dofs);
         simulation.set_keywords(simulation_keywords);
         let boundary_conditions = sim_table.get("boundary_conditions").unwrap().as_array().unwrap();
@@ -182,7 +182,7 @@ pub fn read_toml_file(file_path: &str) -> Project {
                     None
                 }
             }).collect();
-            let bc_node_ids: Vec<u32> = simulation.mesh.get_nodes_in_group(&bc_name);
+            let bc_node_ids: Vec<usize> = simulation.mesh.get_nodes_in_group(&bc_name);
             match bc_type {
                 "fixed" => {
                     let bc = FixedCondition::new(bc_node_ids, bc_values_vec);

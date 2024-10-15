@@ -17,19 +17,19 @@ use crate::bc::BoundaryConditionType;
 /// * `fixed_values`: The fixed values for each node. This is an optional field as some dof may be free
 #[derive(Serialize, Deserialize, Debug)]
 pub struct FixedCondition {
-    nodes: Vec<u32>,
+    nodes: Vec<usize>,
     fixed_values: Vec<Option<f64>>
 }
 
 impl FixedCondition {
-    pub fn new(nodes: Vec<u32>, fixed_values: Vec<Option<f64>>) -> Self {
+    pub fn new(nodes: Vec<usize>, fixed_values: Vec<Option<f64>>) -> Self {
         FixedCondition { nodes, fixed_values }
     }
-    pub fn all_3d(nodes: Vec<u32>, fixed_value: f64) -> Self {
+    pub fn all_3d(nodes: Vec<usize>, fixed_value: f64) -> Self {
         let fixed_values = vec![Some(fixed_value); 3];
         FixedCondition::new(nodes, fixed_values)
     }
-    pub fn static_3d(nodes: Vec<u32>) -> Self {
+    pub fn static_3d(nodes: Vec<usize>) -> Self {
         FixedCondition::all_3d(nodes, 0.0)
     }
 }
@@ -40,13 +40,13 @@ impl BoundaryCondition for FixedCondition {
         for &node_id in &self.nodes {
             for (i, value) in self.fixed_values.iter().enumerate() {
                 if value.is_none() { continue };
-                let global_index: u32 = simulation.get_global_index(node_id, i as u32);
+                let global_index: usize = simulation.get_global_index(node_id, i );
                 simulation.fixed_global_nodal_values.insert(global_index, value.unwrap());
             }
         }
     }
 
-    fn get_nodes(&self) -> &Vec<u32> {
+    fn get_nodes(&self) -> &Vec<usize> {
         &self.nodes
     }
 

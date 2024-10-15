@@ -31,7 +31,7 @@ pub fn write_vtk(filename: &str, simulation: &Simulation) -> std::io::Result<()>
         writeln!(file, "{} {} {}", node.position.x, node.position.y, node.position.z)?;
     }
 
-    let all_elements: &HashMap<u32, Box<dyn BaseElement>> = simulation.elements();
+    let all_elements: &HashMap<usize, Box<dyn BaseElement>> = simulation.elements();
     let elements: Vec<&Box<dyn BaseElement>> = all_elements.iter().filter(|(_id, element)| element.type_name() == ElementType::Brick).map(|(_, element)| element).collect();
 
     let elements_size = elements.len();    // Write cells (elements)

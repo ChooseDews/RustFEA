@@ -18,17 +18,17 @@ pub enum ElementType {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ElementFields { //hashmap containing
     pub field: HashMap<String, Vec<f64>>,
-    size: u32,
-    pub connectivity: Vec<u32>
+    size: usize,
+    pub connectivity: Vec<usize>
 }
 
 
 impl ElementFields {
-    pub fn new(connectivity: Vec<u32>) -> Self {
+    pub fn new(connectivity: Vec<usize>) -> Self {
         let size = connectivity.len();
         ElementFields {
             field: HashMap::new(),
-            size: size as u32,
+            size: size ,
             connectivity
         }
     }
@@ -40,14 +40,14 @@ impl ElementFields {
     pub fn find_field(&mut self, name: &str) -> Option<&mut Vec<f64>> {
         //check if field exists if not create it
         if !self.field.contains_key(name) {
-            self.field.insert(name.to_string(), vec![0.0; self.size as usize]);
+            self.field.insert(name.to_string(), vec![0.0; self.size ]);
         }
         self.field.get_mut(name)
     }
 
-    pub fn append_to_feild(&mut self, name: &str, nn: u32, value: f64) {
+    pub fn append_to_feild(&mut self, name: &str, nn: usize, value: f64) {
         let current_field = self.find_field(name).unwrap();
-        current_field[nn as usize] = value;
+        current_field[nn ] = value;
     }
 
     pub fn get_feild_names(&self) -> Vec<String> {
@@ -66,20 +66,28 @@ pub struct Material {
     //linear elastic material properties
     pub youngs_modulus: f64,
     pub poisson_ratio: f64,
-    pub density: f64
+    pub density: f64,
+    pub material_matrix: Option<Matrix6<f64>>
 }
 
 //3D [C] matrix
 impl Material {
     pub fn new(youngs_modulus: f64, poisson_ratio: f64, density: f64) -> Self {
-        Material {
+        let mut mat = Material {
             youngs_modulus,
             poisson_ratio,
-            density
-        }
+            density,
+            material_matrix: None
+        };
+        mat.compute_material_matrix();
+        mat
     }
 
-    pub fn get_3d_matrix(&self) -> Matrix6<f64>{
+    pub fn get_3d_matrix(&self) -> &Matrix6<f64> {
+        self.material_matrix.as_ref().expect("Material matrix not set")
+    }
+
+    pub fn compute_material_matrix(&mut self){
         let mut C = Matrix6::<f64>::zeros();
         let E = self.youngs_modulus;
         let v = self.poisson_ratio;
@@ -98,7 +106,7 @@ impl Material {
         C[(3,3)] = mu;
         C[(4,4)] = mu;
         C[(5,5)] = mu;
-        C
+        self.material_matrix = Some(C);
     }
 
     pub fn get_density(&self) -> f64 {
@@ -111,19 +119,11 @@ impl Material {
 
     //Aluminum 6061-T6
     pub fn aluminum() -> Self {
-        Material {
-            youngs_modulus: 68.9e9,
-            poisson_ratio: 0.33,
-            density: 2700.0 //mass scaling
-        }
+        Material::new(68.9e9, 0.33, 2700.0)
     }
 
     pub fn empty() -> Self {
-        Material {
-            youngs_modulus: 1.0,
-            poisson_ratio: 0.2,
-            density: 1.0
-        }
+        Material::new(1.0, 0.0, 1.0)
     }
 
 }
@@ -132,11 +132,12 @@ impl Material {
 #[typetag::serde]
 pub trait BaseElement {
 
-    fn dofs(&self) -> u32 { 3 }
-    fn get_id(&self) -> u32;
-    fn get_connectivity(&self) -> &Vec<u32>;
+    fn dofs(&self) -> usize { 3 }
+    fn get_id(&self) -> usize;
+    fn get_connectivity(&self) -> &Vec<usize>;
     fn get_material(&self) -> &Material;
     fn get_deformation_gradient(&self) -> &DMatrix<f64>;
+    fn initialize(&mut self, simulation: &Simulation) {}
 
     fn get_shape_derivatives(&self, xi: f64, eta: f64, zeta: f64) -> DMatrix<f64>;
     fn get_global_position(&self, n: &DVector<f64>, simulation: &Simulation) -> na::Vector3<f64> {
@@ -174,7 +175,7 @@ pub trait BaseElement {
 
     //explicit stuff
     fn compute_force(&self, simulation: &Simulation) -> DVector<f64> {
-        DVector::zeros(self.get_connectivity().len() * self.dofs() as usize)
+        DVector::zeros(self.get_connectivity().len() * self.dofs() )
     }
     // fn step_explicit(&mut self, simulation: &Simulation, force: DVector<f64>, dt: f64); //self modification
 

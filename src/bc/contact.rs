@@ -23,16 +23,16 @@ pub struct NormalContact {
     contact_type: ContactType,
 
     //info
-    primary_nodes: Vec<u32>,
-    primary_elements: Vec<u32>,
-    secondary_nodes: Vec<u32>,
-    secondary_elements: Vec<u32>, //currently expected to be a surface element of sometim
+    primary_nodes: Vec<usize>,
+    primary_elements: Vec<usize>,
+    secondary_nodes: Vec<usize>,
+    secondary_elements: Vec<usize>, //currently expected to be a surface element of sometim
 
     //used for computation
-    active_primary_nodes: Vec<u32>,
-    active_secondary_elements: Vec<u32>,
+    active_primary_nodes: Vec<usize>,
+    active_secondary_elements: Vec<usize>,
     
-    penetration_count: u32,
+    penetration_count: usize,
     max_penetration: f64,
 }
 
@@ -56,8 +56,8 @@ impl NormalContact {
     }
     pub fn set_contact_surfaces_nodes(
         &mut self,
-        primary_nodes: Vec<u32>,
-        secondary_nodes: Vec<u32>,
+        primary_nodes: Vec<usize>,
+        secondary_nodes: Vec<usize>,
     ) {
         self.primary_nodes = primary_nodes;
         self.secondary_nodes = secondary_nodes;
@@ -65,13 +65,13 @@ impl NormalContact {
     //Mesh id which is not necessary the same as the element id of the simulation
     pub fn set_contact_surfaces_elements(
         &mut self,
-        primary_elements: Vec<u32>,
-        secondary_elements: Vec<u32>,
+        primary_elements: Vec<usize>,
+        secondary_elements: Vec<usize>,
     ) {
         self.primary_elements = primary_elements;
         self.secondary_elements = secondary_elements;
     }
-    pub fn set_penetration_count(&mut self, count: u32) {
+    pub fn set_penetration_count(&mut self, count: usize) {
         self.penetration_count = count;
     }
     pub fn set_max_penetration(&mut self, max_penetration: f64) {
@@ -113,7 +113,7 @@ impl BoundaryCondition for NormalContact {
                 for i in 0..3 {
                     let global_index = simulation.get_global_index(*primary_node_index, i);
                     // assert!(!check_for_nans(&load_vector.unwrap()), "#2 contactforce vector contains NaNs, node: {} dof: {}", *primary_node_index, i);
-                    simulation.load_vector[global_index as usize] += load_vector.unwrap()[i as usize];
+                    simulation.load_vector[global_index ] += load_vector.unwrap()[i ];
                 }
             }
 
@@ -123,7 +123,7 @@ impl BoundaryCondition for NormalContact {
         //  debug!("max penetration: {} active nodes: {}", max_penetration, active_nodes);
     }
 
-    fn get_nodes(&self) -> &Vec<u32> {
+    fn get_nodes(&self) -> &Vec<usize> {
         &self.active_primary_nodes
     }
     fn type_name(&self) -> BoundaryConditionType {

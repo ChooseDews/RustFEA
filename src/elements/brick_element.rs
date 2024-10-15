@@ -10,8 +10,8 @@ use log::{debug, trace};
 
 #[derive(Serialize, Deserialize, Debug)] 
 pub struct BrickElement {
-    id: u32,
-    connectivity: Vec<u32>,
+    id: usize,
+    connectivity: Vec<usize>,
     material: Material,
     #[serde(skip, default = "default_deformation_gradient")]
     deformation_gradient: DMatrix<f64>, // ... other properties specific to the 8-node brick element
@@ -22,6 +22,12 @@ pub struct BrickElement {
     #[serde(skip, default = "Vec::new")]//lumped mass matrix
     lumped_mass: Vec<f64>,
     active: bool,
+    #[serde(skip, default = "nodal_positions")]
+    nodal_positions: Option<SMatrix<f64, 8, 3>>,
+}
+
+fn nodal_positions() -> Option<SMatrix<f64, 8, 3>> {
+    Option::None
 }
 
 fn default_deformation_gradient() -> DMatrix<f64> {
@@ -37,7 +43,7 @@ fn empty_element_matrix() -> na::SMatrix<f64, 24, 24> {
 }
 
 impl BrickElement {
-    pub fn new(id: u32, connectivity: Vec<u32>, material: Material) -> Self {
+    pub fn new(id: usize, connectivity: Vec<usize>, material: Material) -> Self {
         assert_eq!(
             connectivity.len(),
             8,
@@ -52,10 +58,15 @@ impl BrickElement {
             mass: default_zero_matrix(),
             lumped_mass: Vec::new(),
             active: true,
+            nodal_positions: Option::None,
         }
     }
 
-    fn get_x_local(&self, simulation: &Simulation) -> SMatrix<f64, 8, 3> { //get global position of each node
+    fn get_x_local(&self, simulation: &Simulation) -> &SMatrix<f64, 8, 3> { //get global position of each node
+        self.nodal_positions.as_ref().expect("Nodal positions not initialized")
+    }
+
+    fn compute_x_local(&mut self, simulation: &Simulation) -> SMatrix<f64, 8, 3> {
         let mut X = SMatrix::<f64, 8, 3>::zeros();
         for (i, node_id) in self.connectivity.iter().enumerate() {
             let node = simulation.get_node(*node_id).unwrap();
@@ -66,36 +77,34 @@ impl BrickElement {
         X
     }
 
-    fn get_gauss_points() -> Vec<(f64, f64, f64, f64)> { //xi, eta, zeta, weight
-        trace!("Generating Gauss points for brick element");
-        //compute and return the gauss points here
-        //assume 2x2x2 gauss points for now
-        let mut gauss_points: Vec<(f64, f64, f64, f64)> = Vec::new();
-        let a = 1.0 / (3.0 as f64).sqrt();
-        //same order as node numbering (useful for computing properties at nodes)
-        gauss_points.push((-a, -a, -a, 1.0));
-        gauss_points.push((a, -a, -a, 1.0));
-        gauss_points.push((a, a, -a, 1.0));
-        gauss_points.push((-a, a, -a, 1.0));
-        gauss_points.push((-a, -a, a, 1.0));
-        gauss_points.push((a, -a, a, 1.0));
-        gauss_points.push((a, a, a, 1.0));
-        gauss_points.push((-a, a, a, 1.0));
-        gauss_points
+
+    fn get_gauss_points() -> &'static [(f64, f64, f64, f64)] {
+        static A: f64 = 0.5773502691896257; // 1/sqrt(3)
+        static GAUSS_POINTS: [(f64, f64, f64, f64); 8] = [
+            (-A, -A, -A, 1.0),
+            (A, -A, -A, 1.0),
+            (A, A, -A, 1.0),
+            (-A, A, -A, 1.0),
+            (-A, -A, A, 1.0),
+            (A, -A, A, 1.0),
+            (A, A, A, 1.0),
+            (-A, A, A, 1.0),
+        ];
+        &GAUSS_POINTS
     }
 
-    fn get_corner_points() -> Vec<(f64, f64, f64, f64)> {
-        //in local coordinates ie. -1 to 1
-        let mut corner_points: Vec<(f64, f64, f64, f64)> = Vec::new();
-        corner_points.push((-1.0, -1.0, -1.0, 1.0));
-        corner_points.push((1.0, -1.0, -1.0, 1.0));
-        corner_points.push((1.0, 1.0, -1.0, 1.0));
-        corner_points.push((-1.0, 1.0, -1.0, 1.0));
-        corner_points.push((-1.0, -1.0, 1.0, 1.0));
-        corner_points.push((1.0, -1.0, 1.0, 1.0));
-        corner_points.push((1.0, 1.0, 1.0, 1.0));
-        corner_points.push((-1.0, 1.0, 1.0, 1.0));
-        corner_points
+    fn get_corner_points() -> &'static [(f64, f64, f64, f64)] {
+        static CORNER_POINTS: [(f64, f64, f64, f64); 8] = [
+            (-1.0, -1.0, -1.0, 1.0),
+            (1.0, -1.0, -1.0, 1.0),
+            (1.0, 1.0, -1.0, 1.0),
+            (-1.0, 1.0, -1.0, 1.0),
+            (-1.0, -1.0, 1.0, 1.0),
+            (1.0, -1.0, 1.0, 1.0),
+            (1.0, 1.0, 1.0, 1.0),
+            (-1.0, 1.0, 1.0, 1.0),
+        ];
+        &CORNER_POINTS
     }
 
     fn get_u_local(&self, simulation: &Simulation) -> SVector<f64, 24> {
@@ -119,18 +128,17 @@ impl BrickElement {
             for m in 0..3 {
                  N_I[m] =  J_inv.row(m).dot(&dN.row(i));
             }
-            //define B_I for each node
-            let mut B_I = SMatrix::<f64, 6, 3>::zeros();
-            B_I[(0, 0)] = N_I[0];
-            B_I[(1, 1)] = N_I[1];
-            B_I[(2, 2)] = N_I[2];
-            B_I[(3, 1)] = N_I[2];
-            B_I[(3, 2)] = N_I[1];
-            B_I[(4, 0)] = N_I[2];
-            B_I[(4, 2)] = N_I[0];
-            B_I[(5, 0)] = N_I[1];
-            B_I[(5, 1)] = N_I[0];
-            
+            //new method to handle B_I
+            let mut B_I = SMatrix::<f64, 6, 3>::new(
+                N_I[0], 0.0, 0.0,
+                0.0, N_I[1], 0.0,
+                0.0, 0.0, N_I[2],
+
+                0.0, N_I[2], N_I[1],
+                N_I[2], 0.0, N_I[0],
+                N_I[1], N_I[0], 0.0
+            );
+
             for j in 0..6 {
                 for k in 0..3 {
                     B[(j, 3 * i + k)] = B_I[(j, k)];
@@ -148,19 +156,24 @@ impl BrickElement {
 
 
     fn get_shape_derivatives_local(&self, xi: f64, eta: f64, zeta: f64) -> SMatrix<f64, 8, 3> {
-        //we expect to return a 3x8 matrix of shape derivatives. ie. the derivative of N_i wrt. xi, eta, and zeta for each node i
-        //derived with sympy
-        let matrix_data = vec![
-            [-0.125 * (eta - 1.0) * (zeta - 1.0), -0.125 * (xi - 1.0) * (zeta - 1.0), -0.125 * (eta - 1.0) * (xi - 1.0)],
-            [0.125 * (eta - 1.0) * (zeta - 1.0), 0.125 * (xi + 1.0) * (zeta - 1.0), 0.125 * (eta - 1.0) * (xi + 1.0)],
-            [-0.125 * (eta + 1.0) * (zeta - 1.0), -0.125 * (xi + 1.0) * (zeta - 1.0), -0.125 * (eta + 1.0) * (xi + 1.0)],
-            [0.125 * (eta + 1.0) * (zeta - 1.0), 0.125 * (xi - 1.0) * (zeta - 1.0), 0.125 * (eta + 1.0) * (xi - 1.0)],
-            [0.125 * (eta - 1.0) * (zeta + 1.0), 0.125 * (xi - 1.0) * (zeta + 1.0), 0.125 * (eta - 1.0) * (xi - 1.0)],
-            [-0.125 * (eta - 1.0) * (zeta + 1.0), -0.125 * (xi + 1.0) * (zeta + 1.0), -0.125 * (eta - 1.0) * (xi + 1.0)],
-            [0.125 * (eta + 1.0) * (zeta + 1.0), 0.125 * (xi + 1.0) * (zeta + 1.0), 0.125 * (eta + 1.0) * (xi + 1.0)],
-            [-0.125 * (eta + 1.0) * (zeta + 1.0), -0.125 * (xi - 1.0) * (zeta + 1.0), -0.125 * (eta + 1.0) * (xi - 1.0)]
-        ];
-        na::SMatrix::from_row_slice(&matrix_data.concat())
+        // Pre-compute common terms
+        let xi_m = xi - 1.0;
+        let xi_p = xi + 1.0;
+        let eta_m = eta - 1.0;
+        let eta_p = eta + 1.0;
+        let zeta_m = zeta - 1.0;
+        let zeta_p = zeta + 1.0;
+
+        SMatrix::from_row_slice(&[
+            -0.125 * eta_m * zeta_m, -0.125 * xi_m * zeta_m, -0.125 * eta_m * xi_m,
+            0.125 * eta_m * zeta_m, 0.125 * xi_p * zeta_m, 0.125 * eta_m * xi_p,
+            -0.125 * eta_p * zeta_m, -0.125 * xi_p * zeta_m, -0.125 * eta_p * xi_p,
+            0.125 * eta_p * zeta_m, 0.125 * xi_m * zeta_m, 0.125 * eta_p * xi_m,
+            0.125 * eta_m * zeta_p, 0.125 * xi_m * zeta_p, 0.125 * eta_m * xi_m,
+            -0.125 * eta_m * zeta_p, -0.125 * xi_p * zeta_p, -0.125 * eta_m * xi_p,
+            0.125 * eta_p * zeta_p, 0.125 * xi_p * zeta_p, 0.125 * eta_p * xi_p,
+            -0.125 * eta_p * zeta_p, -0.125 * xi_m * zeta_p, -0.125 * eta_p * xi_m
+        ])
     }   
 
 
@@ -177,18 +190,24 @@ impl BrickElement {
     }
 
     fn get_shape_functions(&self, xi: f64, eta: f64, zeta: f64) -> SVector<f64, 8> {
-        //compute N_i in local coordinates (xi, eta, zeta)
-        //return as a DVector of length 8
-        let mut shape_functions = SVector::<f64, 8>::zeros();
-        shape_functions[0] = 0.125 * (1.0 - xi) * (1.0 - eta) * (1.0 - zeta);
-        shape_functions[1] = 0.125 * (1.0 + xi) * (1.0 - eta) * (1.0 - zeta);
-        shape_functions[2] = 0.125 * (1.0 + xi) * (1.0 + eta) * (1.0 - zeta);
-        shape_functions[3] = 0.125 * (1.0 - xi) * (1.0 + eta) * (1.0 - zeta);
-        shape_functions[4] = 0.125 * (1.0 - xi) * (1.0 - eta) * (1.0 + zeta);
-        shape_functions[5] = 0.125 * (1.0 + xi) * (1.0 - eta) * (1.0 + zeta);
-        shape_functions[6] = 0.125 * (1.0 + xi) * (1.0 + eta) * (1.0 + zeta);
-        shape_functions[7] = 0.125 * (1.0 - xi) * (1.0 + eta) * (1.0 + zeta);
-        shape_functions
+        // Pre-compute common terms
+        let xi_m = 1.0 - xi;
+        let xi_p = 1.0 + xi;
+        let eta_m = 1.0 - eta;
+        let eta_p = 1.0 + eta;
+        let zeta_m = 1.0 - zeta;
+        let zeta_p = 1.0 + zeta;
+
+        SVector::from([
+            0.125 * xi_m * eta_m * zeta_m,
+            0.125 * xi_p * eta_m * zeta_m,
+            0.125 * xi_p * eta_p * zeta_m,
+            0.125 * xi_m * eta_p * zeta_m,
+            0.125 * xi_m * eta_m * zeta_p,
+            0.125 * xi_p * eta_m * zeta_p,
+            0.125 * xi_p * eta_p * zeta_p,
+            0.125 * xi_m * eta_p * zeta_p
+        ])
     }
 
 
@@ -197,11 +216,17 @@ impl BrickElement {
 
 #[typetag::serde]
 impl BaseElement for BrickElement {
-    fn get_id(&self) -> u32 {
+    fn get_id(&self) -> usize {
         self.id
     }
 
-    fn get_connectivity(&self) -> &Vec<u32> {
+
+    fn initialize(&mut self, simulation: &Simulation) {
+        self.nodal_positions = Some(self.compute_x_local(simulation));
+    }
+
+
+    fn get_connectivity(&self) -> &Vec<usize> {
         &self.connectivity
     }
 
@@ -253,20 +278,40 @@ impl BaseElement for BrickElement {
     }
 
     fn get_shape_derivatives(&self, xi: f64, eta: f64, zeta: f64) -> DMatrix<f64> {
-        //we expect to return a 8x3 matrix of shape derivatives. ie. the derivative of N_i wrt. xi, eta, and zeta for each node i
-        //derived with sympy
-        let matrix_data = vec![
-            [-0.125 * (eta - 1.0) * (zeta - 1.0), -0.125 * (xi - 1.0) * (zeta - 1.0), -0.125 * (eta - 1.0) * (xi - 1.0)],
-            [0.125 * (eta - 1.0) * (zeta - 1.0), 0.125 * (xi + 1.0) * (zeta - 1.0), 0.125 * (eta - 1.0) * (xi + 1.0)],
-            [-0.125 * (eta + 1.0) * (zeta - 1.0), -0.125 * (xi + 1.0) * (zeta - 1.0), -0.125 * (eta + 1.0) * (xi + 1.0)],
-            [0.125 * (eta + 1.0) * (zeta - 1.0), 0.125 * (xi - 1.0) * (zeta - 1.0), 0.125 * (eta + 1.0) * (xi - 1.0)],
-            [0.125 * (eta - 1.0) * (zeta + 1.0), 0.125 * (xi - 1.0) * (zeta + 1.0), 0.125 * (eta - 1.0) * (xi - 1.0)],
-            [-0.125 * (eta - 1.0) * (zeta + 1.0), -0.125 * (xi + 1.0) * (zeta + 1.0), -0.125 * (eta - 1.0) * (xi + 1.0)],
-            [0.125 * (eta + 1.0) * (zeta + 1.0), 0.125 * (xi + 1.0) * (zeta + 1.0), 0.125 * (eta + 1.0) * (xi + 1.0)],
-            [-0.125 * (eta + 1.0) * (zeta + 1.0), -0.125 * (xi - 1.0) * (zeta + 1.0), -0.125 * (eta + 1.0) * (xi - 1.0)]
-        ];
-        let dmatrix = na::DMatrix::from_row_slice(8, 3, &matrix_data.concat());
-        dmatrix
+        // Pre-compute common terms
+        let xi_m = xi - 1.0;
+        let xi_p = xi + 1.0;
+        let eta_m = eta - 1.0;
+        let eta_p = eta + 1.0;
+        let zeta_m = zeta - 1.0;
+        let zeta_p = zeta + 1.0;
+
+        let eta_m_zeta_m = eta_m * zeta_m;
+        let eta_p_zeta_m = eta_p * zeta_m;
+        let eta_m_zeta_p = eta_m * zeta_p;
+        let eta_p_zeta_p = eta_p * zeta_p;
+
+        let xi_m_zeta_m = xi_m * zeta_m;
+        let xi_p_zeta_m = xi_p * zeta_m;
+        let xi_m_zeta_p = xi_m * zeta_p;
+        let xi_p_zeta_p = xi_p * zeta_p;
+
+        let xi_m_eta_m = xi_m * eta_m;
+        let xi_p_eta_m = xi_p * eta_m;
+        let xi_m_eta_p = xi_m * eta_p;
+        let xi_p_eta_p = xi_p * eta_p;
+
+        // Create the matrix directly with computed values
+        DMatrix::from_row_slice(8, 3, &[
+            -0.125 * eta_m_zeta_m, -0.125 * xi_m_zeta_m, -0.125 * xi_m_eta_m,
+             0.125 * eta_m_zeta_m,  0.125 * xi_p_zeta_m,  0.125 * xi_p_eta_m,
+            -0.125 * eta_p_zeta_m, -0.125 * xi_p_zeta_m, -0.125 * xi_p_eta_p,
+             0.125 * eta_p_zeta_m,  0.125 * xi_m_zeta_m,  0.125 * xi_m_eta_p,
+             0.125 * eta_m_zeta_p,  0.125 * xi_m_zeta_p,  0.125 * xi_m_eta_m,
+            -0.125 * eta_m_zeta_p, -0.125 * xi_p_zeta_p, -0.125 * xi_p_eta_m,
+             0.125 * eta_p_zeta_p,  0.125 * xi_p_zeta_p,  0.125 * xi_p_eta_p,
+            -0.125 * eta_p_zeta_p, -0.125 * xi_m_zeta_p, -0.125 * xi_m_eta_p,
+        ])
     }
 
 
@@ -280,15 +325,15 @@ impl BaseElement for BrickElement {
         trace!("Computing stiffness matrix for brick element");
         let mut K = empty_element_matrix();
         let gauss_points = BrickElement::get_corner_points();
-        let x = self.get_x_local(simulation); //nodal positions
-        for (xi, eta, zeta, weight) in gauss_points {
+        let x = self.get_x_local(simulation);
+        let C = self.material.get_3d_matrix();
+
+        for &(xi, eta, zeta, weight) in gauss_points {
             let d_n = self.get_shape_derivatives_local(xi, eta, zeta);
             let J = self.compute_jacobian_matrix(&x, &d_n);
             let B = self.compute_b(&x, &J, &d_n);
-            let C = self.material.get_3d_matrix();
-            K +=  B.transpose() * C * B * J.determinant() * weight;
+            K += B.transpose() * C * B * J.determinant() * weight;
         }
-        //use the gauss quadrature to compute the stiffness matrix
         self.stiffness = K;
     }
 
@@ -306,17 +351,16 @@ impl BaseElement for BrickElement {
 
 
     fn compute_mass(&self, simulation: &Simulation) -> DMatrix<f64> {
-        //compute the mass matrix [M] = intergrate(density * N^T * N * detJ * weight)
         let mut M = DMatrix::<f64>::zeros(8, 8);
         let gauss_points = BrickElement::get_gauss_points();
         let density = self.material.density;
         let x = self.get_x_local(simulation);
-        for (xi, eta, zeta, weight) in gauss_points {
+
+        for &(xi, eta, zeta, weight) in gauss_points {
             let d_n = self.get_shape_derivatives_local(xi, eta, zeta);
             let J = self.compute_jacobian_matrix(&x, &d_n);
             let N = self.get_shape_functions(xi, eta, zeta);
-            let M_point = density * N * N.transpose() *  J.determinant() * weight;
-            M += M_point;
+            M += density * N * N.transpose() * J.determinant() * weight;
         }
         M
     }
@@ -361,34 +405,32 @@ impl BaseElement for BrickElement {
 
     fn compute_element_nodal_properties(&self, simulation: &Simulation) -> ElementFields {
         trace!("Computing element nodal properties for brick element");
-        //compute the nodal properties for each node
-        let mut element_feilds = ElementFields::new(self.get_connectivity().to_vec());
+        let mut element_fields = ElementFields::new(self.get_connectivity().to_vec());
         let gauss_points = BrickElement::get_gauss_points();
         let u_e = self.get_u_local(simulation);
         let x = self.get_x_local(simulation);
-        let mut nn = 0; //node number
-        for (xi, eta, zeta, _) in gauss_points {
+
+        for (nn, &(xi, eta, zeta, _)) in gauss_points.iter().enumerate() {
             let d_n = self.get_shape_derivatives_local(xi, eta, zeta);
             let strain = self.compute_strain(&x, &u_e, &d_n);
             let stress = self.compute_stress(&x, &u_e, &d_n);
-            element_feilds.append_to_feild("e_xx", nn, strain[0]);
-            element_feilds.append_to_feild("e_yy", nn, strain[1]);
-            element_feilds.append_to_feild("e_zz", nn, strain[2]);
-            element_feilds.append_to_feild("e_xy", nn, strain[3]);
-            element_feilds.append_to_feild("e_yz", nn, strain[4]);
-            element_feilds.append_to_feild("e_xz", nn, strain[5]);
-            element_feilds.append_to_feild("s_xx", nn, stress[0]);
-            element_feilds.append_to_feild("s_yy", nn, stress[1]);
-            element_feilds.append_to_feild("s_zz", nn, stress[2]);
-            element_feilds.append_to_feild("s_xy", nn, stress[3]);
-            element_feilds.append_to_feild("s_yz", nn, stress[4]);
-            element_feilds.append_to_feild("s_xz", nn, stress[5]);
             let vm = compute_von_mises(stress);
-            element_feilds.append_to_feild("vm", nn, vm);
-            nn += 1;
+            element_fields.append_to_feild("e_xx", nn, strain[0]);
+            element_fields.append_to_feild("e_yy", nn, strain[1]);
+            element_fields.append_to_feild("e_zz", nn, strain[2]);
+            element_fields.append_to_feild("e_xy", nn, strain[3]);
+            element_fields.append_to_feild("e_yz", nn, strain[4]);
+            element_fields.append_to_feild("e_xz", nn, strain[5]);
+            element_fields.append_to_feild("s_xx", nn, stress[0]);
+            element_fields.append_to_feild("s_yy", nn, stress[1]);
+            element_fields.append_to_feild("s_zz", nn, stress[2]);
+            element_fields.append_to_feild("s_xy", nn, stress[3]);
+            element_fields.append_to_feild("s_yz", nn, stress[4]);
+            element_fields.append_to_feild("s_xz", nn, stress[5]);
+            element_fields.append_to_feild("vm", nn, vm);
         }
 
-        return element_feilds;
+        element_fields
     }
 
     fn type_name(&self) -> ElementType {

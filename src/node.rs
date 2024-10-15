@@ -6,7 +6,7 @@ use na::Vector3;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Node {
-    pub id: u32,
+    pub id: usize,
     pub position: Vector3<f64>,
     pub displacement: Vector3<f64>,
     #[serde(skip, default = "Vector3::zeros")]
@@ -27,7 +27,7 @@ impl Node {
     /// * `x`: The x-coordinate of the node.
     /// * `y`: The y-coordinate of the node.
     // Constructor
-    pub fn new(id: u32, x: f64, y: f64, z: f64) -> Self {
+    pub fn new(id: usize, x: f64, y: f64, z: f64) -> Self {
         Node {
             id,
             position: Vector3::new(x, y, z),
