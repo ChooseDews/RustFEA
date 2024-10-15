@@ -35,7 +35,7 @@ impl MeshNode {
     pub fn offset(&self, offset: &HashMap<usize, usize>) -> MeshNode {
         MeshNode {
             coordinates: self.coordinates.clone(),
-            id: offset.get(&self.id).unwrap().clone()
+            id: *offset.get(&self.id).unwrap()
         }
     }
 }
@@ -77,13 +77,13 @@ impl MeshElement {
     pub fn offset(&self, el_offset: &HashMap<usize, usize>, node_offset: &HashMap<usize, usize>) -> MeshElement {
         let mut connectivity = Vec::new();
         for node_id in &self.connectivity {
-            connectivity.push(node_offset.get(node_id).unwrap().clone());
+            connectivity.push(*node_offset.get(node_id).unwrap());
         }
         MeshElement {
-            connectivity: connectivity,
+            connectivity,
             name: self.name.clone(),
             el_type: self.el_type.clone(),
-            id: el_offset.get(&self.id).unwrap().clone(),
+            id: *el_offset.get(&self.id).unwrap(),
         }
     }
 }
@@ -101,7 +101,7 @@ pub struct ElementGroup {
 impl ElementGroup {
     pub fn offset(&self, el_offset: &HashMap<usize, usize>) -> ElementGroup {
         ElementGroup {
-            elements: self.elements.iter().map(|e| el_offset.get(e).unwrap().clone()).collect(),
+            elements: self.elements.iter().map(|e| *el_offset.get(e).unwrap()).collect(),
             name: self.name.clone(),
             el_type: self.el_type.clone(),
         }
@@ -116,7 +116,7 @@ pub struct NodeGroup {
 impl NodeGroup {
     pub fn offset(&self, node_offset: &HashMap<usize, usize>) -> NodeGroup {
         NodeGroup {
-            nodes: self.nodes.iter().map(|n| node_offset.get(n).unwrap().clone()).collect(),
+            nodes: self.nodes.iter().map(|n| *node_offset.get(n).unwrap()).collect(),
             name: self.name.clone(),
         }
     }
@@ -132,8 +132,8 @@ pub struct Body {
 impl Body {
     pub fn offset(&self, el_offset: &HashMap<usize, usize>, node_offset: &HashMap<usize, usize> ) -> Body {
         Body {
-            elements: self.elements.iter().map(|e| el_offset.get(e).unwrap().clone()).collect(),
-            nodes: self.nodes.iter().map(|n| node_offset.get(n).unwrap().clone()).collect(),
+            elements: self.elements.iter().map(|e| *el_offset.get(e).unwrap()).collect(),
+            nodes: self.nodes.iter().map(|n| *node_offset.get(n).unwrap()).collect(),
             name: self.name.clone(),
         }
     }
@@ -189,8 +189,8 @@ impl MeshAssembly {
 
     pub fn multiple_bodies(&mut self, bodies: Vec<String>) {
         for body_name in bodies {
-            let el_group = self.element_groups.get(&body_name).expect(&format!("Element group: {} not found in mesh", body_name));
-            let node_group = self.node_groups.get(&body_name).expect(&format!("Node group: {} not found in mesh", body_name));
+            let el_group = self.element_groups.get(&body_name).unwrap_or_else(|| panic!("Element group: {} not found in mesh", body_name));
+            let node_group = self.node_groups.get(&body_name).unwrap_or_else(|| panic!("Node group: {} not found in mesh", body_name));
             let body = Body {
                 elements: el_group.elements.clone(),
                 nodes: node_group.nodes.clone(),
@@ -209,12 +209,12 @@ impl MeshAssembly {
     }
 
     pub fn get_nodes_in_group(&self, group_name: &str) -> Vec<usize> {
-        let group = self.node_groups.get(group_name).expect(&format!("Node group: {} not found in mesh", group_name));
+        let group = self.node_groups.get(group_name).unwrap_or_else(|| panic!("Node group: {} not found in mesh", group_name));
         group.nodes.clone()
     }
 
     pub fn get_elements_in_group(&self, group_name: &str) -> Vec<usize> {
-        let group = self.element_groups.get(group_name).expect(&format!("Element group: {} not found in mesh", group_name));
+        let group = self.element_groups.get(group_name).unwrap_or_else(|| panic!("Element group: {} not found in mesh", group_name));
         group.elements.clone()
     }
 

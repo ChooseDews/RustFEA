@@ -60,7 +60,7 @@ pub fn read_file(filename: &str) -> MeshAssembly {
     let lines = read_lines(filename);
 
     let mut current_block = -1; //0 = *NODE, 1 = *ELEMENT, 2 = *ELSET, 3 = *NSET
-    let headings = vec!["*NODE", "*ELEMENT", "*ELSET", "*NSET"];
+    let headings = ["*NODE", "*ELEMENT", "*ELSET", "*NSET"];
     let mut params: HashMap<String, String> = HashMap::new();
     for line in lines {
         //check if a heading is contained in the line, then set current_block to the index of that heading

@@ -105,7 +105,7 @@ pub fn read_toml_file(file_path: &str) -> Project {
             for mesh in meshes.iter() {
                 let mesh_table = mesh.as_table().unwrap();
                 let mesh_file = mesh_table.get("file").unwrap().as_str().unwrap();
-                let mesh_path = format_path(&mesh_file, file_path);
+                let mesh_path = format_path(mesh_file, file_path);
 
                 //get array of bodies corresponding to the mesh node_sets
                 let volumes = {
@@ -182,7 +182,7 @@ pub fn read_toml_file(file_path: &str) -> Project {
                     None
                 }
             }).collect();
-            let bc_node_ids: Vec<usize> = simulation.mesh.get_nodes_in_group(&bc_name);
+            let bc_node_ids: Vec<usize> = simulation.mesh.get_nodes_in_group(bc_name);
             match bc_type {
                 "fixed" => {
                     let bc = FixedCondition::new(bc_node_ids, bc_values_vec);

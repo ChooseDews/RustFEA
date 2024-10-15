@@ -29,9 +29,9 @@ fn criterion_benchmark(c: &mut Criterion) {
     group.sample_size(10);
     group.measurement_time(Duration::from_secs(70));
     group.warm_up_time(Duration::from_secs(1));
-    group.bench_function("Load Project: Tube", |b: &mut criterion::Bencher<'_>| b.iter(|| load_project()));
-    group.bench_function("Load + Direct Solve: Tube", |b| b.iter(|| project()));
-    group.bench_function("Explicit Contact Problem", |b| b.iter(|| project_contact()));
+    group.bench_function("Load Project: Tube", |b: &mut criterion::Bencher<'_>| b.iter(load_project));
+    group.bench_function("Load + Direct Solve: Tube", |b| b.iter(project));
+    group.bench_function("Explicit Contact Problem", |b| b.iter(project_contact));
     group.finish();
 }
 

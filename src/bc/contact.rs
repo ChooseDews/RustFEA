@@ -132,7 +132,7 @@ impl BoundaryCondition for NormalContact {
     fn initalize(&mut self, simulation: &Simulation) {
         debug!("Initializing contact condition");
         assert!(
-            self.secondary_elements.len() > 0,
+            !self.secondary_elements.is_empty(),
             "No main 2nd surface elements found"
         );
         //rule out elements which are not close by the max distance from center

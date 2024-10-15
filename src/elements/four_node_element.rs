@@ -1,8 +1,7 @@
-use crate::simulation::{Simulation};
+use crate::simulation::Simulation;
 use super::base_element::{BaseElement, Material, ElementFields, ElementType};
 use nalgebra as na;
 use na::{DMatrix, DVector};
-use crate::utilities::{compute_von_mises};
 use serde::{Serialize, Deserialize};
 use log::{debug, trace};
 
@@ -60,14 +59,14 @@ impl FourNodeElement {
 
     fn center(&self, simulation: &Simulation) -> na::Vector3<f64> {
         let x_pos = self.get_x_vector(simulation);
-        let center = (x_pos[0] + x_pos[1] + x_pos[2] + x_pos[3]) / 4.0;
-        center  
+        
+        (x_pos[0] + x_pos[1] + x_pos[2] + x_pos[3]) / 4.0  
     }
 
     fn get_gauss_points() -> Vec<(f64, f64, f64)> { // xi, eta, weight
         trace!("Generating Gauss points for four-node element");
         let mut gauss_points: Vec<(f64, f64, f64)> = Vec::new();
-        let a = 1.0 / (3.0 as f64).sqrt();
+        let a = 1.0 / 3.0_f64.sqrt();
         // Gauss points for 2x2 quadrature in a plane
         gauss_points.push((-a, -a, 1.0));
         gauss_points.push((a, -a, 1.0));
@@ -82,8 +81,8 @@ impl FourNodeElement {
         let node3 = simulation.get_node(self.connectivity[2]).unwrap();
         let vector1 = node2.position - node1.position;
         let vector2 = node3.position - node1.position;
-        let normal = vector1.cross(&vector2);
-        normal
+        
+        vector1.cross(&vector2)
     }
 
 
@@ -119,8 +118,8 @@ impl FourNodeElement {
 
     fn get_area(&self, simulation: &Simulation) -> f64 {
         let x_pos = self.get_x_vector(simulation);
-        let area = get_area_of_triangle(&x_pos[0], &x_pos[1], &x_pos[2]) + get_area_of_triangle(&x_pos[0], &x_pos[2], &x_pos[3]);
-        area
+        
+        get_area_of_triangle(&x_pos[0], &x_pos[1], &x_pos[2]) + get_area_of_triangle(&x_pos[0], &x_pos[2], &x_pos[3])
     }
 
     fn get_x_vector(&self, simulation: &Simulation) -> Vec<na::Vector3<f64>> {
@@ -186,14 +185,14 @@ impl BaseElement for FourNodeElement {
 
     fn get_x(&self, simulation: &Simulation) -> DMatrix<f64> {
         // Compute X matrix in 3D coordinates for each node
-        let mut X = DMatrix::<f64>::zeros(3, 4);
+        let mut x = DMatrix::<f64>::zeros(3, 4);
         for (i, node_id) in self.connectivity.iter().enumerate() {
             let node = simulation.get_node(*node_id).unwrap();
-            X[(0, i)] = node.position[0];
-            X[(1, i)] = node.position[1];
-            X[(2, i)] = node.position[2];
+            x[(0, i)] = node.position[0];
+            x[(1, i)] = node.position[1];
+            x[(2, i)] = node.position[2];
         }
-        X
+        x
     }
 
     fn get_u(&self, simulation: &Simulation) -> DVector<f64> {
@@ -210,12 +209,10 @@ impl BaseElement for FourNodeElement {
 
     fn get_shape_derivatives(&self, xi: f64, eta: f64, _zeta: f64) -> DMatrix<f64> {
         // Return 2x4 matrix of shape function derivatives (for plane elements)
-        let matrix_data = vec![
-            [-0.25 * (1.0 - eta), -0.25 * (1.0 - xi)],
+        let matrix_data = [[-0.25 * (1.0 - eta), -0.25 * (1.0 - xi)],
             [0.25 * (1.0 - eta), -0.25 * (1.0 + xi)],
             [0.25 * (1.0 + eta), 0.25 * (1.0 + xi)],
-            [-0.25 * (1.0 + eta), 0.25 * (1.0 - xi)],
-        ];
+            [-0.25 * (1.0 + eta), 0.25 * (1.0 - xi)]];
         DMatrix::from_row_slice(4, 2, &matrix_data.concat())
     }
 

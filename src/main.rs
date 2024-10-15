@@ -40,8 +40,8 @@ fn main() {
 
     let load = 1e7;
     let modulus = material.youngs_modulus;
-    let I = (1.0/12.0) * base * height.powi(3);
-    let disp_max = length.powi(3) * load / (3.0 * modulus * I);
+    let i = (1.0/12.0) * base * height.powi(3);
+    let disp_max = length.powi(3) * load / (3.0 * modulus * i);
     info!("Analytical displacement: {}", disp_max);
 
     //find node with max displacement and print it

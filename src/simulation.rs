@@ -54,6 +54,12 @@ pub struct NodeAvgValue {
     count: usize,
 }
 
+impl Default for NodeAvgValue {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NodeAvgValue {
     pub fn new() -> Self {
         NodeAvgValue {
@@ -70,6 +76,12 @@ impl NodeAvgValue {
             return 0.0;
         }
         self.value / self.count as f64
+    }
+}
+
+impl Default for Simulation {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -106,7 +118,7 @@ impl Simulation {
         debug!("Checking node ordering");
         let n_count = self.nodes.len();
         for i in 0..n_count {
-            let node = self.get_node(i ).expect(format!("Node {} out of {} not found", i, n_count).as_str());
+            let node = self.get_node(i ).unwrap_or_else(|| panic!("Node {} out of {} not found", i, n_count));
             if node.id != i  {
                 panic!("Internal Node Id {} is out of order from expected {}", node.id, i);
             }
@@ -269,7 +281,7 @@ impl Simulation {
     }
 
     pub fn compute_element_mass(&self, id: usize) -> DMatrix<f64> {
-        self.get_element(id).unwrap().compute_mass(&self)
+        self.get_element(id).unwrap().compute_mass(self)
     }
 
     pub fn set_element_mass(&mut self, id: usize, mass: DMatrix<f64>) {
@@ -355,7 +367,7 @@ impl Simulation {
         let mut force_vector = DVector::zeros(self.nodes.len() * self.dofs );
         for i in self.active_elements().iter() {
             let element = self.get_element(*i).unwrap();
-            let force: nalgebra::Matrix<f64, nalgebra::Dyn, nalgebra::Const<1>, nalgebra::VecStorage<f64, nalgebra::Dyn, nalgebra::Const<1>>> = element.compute_force(&self);
+            let force: nalgebra::Matrix<f64, nalgebra::Dyn, nalgebra::Const<1>, nalgebra::VecStorage<f64, nalgebra::Dyn, nalgebra::Const<1>>> = element.compute_force(self);
             let connectivity = element.get_connectivity();
             // assert!(!check_for_nans(&force), "#1 force vector contains NaNs, element: {} with nodes: {}", *i, connectivity.iter().map(|x| x.to_string()).collect::<Vec<String>>().join(", "));
             for (local_index, &node_id) in connectivity.iter().enumerate() {
@@ -486,7 +498,7 @@ impl Simulation {
             if vtk_save_steps > 0 && i % vtk_save_steps == 0 {
                 self.compute_result_feilds();
                 let output_vtk = output_vtk.replace(".vtk", &format!("_step_{}.vtk", i));
-                write_vtk(output_vtk.as_str(), &self);
+                write_vtk(output_vtk.as_str(), self);
                 print_max_displacement(&u);
 
                 //print contact stats
@@ -573,7 +585,7 @@ impl Simulation {
 
 
             let element = self.get_element(*i).unwrap();
-            let element_props = element.compute_element_nodal_properties(&self);
+            let element_props = element.compute_element_nodal_properties(self);
             let connectivity = element.get_connectivity();
             for feild in &feilds {
                 let feild_values = element_props.field.get(feild).unwrap();
@@ -598,7 +610,7 @@ impl Simulation {
 
     pub fn compute_element_properties(&self, id: usize) -> ElementFields {
         let element = self.get_element(id).unwrap();
-        element.compute_element_nodal_properties(&self)
+        element.compute_element_nodal_properties(self)
     }
 
     pub fn print(&self) {

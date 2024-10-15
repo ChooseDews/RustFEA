@@ -3,7 +3,6 @@ use russell_lab::{Matrix, Vector};
 use russell_sparse::{ConfigSolver, Solver, SparseTriplet, StrError, LinSolKind};
 use std::collections::HashMap;
 use nalgebra as na;
-use nalgebra_sparse;
 use std::time::Instant;
 use log::{info, debug, trace};
 
@@ -33,7 +32,7 @@ pub fn direct_solve(global_stiffness_matrix: &HashMap<(usize, usize), f64>, glob
     for key in global_stiffness_matrix.keys() {
         let row = key.0;
         let col = key.1;
-        let value = global_stiffness_matrix[&key];
+        let value = global_stiffness_matrix[key];
         trip.put(row , col , value).unwrap();
     }    
     //allocate rhs

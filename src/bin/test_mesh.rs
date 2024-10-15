@@ -3,7 +3,6 @@ use rust_fea::io::mesh_reader::read_file;
 use rust_fea::mesh::MeshAssembly;
 use rust_fea::simulation::Simulation;
 use rust_fea::io::vtk_writer::write_vtk;
-use serde_json;
 use std::fs::File;
 use std::io::Write;
 use rust_fea::io::file::{seralized_read, seralized_write};

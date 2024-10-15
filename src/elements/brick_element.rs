@@ -67,14 +67,14 @@ impl BrickElement {
     }
 
     fn compute_x_local(&mut self, simulation: &Simulation) -> SMatrix<f64, 8, 3> {
-        let mut X = SMatrix::<f64, 8, 3>::zeros();
+        let mut x = SMatrix::<f64, 8, 3>::zeros();
         for (i, node_id) in self.connectivity.iter().enumerate() {
             let node = simulation.get_node(*node_id).unwrap();
-            X[(i, 0)] = node.position[0];
-            X[(i, 1)] = node.position[1];
-            X[(i, 2)] = node.position[2];
+            x[(i, 0)] = node.position[0];
+            x[(i, 1)] = node.position[1];
+            x[(i, 2)] = node.position[2];
         }
-        X
+        x
     }
 
 
@@ -118,34 +118,34 @@ impl BrickElement {
         u
     }
 
-    fn compute_b(&self, x: &SMatrix<f64, 8, 3>, J: &Matrix3<f64>, dN: &SMatrix<f64, 8, 3>) -> SMatrix<f64, 6, 24> {
-        let mut B = SMatrix::<f64, 6, 24>::zeros();
-        let J_inv = J.try_inverse().unwrap();
-        let mut N_I = vec![0.0; 3];
+    fn compute_b(&self, x: &SMatrix<f64, 8, 3>, j: &Matrix3<f64>, d_n: &SMatrix<f64, 8, 3>) -> SMatrix<f64, 6, 24> {
+        let mut b = SMatrix::<f64, 6, 24>::zeros();
+        let j_inv = j.try_inverse().unwrap();
+        let mut n_i = [0.0; 3];
         //compute B_i for each node [6x3] 6 strains and 3 displacements per node
         for i in 0..8 {
             //Compute N_I for each node N_I,M = (delta_N_I/delta_local_J)*J_inv(j,M)
             for m in 0..3 {
-                 N_I[m] =  J_inv.row(m).dot(&dN.row(i));
+                 n_i[m] =  j_inv.row(m).dot(&d_n.row(i));
             }
             //new method to handle B_I
-            let mut B_I = SMatrix::<f64, 6, 3>::new(
-                N_I[0], 0.0, 0.0,
-                0.0, N_I[1], 0.0,
-                0.0, 0.0, N_I[2],
+            let mut b_i = SMatrix::<f64, 6, 3>::new(
+                n_i[0], 0.0, 0.0,
+                0.0, n_i[1], 0.0,
+                0.0, 0.0, n_i[2],
 
-                0.0, N_I[2], N_I[1],
-                N_I[2], 0.0, N_I[0],
-                N_I[1], N_I[0], 0.0
+                0.0, n_i[2], n_i[1],
+                n_i[2], 0.0, n_i[0],
+                n_i[1], n_i[0], 0.0
             );
 
             for j in 0..6 {
                 for k in 0..3 {
-                    B[(j, 3 * i + k)] = B_I[(j, k)];
+                    b[(j, 3 * i + k)] = b_i[(j, k)];
                 }
             }
         }
-        B
+        b
     }
 
 
@@ -323,18 +323,18 @@ impl BaseElement for BrickElement {
     
     fn compute_stiffness(&mut self, simulation: &Simulation){
         trace!("Computing stiffness matrix for brick element");
-        let mut K = empty_element_matrix();
+        let mut k = empty_element_matrix();
         let gauss_points = BrickElement::get_corner_points();
         let x = self.get_x_local(simulation);
-        let C = self.material.get_3d_matrix();
+        let c = self.material.get_3d_matrix();
 
         for &(xi, eta, zeta, weight) in gauss_points {
             let d_n = self.get_shape_derivatives_local(xi, eta, zeta);
-            let J = self.compute_jacobian_matrix(&x, &d_n);
-            let B = self.compute_b(&x, &J, &d_n);
-            K += B.transpose() * C * B * J.determinant() * weight;
+            let j = self.compute_jacobian_matrix(x, &d_n);
+            let b = self.compute_b(x, &j, &d_n);
+            k += b.transpose() * c * b * j.determinant() * weight;
         }
-        self.stiffness = K;
+        self.stiffness = k;
     }
 
 
@@ -358,7 +358,7 @@ impl BaseElement for BrickElement {
 
         for &(xi, eta, zeta, weight) in gauss_points {
             let d_n = self.get_shape_derivatives_local(xi, eta, zeta);
-            let J = self.compute_jacobian_matrix(&x, &d_n);
+            let J = self.compute_jacobian_matrix(x, &d_n);
             let N = self.get_shape_functions(xi, eta, zeta);
             M += density * N * N.transpose() * J.determinant() * weight;
         }
@@ -412,8 +412,8 @@ impl BaseElement for BrickElement {
 
         for (nn, &(xi, eta, zeta, _)) in gauss_points.iter().enumerate() {
             let d_n = self.get_shape_derivatives_local(xi, eta, zeta);
-            let strain = self.compute_strain(&x, &u_e, &d_n);
-            let stress = self.compute_stress(&x, &u_e, &d_n);
+            let strain = self.compute_strain(x, &u_e, &d_n);
+            let stress = self.compute_stress(x, &u_e, &d_n);
             let vm = compute_von_mises(stress);
             element_fields.append_to_feild("e_xx", nn, strain[0]);
             element_fields.append_to_feild("e_yy", nn, strain[1]);

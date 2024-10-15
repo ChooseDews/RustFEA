@@ -28,7 +28,7 @@ impl ElementFields {
         let size = connectivity.len();
         ElementFields {
             field: HashMap::new(),
-            size: size ,
+            size ,
             connectivity
         }
     }
@@ -88,25 +88,25 @@ impl Material {
     }
 
     pub fn compute_material_matrix(&mut self){
-        let mut C = Matrix6::<f64>::zeros();
-        let E = self.youngs_modulus;
+        let mut c = Matrix6::<f64>::zeros();
+        let e = self.youngs_modulus;
         let v = self.poisson_ratio;
-        let _g = E / (2.0 * (1.0 + v));
-        let lambda = (E * v) / ((1.0 + v) * (1.0 - 2.0 * v));
-        let mu = E / (2.0 * (1.0 + v));
-        C[(0,0)] = lambda + 2.0 * mu;
-        C[(0,1)] = lambda;
-        C[(0,2)] = lambda;
-        C[(1,0)] = lambda;
-        C[(1,1)] = lambda + 2.0 * mu;
-        C[(1,2)] = lambda;
-        C[(2,0)] = lambda;
-        C[(2,1)] = lambda;
-        C[(2,2)] = lambda + 2.0 * mu;
-        C[(3,3)] = mu;
-        C[(4,4)] = mu;
-        C[(5,5)] = mu;
-        self.material_matrix = Some(C);
+        let _g = e / (2.0 * (1.0 + v));
+        let lambda = (e * v) / ((1.0 + v) * (1.0 - 2.0 * v));
+        let mu = e / (2.0 * (1.0 + v));
+        c[(0,0)] = lambda + 2.0 * mu;
+        c[(0,1)] = lambda;
+        c[(0,2)] = lambda;
+        c[(1,0)] = lambda;
+        c[(1,1)] = lambda + 2.0 * mu;
+        c[(1,2)] = lambda;
+        c[(2,0)] = lambda;
+        c[(2,1)] = lambda;
+        c[(2,2)] = lambda + 2.0 * mu;
+        c[(3,3)] = mu;
+        c[(4,4)] = mu;
+        c[(5,5)] = mu;
+        self.material_matrix = Some(c);
     }
 
     pub fn get_density(&self) -> f64 {

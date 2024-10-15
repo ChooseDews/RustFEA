@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use nalgebra::{self as na, Vector6};
-use na::{DVector};
+use na::DVector;
 use serde::{Serialize, Deserialize};
 use log::{debug, info, warn};
 use toml::Value;
@@ -56,8 +56,8 @@ pub fn compute_von_mises(stress_vector: Vector6<f64>) -> f64 {
 
 //compute the y displacement of a cantilever beam with a point load at the end
 pub fn eular_beam_displacement(x: f64, length: f64, load: f64, modulus: f64, moment_of_inertia: f64) -> f64 {
-    let y = load * x.powi(2) * (3.0 * length - x) / (6.0 * modulus * moment_of_inertia);
-    y
+    
+    load * x.powi(2) * (3.0 * length - x) / (6.0 * modulus * moment_of_inertia)
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -75,6 +75,12 @@ impl Keyword {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Keywords {
     values: Vec<Keyword>,
+}
+
+impl Default for Keywords {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Keywords {
@@ -127,7 +133,7 @@ impl Keywords {
     pub fn add(&mut self, keyword: &str, value: Value) {
         let keyword = Keyword { 
             keyword: keyword.to_uppercase(), 
-            value: value
+            value
         };
         self.values.push(keyword);
     }
