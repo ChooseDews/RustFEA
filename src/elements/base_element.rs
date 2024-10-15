@@ -144,7 +144,7 @@ pub trait BaseElement {
         na::Vector3::zeros()
     }
 
-    fn get_signed_distance_vector(&self, point: na::Vector3<f64>, simulation: &Simulation) -> Option<na::Vector3<f64>> {
+    fn get_signed_distance_vector(&self, point: &na::Vector3<f64>, simulation: &Simulation) -> Option<na::Vector3<f64>> {
         None
     }
 

@@ -95,7 +95,7 @@ impl BoundaryCondition for NormalContact {
             for secondary_element in &self.active_secondary_elements {
                 let secondary_element = simulation.get_element(*secondary_element).unwrap();
                 let point = primary_node.position + primary_node.displacement;
-                let distance = secondary_element.get_signed_distance_vector(point, simulation);
+                let distance = secondary_element.get_signed_distance_vector(&point, simulation);
                 if distance.is_some() {
                     let signed_distance = distance.unwrap();
                     let contact_stiffness = self.contact_stiffness;

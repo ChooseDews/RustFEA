@@ -149,7 +149,7 @@ impl FourNodeElement {
 #[typetag::serde]
 impl BaseElement for FourNodeElement {
 
-    fn get_signed_distance_vector(&self, point: na::Vector3<f64>, simulation: &Simulation) -> Option<na::Vector3<f64>> {
+    fn get_signed_distance_vector(&self, point: &na::Vector3<f64>, simulation: &Simulation) -> Option<na::Vector3<f64>> {
         // Get the plane normal
         let normal = self.get_plane_normal(simulation).normalize();
         let center: nalgebra::Matrix<f64, nalgebra::Const<3>, nalgebra::Const<1>, nalgebra::ArrayStorage<f64, 3, 1>> = self.center(simulation);
