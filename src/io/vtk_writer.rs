@@ -4,8 +4,14 @@ use crate::simulation::Simulation;
 use crate::elements::{BrickElement, BaseElement, ElementType};
 use std::collections::HashMap;
 
+
+// use hdf5::{File, Group, Result};
+// use ndarray::{Array1, Array2};
+
 //logging
 use log::{info, debug, trace};
+
+
 
 /// Writes a VTK file for a given simulation.
 /// 
@@ -72,3 +78,5 @@ pub fn write_vtk(filename: &str, simulation: &Simulation) -> std::io::Result<()>
     }
     Ok(())
 }
+
+

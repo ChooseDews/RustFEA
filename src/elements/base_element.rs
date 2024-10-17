@@ -179,5 +179,5 @@ pub trait BaseElement {
     }
     // fn step_explicit(&mut self, simulation: &Simulation, force: DVector<f64>, dt: f64); //self modification
 
-
+    fn add_force(&self, simulation: &Simulation, force: &mut DVector<f64>) {}
 }

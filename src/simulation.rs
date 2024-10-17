@@ -363,21 +363,13 @@ impl Simulation {
         global_mass_diagonal
     }
 
-    pub fn compute_force_vector(&self) -> DVector<f64> {
-        let mut force_vector = DVector::zeros(self.nodes.len() * self.dofs );
-        for i in self.active_elements().iter() {
-            let element = self.get_element(*i).unwrap();
-            let force: nalgebra::Matrix<f64, nalgebra::Dyn, nalgebra::Const<1>, nalgebra::VecStorage<f64, nalgebra::Dyn, nalgebra::Const<1>>> = element.compute_force(self);
-            let connectivity = element.get_connectivity();
-            // assert!(!check_for_nans(&force), "#1 force vector contains NaNs, element: {} with nodes: {}", *i, connectivity.iter().map(|x| x.to_string()).collect::<Vec<String>>().join(", "));
-            for (local_index, &node_id) in connectivity.iter().enumerate() {
-                let dofs = self.dofs ;
-                for dof in 0..dofs {
-                    let global_index = self.get_global_index(node_id, dof );
-                    force_vector[global_index ] += force[local_index * dofs + dof];
-                }
-            }
+    pub fn compute_force_vector(&mut self) -> DVector<f64> {
+        let mut force_vector = DVector::zeros(self.nodes.len() * self.dofs);
+        let mut elements = std::mem::take(&mut self.elements);
+        for active_id in self.active_elements().iter() {
+            elements[active_id].add_force(self, &mut force_vector);
         }
+        self.elements = elements;
         force_vector
     }
 

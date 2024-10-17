@@ -3,7 +3,7 @@ use crate::{simulation::Simulation, utilities::check_for_nans};
 use super::base_element::{BaseElement, Material, ElementFields, ElementType};
 use nalgebra as na;
 use na::{DMatrix, DVector, SMatrix, SVector, Matrix3};
-use crate::utilities::{compute_von_mises};
+use crate::utilities::compute_von_mises;
 use serde::{Serialize, Deserialize};
 use log::{debug, trace};
 
@@ -24,6 +24,12 @@ pub struct BrickElement {
     active: bool,
     #[serde(skip, default = "nodal_positions")]
     nodal_positions: Option<SMatrix<f64, 8, 3>>,
+    #[serde(skip, default = "default_internal_force")]
+    internal_force: SVector<f64, 24>,
+}
+
+fn default_internal_force() -> SVector<f64, 24> {
+    SVector::zeros()
 }
 
 fn nodal_positions() -> Option<SMatrix<f64, 8, 3>> {
@@ -59,6 +65,7 @@ impl BrickElement {
             lumped_mass: Vec::new(),
             active: true,
             nodal_positions: Option::None,
+            internal_force: default_internal_force(),
         }
     }
 
@@ -129,7 +136,7 @@ impl BrickElement {
                  n_i[m] =  j_inv.row(m).dot(&d_n.row(i));
             }
             //new method to handle B_I
-            let mut b_i = SMatrix::<f64, 6, 3>::new(
+            let b_i = SMatrix::<f64, 6, 3>::new(
                 n_i[0], 0.0, 0.0,
                 0.0, n_i[1], 0.0,
                 0.0, 0.0, n_i[2],
@@ -401,6 +408,15 @@ impl BaseElement for BrickElement {
         let u_e = self.get_u_local(simulation);
         let f_e = self.stiffness * u_e;
         DVector::<f64>::from_column_slice(f_e.as_slice())
+    }
+
+    fn add_force(&self, simulation: &Simulation, global_force_vector: &mut DVector<f64>) {
+        let f_e = self.stiffness * self.get_u_local(simulation);
+        for (local_index, global_index) in self.connectivity.iter().enumerate() {
+            for dof in 0..3 {
+                global_force_vector[3 * global_index + dof] += f_e[3 * local_index + dof];
+            }
+        }
     }
 
     fn compute_element_nodal_properties(&self, simulation: &Simulation) -> ElementFields {
