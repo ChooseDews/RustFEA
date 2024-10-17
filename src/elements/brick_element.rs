@@ -415,19 +415,19 @@ impl BaseElement for BrickElement {
             let strain = self.compute_strain(x, &u_e, &d_n);
             let stress = self.compute_stress(x, &u_e, &d_n);
             let vm = compute_von_mises(stress);
-            element_fields.append_to_feild("e_xx", nn, strain[0]);
-            element_fields.append_to_feild("e_yy", nn, strain[1]);
-            element_fields.append_to_feild("e_zz", nn, strain[2]);
-            element_fields.append_to_feild("e_xy", nn, strain[3]);
-            element_fields.append_to_feild("e_yz", nn, strain[4]);
-            element_fields.append_to_feild("e_xz", nn, strain[5]);
-            element_fields.append_to_feild("s_xx", nn, stress[0]);
-            element_fields.append_to_feild("s_yy", nn, stress[1]);
-            element_fields.append_to_feild("s_zz", nn, stress[2]);
-            element_fields.append_to_feild("s_xy", nn, stress[3]);
-            element_fields.append_to_feild("s_yz", nn, stress[4]);
-            element_fields.append_to_feild("s_xz", nn, stress[5]);
-            element_fields.append_to_feild("vm", nn, vm);
+            element_fields.append_to_field("e_xx", nn, strain[0]);
+            element_fields.append_to_field("e_yy", nn, strain[1]);
+            element_fields.append_to_field("e_zz", nn, strain[2]);
+            element_fields.append_to_field("e_xy", nn, strain[3]);
+            element_fields.append_to_field("e_yz", nn, strain[4]);
+            element_fields.append_to_field("e_xz", nn, strain[5]);
+            element_fields.append_to_field("s_xx", nn, stress[0]);
+            element_fields.append_to_field("s_yy", nn, stress[1]);
+            element_fields.append_to_field("s_zz", nn, stress[2]);
+            element_fields.append_to_field("s_xy", nn, stress[3]);
+            element_fields.append_to_field("s_yz", nn, stress[4]);
+            element_fields.append_to_field("s_xz", nn, stress[5]);
+            element_fields.append_to_field("vm", nn, vm);
         }
 
         element_fields

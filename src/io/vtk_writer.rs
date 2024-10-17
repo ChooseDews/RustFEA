@@ -62,7 +62,7 @@ pub fn write_vtk(filename: &str, simulation: &Simulation) -> std::io::Result<()>
     }
 
     // Write node_fields as scalar data
-    let node_fields = &simulation.node_feilds; // Consider renaming `node_feilds` to `node_fields`
+    let node_fields = &simulation.node_fields; // Consider renaming `node_fields` to `node_fields`
     for (name, field) in node_fields.iter() {
         writeln!(file, "SCALARS {} float", name)?;
         writeln!(file, "LOOKUP_TABLE default")?;

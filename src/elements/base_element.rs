@@ -45,12 +45,12 @@ impl ElementFields {
         self.field.get_mut(name)
     }
 
-    pub fn append_to_feild(&mut self, name: &str, nn: usize, value: f64) {
+    pub fn append_to_field(&mut self, name: &str, nn: usize, value: f64) {
         let current_field = self.find_field(name).unwrap();
         current_field[nn ] = value;
     }
 
-    pub fn get_feild_names(&self) -> Vec<String> {
+    pub fn get_field_names(&self) -> Vec<String> {
         let mut names = Vec::new();
         for key in self.field.keys() {
             names.push(key.to_string());

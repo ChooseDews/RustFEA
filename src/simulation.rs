@@ -19,7 +19,7 @@ use crate::utilities::{Keywords, check_for_nans, safe_component_div, print_max_d
 #[derive(Serialize, Deserialize)]
 pub struct Simulation {
     pub nodes: Vec<Node>,
-    pub node_feilds: HashMap<String, Vec<f64>>,
+    pub node_fields: HashMap<String, Vec<f64>>,
     pub elements: HashMap<usize, Box<dyn BaseElement>>,
 
     pub dofs: usize,
@@ -90,7 +90,7 @@ impl Simulation {
         Simulation {
             nodes: Vec::new(),
             elements: HashMap::new(),
-            node_feilds: HashMap::new(),
+            node_fields: HashMap::new(),
             boundary_conditions: Vec::new(),
             load_vector: Vec::new(),
             fixed_global_nodal_values: HashMap::new(),
@@ -460,14 +460,18 @@ impl Simulation {
 
         let mut i = 0;
         let mut t = 0.0;
+
+        let mut internal_force = self.compute_force_vector();
+        let mut external_force = DVector::zeros(self.nodes.len() * self.dofs );
+
         while i < time_steps {
 
             assert!(!check_for_nans(&u), "#1 Initial displacement vector contains NaNs, step: {}", i);
             
             // Compute forces
             self.assemble_global_force(); //populates global force and fixed global nodal values
-            let external_force = DVector::from_vec(self.load_vector.clone());
-            let internal_force = self.compute_force_vector();
+            external_force.copy_from_slice(&self.load_vector);
+
             let residual_force = &external_force - &internal_force;
             // assert!(!check_for_nans(&internal_force), "#2 internal_force vector contains NaNs, step: {}", i);
             // assert!(!check_for_nans(&residual_force), "#3 residual_force vector contains NaNs, step: {}", i);
@@ -489,25 +493,17 @@ impl Simulation {
             }
 
             // Compute new forces and update velocity
-            let new_internal_force = self.compute_force_vector();
-            let new_residual_force = &external_force - &new_internal_force;
+            internal_force = self.compute_force_vector();
+            let new_residual_force = &external_force - &internal_force;
             let new_u_dotdot = safe_component_div(&new_residual_force, &global_mass_matrix_diagonal);
             u_dot = &u_half_dot + 0.5 * dt * &new_u_dotdot;
             u_dot *= 0.9995;
 
             if vtk_save_steps > 0 && i % vtk_save_steps == 0 {
-                self.compute_result_feilds();
+                self.compute_result_fields();
                 let output_vtk = output_vtk.replace(".vtk", &format!("_step_{}.vtk", i));
                 write_vtk(output_vtk.as_str(), self);
                 print_max_displacement(&u);
-
-                //print contact stats
-                for bc in &self.boundary_conditions {
-                    if let BoundaryConditionType::Contact = bc.type_name() {
-                        bc.print_stats();
-                    }
-                }
-
 
             }
             if print_steps > 0 && i % print_steps == 0 {
@@ -516,12 +512,17 @@ impl Simulation {
                 info!("Residual force: {}", res_vals.join(", "));
                 let u_vals: Vec<String> = u.iter().map(|x| x.to_string()).collect();
                 info!("\n Displacment: {}", u_vals.join(", "));
+                for bc in &self.boundary_conditions {
+                    if let BoundaryConditionType::Contact = bc.type_name() {
+                        bc.print_stats();
+                    }
+                }
             }
             i += 1;
             t += dt;
         }
 
-        self.compute_result_feilds();
+        self.compute_result_fields();
     }
 
     pub fn solve(&mut self) {
@@ -553,31 +554,31 @@ impl Simulation {
         for (node_id, node) in self.nodes_mut().iter_mut().enumerate() {
             node.set_displacement(u[node_id * 3], u[node_id * 3 + 1], u[node_id * 3 + 2])
         }
-        self.compute_result_feilds();
+        self.compute_result_fields();
     }
 
-    pub fn compute_result_feilds(&mut self) {
+    pub fn compute_result_fields(&mut self) {
         let element_count = self.elements.len();
 
-        //average element feilds for each node
-        let mut feilds: Vec<String> = Vec::new();
-        let mut node_feilds: HashMap<String, Vec<NodeAvgValue>> = HashMap::new();
+        //average element fields for each node
+        let mut fields: Vec<String> = Vec::new();
+        let mut node_fields: HashMap<String, Vec<NodeAvgValue>> = HashMap::new();
 
 
         for i in self.active_elements().iter() {
 
-            if feilds.is_empty() { //use first element to get & initalize fields
-                feilds = self.compute_element_properties(*i).get_feild_names();
-                if !feilds.is_empty() {
-                    for feild in &feilds {
+            if fields.is_empty() { //use first element to get & initalize fields
+                fields = self.compute_element_properties(*i).get_field_names();
+                if !fields.is_empty() {
+                    for field in &fields {
                         let mut node_avg_values: Vec<NodeAvgValue> = Vec::new();
                         for _ in 0..self.nodes.len() {
                         node_avg_values.push(NodeAvgValue::new());
                         }
-                        node_feilds.insert(feild.to_string(), node_avg_values);
+                        node_fields.insert(field.to_string(), node_avg_values);
                     }
                 }else{
-                    warn!("No feilds found for first element {}", i);
+                    warn!("No fields found for first element {}", i);
                     continue;
                 }
             }
@@ -587,24 +588,24 @@ impl Simulation {
             let element = self.get_element(*i).unwrap();
             let element_props = element.compute_element_nodal_properties(self);
             let connectivity = element.get_connectivity();
-            for feild in &feilds {
-                let feild_values = element_props.field.get(feild).unwrap();
-                for (j, value) in feild_values.iter().enumerate() {
+            for field in &fields {
+                let field_values = element_props.field.get(field).unwrap();
+                for (j, value) in field_values.iter().enumerate() {
                     let node_id = connectivity[j];
-                    node_feilds.get_mut(feild).unwrap()[node_id ].add_value(*value);
+                    node_fields.get_mut(field).unwrap()[node_id ].add_value(*value);
                 }
             }
         }
 
-        self.node_feilds = HashMap::new();
-        //avg node_feilds
-        for feild in &feilds {
-            let node_avg_values = node_feilds.get_mut(feild).unwrap();
-            let mut node_feilds_value: Vec<f64> = Vec::new();
+        self.node_fields = HashMap::new();
+        //avg node_fields
+        for field in &fields {
+            let node_avg_values = node_fields.get_mut(field).unwrap();
+            let mut node_fields_value: Vec<f64> = Vec::new();
             for node_avg_value in node_avg_values {
-                node_feilds_value.push(node_avg_value.get_avg());
+                node_fields_value.push(node_avg_value.get_avg());
             }
-            self.node_feilds.insert(feild.to_string(), node_feilds_value);
+            self.node_fields.insert(field.to_string(), node_fields_value);
         }
     }
 
@@ -616,11 +617,11 @@ impl Simulation {
     pub fn print(&self) {
         debug!("{}", self);
         debug!("Boundary Conditions: {}", self.boundary_conditions.len());
-        debug!("Node Fields: {}", self.node_feilds.len());
+        debug!("Node Fields: {}", self.node_fields.len());
 
-        if !self.node_feilds.is_empty() {
+        if !self.node_fields.is_empty() {
             debug!("Field names:");
-            for field_name in self.node_feilds.keys() {
+            for field_name in self.node_fields.keys() {
                 debug!("  - {}", field_name);
             }
         }

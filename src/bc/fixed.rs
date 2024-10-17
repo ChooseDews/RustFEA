@@ -11,7 +11,7 @@ use crate::bc::BoundaryConditionType;
 /// Represents a fixed boundary condition
 /// # Mathematical Formulation
 /// A fixed condition is an essential boundary condition, where the nodes are fixed to a specific value.
-/// This feild can be applied to some or all nodes in the mesh.
+/// This field can be applied to some or all nodes in the mesh.
 /// # Fields
 /// * `nodes`: The nodes to apply the fixed condition to.
 /// * `fixed_values`: The fixed values for each node. This is an optional field as some dof may be free

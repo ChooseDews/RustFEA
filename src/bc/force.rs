@@ -9,7 +9,7 @@ use crate::bc::BoundaryConditionType;
 /// Represents a load boundary condition
 /// # Mathematical Formulation
 /// A load condition is a natural boundary condition, where the nodes are loaded with a specific force.
-/// This feild can be applied to some or all nodes in the mesh.
+/// This field can be applied to some or all nodes in the mesh.
 /// Here we are applying a condition on the derivative of the field, in the case of solid mechanics this would be a force,
 /// # Fields
 /// * `nodes`: The nodes to apply the load condition to.
