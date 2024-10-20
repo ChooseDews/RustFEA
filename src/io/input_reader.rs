@@ -38,6 +38,7 @@ fn remove_comments(line: &str) -> String {
 /// # Returns
 /// A tuple containing the keywords, a single simulation, and the mesh.
 pub fn read_simulation_file(file_path: &str) -> Result<Project, Box<dyn Error>> {
+    println!("Reading file: {}", file_path);
     if file_path.ends_with(".toml"){
         return Ok(read_toml_file(file_path));
     }

@@ -185,10 +185,10 @@ impl BrickElement {
 
 
     fn compute_stress(&self, x: &SMatrix<f64, 8, 3>, u: &SVector<f64, 24>, d_n: &SMatrix<f64, 8, 3>) -> SVector<f64, 6> {
-        let J = self.compute_jacobian_matrix(x, d_n);
-        let B = self.compute_b(x, &J, d_n);
-        let C = self.material.get_3d_matrix();
-        C * B * u 
+        let j = self.compute_jacobian_matrix(x, d_n);
+        let b = self.compute_b(x, &j, d_n);
+        let c = self.material.get_3d_matrix();
+        c * b * u
     }
 
     fn compute_strain(&self, x: &SMatrix<f64, 8, 3>, u: &SVector<f64, 24>, d_n: &SMatrix<f64, 8, 3>) -> SVector<f64, 6> {
@@ -324,7 +324,7 @@ impl BaseElement for BrickElement {
 
 
     fn get_b(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DMatrix<f64> {
-        todo!()
+        unimplemented!()
     }
 
     

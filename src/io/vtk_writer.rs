@@ -1,12 +1,12 @@
-use std::fs::File;
 use std::io::{Write, BufWriter};
 use crate::simulation::Simulation;
 use crate::elements::{BrickElement, BaseElement, ElementType};
 use std::collections::HashMap;
 
 
-// use hdf5::{File, Group, Result};
-// use ndarray::{Array1, Array2};
+use hdf5::{Extents, File, Group, Result};
+use nalgebra::Vector3;
+use ndarray::{Array1, Array2, Axis};
 
 //logging
 use log::{info, debug, trace};
@@ -24,7 +24,7 @@ use log::{info, debug, trace};
 pub fn write_vtk(filename: &str, simulation: &Simulation) -> std::io::Result<()> {
     info!("Writing VTK file: {}", filename);
 
-    let file = File::create(filename)?;
+    let file = std::fs::File::create(filename)?;
     let mut file = BufWriter::new(file);
 
     // Write VTK header
@@ -80,3 +80,103 @@ pub fn write_vtk(filename: &str, simulation: &Simulation) -> std::io::Result<()>
 }
 
 
+// TODO: Add .vtkhdf support for single file output with smaller size
+
+
+pub fn write_vtkhdf(filename: &str, simulation: &Simulation) -> std::io::Result<()> {
+
+    println!("Writing VTKHDF file: {}", filename);
+
+    let file = hdf5::File::create(filename).expect("Failed to create file");
+    let root = file.create_group("VTKHDF").expect("Failed to create group");
+    let val = hdf5::types::FixedAscii::<16>::from_ascii("UnstructuredGrid".as_bytes()).unwrap();
+    let attr = root.new_attr::<hdf5::types::FixedAscii::<16>>().create("Type").expect("Failed to create attribute");
+    attr.write_scalar(&val).expect("Failed to write attribute");
+
+    root.new_attr_builder().with_data(&[2, 0]).create("Version").expect("Failed to create attribute");
+
+    // Create NumberOfPoints dataset
+    let n_points = simulation.nodes().len();
+    let num_points_ds = root.new_dataset::<i64>().shape((1,)).create("NumberOfPoints").expect("Failed to create dataset");
+    num_points_ds.write_raw(&[n_points as i64]).expect("Failed to write dataset");
+
+
+
+    // Create Points dataset
+    let n_points = simulation.nodes().len();
+    let mut points_data = Array2::<f64>::zeros((n_points, 3));
+    for (i, node) in simulation.nodes().iter().enumerate() {
+        points_data[[i, 0]] = node.position.x;
+        points_data[[i, 1]] = node.position.y;
+        points_data[[i, 2]] = node.position.z;
+    }
+    let points_ds = root.new_dataset::<f64>().shape((n_points, 3)).create("Points").expect("Failed to create dataset");
+    points_ds.write_raw(points_data.as_slice().unwrap()).expect("Failed to write dataset");
+
+
+    //handle connectivity data
+    let all_elements: &HashMap<usize, Box<dyn BaseElement>> = simulation.elements();
+    let elements: Vec<&Box<dyn BaseElement>> = all_elements.iter().filter(|(_id, element)| element.type_name() == ElementType::Brick).map(|(_, element)| element).collect();
+    let n_elements: usize = elements.len();
+
+    let num_cells_ds = root.new_dataset::<i64>().shape((1,)).create("NumberOfCells").expect("Failed to create dataset");
+    num_cells_ds.write_raw(&[n_elements as i64]).expect("Failed to write dataset");
+
+    //NumberOfConnectivityIds dataset
+    let num_connectivity_ids_ds = root.new_dataset::<i64>().shape((1,)).create("NumberOfConnectivityIds").expect("Failed to create dataset");
+    num_connectivity_ids_ds.write_raw(&[8*n_elements as i64]).expect("Failed to write dataset");
+
+    // Create Connectivity dataset
+    let mut connectivity_data = Array2::<i64>::zeros((n_elements, 8));
+    for (i, elem) in elements.iter().enumerate() {
+        for (j, &id) in elem.get_connectivity().iter().enumerate() {
+            connectivity_data[[i, j]] = id as i64;
+        }
+    }
+
+    let extents = Extents::new(connectivity_data.len());
+    let connectivity_ds = root.new_dataset::<i64>()
+        .shape(extents)
+        .create("Connectivity")
+        .expect("Failed to create dataset");
+    connectivity_ds.write(connectivity_data.as_slice().unwrap()).expect("Failed to write dataset");
+
+    // Create Offsets dataset
+    let mut offsets = Vec::with_capacity(n_elements+1);
+    for i in 0..(n_elements+1) {
+        offsets.push((i) * 8);  // 8 nodes per element
+    }
+    let extents = Extents::new(offsets.len());
+    let offsets_ds = root.new_dataset::<i64>()
+        .shape(extents)
+        .create("Offsets")
+        .expect("Failed to create dataset");
+    offsets_ds.write(&offsets).expect("Failed to write dataset");
+
+    // Create Types dataset
+    let extents = Extents::new(n_elements);
+    let types = vec![12u8; n_elements]; // 12 is the VTK type for hexahedron
+    let types_ds = root.new_dataset::<u8>()  // Change the data type to u8
+        .shape(extents)
+        .create("Types")
+        .expect("Failed to create dataset");
+    types_ds.write(&types).expect("Failed to write dataset");
+
+
+    //create PointData
+    let point_data_group = root.create_group("PointData").expect("Failed to create group");
+    let displacement_ds = point_data_group.new_dataset::<f64>().shape((n_points, 3)).create("Displacement").expect("Failed to create dataset");
+    let u = simulation.nodes().iter().map(|node| node.displacement.as_slice()).collect::<Vec<&[f64]>>();
+    displacement_ds.write_raw(u.concat().as_slice()).expect("Failed to write dataset");
+
+
+    //handle all node fields
+    let node_fields = &simulation.node_fields;
+    for (name, field) in node_fields.iter() {
+        let field_ds = point_data_group.new_dataset::<f64>().shape((n_points,)).create(name.as_str()).expect("Failed to create dataset");
+        field_ds.write_raw(field.as_slice()).expect("Failed to write dataset");
+    }
+
+
+    Ok(())
+}

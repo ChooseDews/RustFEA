@@ -5,7 +5,8 @@ use serde::{Serialize, Deserialize};
 pub enum BoundaryConditionType {
     Fixed,
     Force,
-    Contact
+    Contact,
+    Pressure
 }
 
 /// Represents a boundary condition

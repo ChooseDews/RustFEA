@@ -217,19 +217,19 @@ impl BaseElement for FourNodeElement {
     }
 
     fn get_b(&self, xi: f64, eta: f64, _zeta: f64, simulation: &Simulation) -> DMatrix<f64> {
-        todo!()
+        unimplemented!()
     }
     fn get_stiffness(&self) -> DMatrix<f64> {
-        todo!()
+        unimplemented!()
     }
     fn compute_mass(&self, simulation: &Simulation) -> DMatrix<f64> {
-        todo!()
+        unimplemented!()
     }   
     fn get_mass(&self) -> &DMatrix<f64> {
         &self.mass
     }
     fn set_lumped_mass(&mut self, lumped_mass: &DMatrix<f64>) -> f64 {
-        todo!()
+        unimplemented!()
     }   
 
 

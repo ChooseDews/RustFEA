@@ -114,7 +114,7 @@ impl Simulation {
         simulation
     }
 
-    pub fn check_node_ordering(&self) { //required for correct assembly. Not required for elements as you never need to assemble by index. TODO: Could be replaced by mapping at solve time
+    pub fn check_node_ordering(&self) { //required for correct assembly. Not required for elements as you never need to assemble by index.
         debug!("Checking node ordering");
         let n_count = self.nodes.len();
         for i in 0..n_count {
@@ -407,6 +407,7 @@ impl Simulation {
     }
 
     pub fn solve_explicit(&mut self) {
+        // TODO: Multi threading of element force computation
         self.prep_output_directory();
         let output_vtk = self
             .keywords
