@@ -6,7 +6,8 @@ pub enum BoundaryConditionType {
     Fixed,
     Force,
     Contact,
-    Pressure
+    Pressure,
+    Traction
 }
 
 /// Represents a boundary condition

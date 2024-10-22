@@ -11,6 +11,7 @@ use log::{debug, trace};
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum ElementType {
     Brick,
+    Tetrahedral,
     Quad
 }
 

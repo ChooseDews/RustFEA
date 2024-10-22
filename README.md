@@ -40,8 +40,6 @@ cargo run --bin read_input -- examples/tube_benchmark.toml -v
 ```
 
 
-
-
 ### Rust FEA Library Overview
 
 Rust FEA is a Finite Element Analysis (FEA) library written in Rust, designed to provide efficient and robust tools for performing finite element analysis.
@@ -103,6 +101,9 @@ This struct represents a project. Which can contain mulitple simulations. Any pr
 - [ ] New Element Types
     - [ ] 3D 4 node tetrahedra
     - [ ] Shell element
+- [ ] VTL HDF Export
+    - [x] Single time step export
+    - [ ] Multi time step export
 - [ ] Generalized field handling
 - [ ] Body forces
 - [ ] Simple material input handling
