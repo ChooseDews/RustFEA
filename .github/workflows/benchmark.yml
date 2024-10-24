@@ -27,7 +27,8 @@ jobs:
           liblapacke-dev \
           libopenblas-dev \
           libsuitesparse-dev \
-          libmumps-dev
+          libmumps-dev \
+          libhdf5-dev
     - name: Run benchmark
       run: cargo bench --bench main -- --output-format bencher | tee output.txt
     - name: Download previous benchmark data
