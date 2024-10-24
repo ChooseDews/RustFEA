@@ -131,7 +131,7 @@ impl Material {
 
 
 #[typetag::serde]
-pub trait BaseElement {
+pub trait BaseElement: Send + Sync {
 
     fn dofs(&self) -> usize { 3 }
     fn get_id(&self) -> usize;
@@ -175,7 +175,7 @@ pub trait BaseElement {
     fn type_name(&self) -> ElementType;
 
     //explicit stuff
-    fn compute_force(&self, simulation: &Simulation) -> DVector<f64> {
+    fn compute_force(&self, displacement: &DVector<f64>) -> DVector<f64> {
         DVector::zeros(self.get_connectivity().len() * self.dofs() )
     }
     // fn step_explicit(&mut self, simulation: &Simulation, force: DVector<f64>, dt: f64); //self modification

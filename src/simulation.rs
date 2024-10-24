@@ -16,6 +16,8 @@ use crate::solver::{direct_choslky, direct_solve};
 
 use crate::io::vtk_writer::write_vtk;
 use crate::utilities::{Keywords, check_for_nans, safe_component_div, print_max_displacement};
+use rayon::prelude::*;
+
 #[derive(Serialize, Deserialize)]
 pub struct Simulation {
     pub nodes: Vec<Node>,
@@ -363,13 +365,42 @@ impl Simulation {
         global_mass_diagonal
     }
 
-    pub fn compute_force_vector(&mut self) -> DVector<f64> {
-        let mut force_vector = DVector::zeros(self.nodes.len() * self.dofs);
+    pub fn compute_force_vector(&mut self, displacement: &DVector<f64>) -> DVector<f64> {
+        let n_dofs = self.nodes.len() * self.dofs;
+        let active_ids = self.active_elements();
+
+        // Temporarily take ownership of elements to avoid synchronization issues
         let mut elements = std::mem::take(&mut self.elements);
-        for active_id in self.active_elements().iter() {
-            elements[active_id].add_force(self, &mut force_vector);
-        }
+
+        // Pre-allocate the vector
+        let mut element_forces = Vec::with_capacity(active_ids.len());
+
+        // Compute forces in parallel and collect results
+        element_forces.par_extend(
+            active_ids.par_iter().map(|&id| {
+                let element = &elements[&id];
+                let force = element.compute_force(displacement);
+                let connectivity = element.get_connectivity().clone();
+                (connectivity, force.as_slice().to_vec())
+            })
+        );
+
+        // Restore the elements back to the simulation
         self.elements = elements;
+
+        // Assemble the global force vector
+        let mut force_vector = DVector::zeros(n_dofs);
+        element_forces.into_iter().for_each(|(connectivity, element_force)| {
+            for (local_index, &global_node) in connectivity.iter().enumerate() {
+                let start = global_node * self.dofs;
+                let end = start + self.dofs;
+                let slice = &mut force_vector.as_mut_slice()[start..end];
+                for (i, val) in slice.iter_mut().enumerate() {
+                    *val += element_force[local_index * self.dofs + i];
+                }
+            }
+        });
+
         force_vector
     }
 
@@ -454,7 +485,7 @@ impl Simulation {
         let mut i = 0;
         let mut t = 0.0;
 
-        let mut internal_force = self.compute_force_vector();
+        let mut internal_force = self.compute_force_vector(&u);
         let mut external_force = DVector::zeros(self.nodes.len() * self.dofs );
 
         while i < time_steps {
@@ -466,9 +497,6 @@ impl Simulation {
             external_force.copy_from_slice(&self.load_vector);
 
             let residual_force = &external_force - &internal_force;
-            // assert!(!check_for_nans(&internal_force), "#2 internal_force vector contains NaNs, step: {}", i);
-            // assert!(!check_for_nans(&residual_force), "#3 residual_force vector contains NaNs, step: {}", i);
-            // let u_dotdot = residual_force.component_div(&global_mass_matrix_diagonal);
             let u_dotdot = safe_component_div(&residual_force, &global_mass_matrix_diagonal);
             u_half_dot = &u_dot + 0.5 * dt * &u_dotdot;
             u += dt * &u_half_dot;
@@ -481,12 +509,12 @@ impl Simulation {
             }
 
             // Update nodal displacements
-            for (node_id, node) in self.nodes_mut().iter_mut().enumerate() {
+            self.nodes_mut().par_iter_mut().enumerate().for_each(|(node_id, node)| {
                 node.set_displacement(u[node_id * 3], u[node_id * 3 + 1], u[node_id * 3 + 2]);
-            }
+            });
 
             // Compute new forces and update velocity
-            internal_force = self.compute_force_vector();
+            internal_force = self.compute_force_vector(&u);
             let new_residual_force = &external_force - &internal_force;
             let new_u_dotdot = safe_component_div(&new_residual_force, &global_mass_matrix_diagonal);
             u_dot = &u_half_dot + 0.5 * dt * &new_u_dotdot;
@@ -648,3 +676,4 @@ impl Simulation {
         }
     }
 }
+

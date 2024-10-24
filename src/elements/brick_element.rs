@@ -125,6 +125,16 @@ impl BrickElement {
         u
     }
 
+    fn get_u_local_from_displacement(&self, displacement: &DVector<f64>) -> SVector<f64, 24> {
+        let mut u = SVector::<f64, 24>::zeros();
+        for (i, node_id) in self.connectivity.iter().enumerate() {
+            u[3 * i] = displacement[3 * node_id];
+            u[3 * i + 1] = displacement[3 * node_id + 1];
+            u[3 * i + 2] = displacement[3 * node_id + 2];
+        }
+        u
+    }
+
     fn compute_b(&self, x: &SMatrix<f64, 8, 3>, j: &Matrix3<f64>, d_n: &SMatrix<f64, 8, 3>) -> SMatrix<f64, 6, 24> {
         let mut b = SMatrix::<f64, 6, 24>::zeros();
         let j_inv = j.try_inverse().unwrap();
@@ -404,9 +414,8 @@ impl BaseElement for BrickElement {
     }
 
 
-    fn compute_force(&self, simulation: &Simulation) -> DVector<f64> {
-        let u_e = self.get_u_local(simulation);
-        let f_e = self.stiffness * u_e;
+    fn compute_force(&self, displacement: &DVector<f64>) -> DVector<f64> {
+        let f_e = self.stiffness * self.get_u_local_from_displacement(displacement);
         DVector::<f64>::from_column_slice(f_e.as_slice())
     }
 

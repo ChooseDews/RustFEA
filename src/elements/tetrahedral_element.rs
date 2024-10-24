@@ -365,11 +365,11 @@ impl BaseElement for TetElement {
     }
 
 
-    fn compute_force(&self, simulation: &Simulation) -> DVector<f64> {
-        let u_e = self.get_u_local(simulation);
-        let f_e = self.stiffness * u_e;
-        DVector::<f64>::from_column_slice(f_e.as_slice())
-    }
+    // fn compute_force(&self, simulation: &Simulation) -> DVector<f64> {
+    //     let u_e = self.get_u_local(simulation);
+    //     let f_e = self.stiffness * u_e;
+    //     DVector::<f64>::from_column_slice(f_e.as_slice())
+    // }
 
     fn add_force(&self, simulation: &Simulation, global_force_vector: &mut DVector<f64>) {
         let f_e = self.stiffness * self.get_u_local(simulation);
