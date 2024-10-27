@@ -98,6 +98,7 @@ impl BoundaryCondition for NormalContact {
                 let distance = secondary_element.get_signed_distance_vector(&point, simulation);
                 if distance.is_some() {
                     let signed_distance = distance.unwrap();
+                    //todo: square the distance for smoother contact penalty
                     let contact_stiffness = self.contact_stiffness;
                     let contact_force = contact_stiffness * signed_distance;
                     load_vector = Some(contact_force);

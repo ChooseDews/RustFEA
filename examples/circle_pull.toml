@@ -4,7 +4,7 @@ OUTPUT = "temp/circle_pull.json.xz"
 
 
 [[sim]]
-mesh = "meshes/circle_pull.inp"
+mesh = "meshes/circle_pull_big.inp"
 
 [[sim.boundary_conditions]]
 type = "fixed"
@@ -30,5 +30,5 @@ clear_directory = true
 extra_stiffness = 1e13
 method = "explicit"
 # time_step = 0.000001
-time_steps = 20000
-vtk_save_steps = 500
+time_steps = 50000
+vtk_save_steps = 1000

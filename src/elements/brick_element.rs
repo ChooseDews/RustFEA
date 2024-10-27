@@ -202,8 +202,8 @@ impl BrickElement {
     }
 
     fn compute_strain(&self, x: &SMatrix<f64, 8, 3>, u: &SVector<f64, 24>, d_n: &SMatrix<f64, 8, 3>) -> SVector<f64, 6> {
-        let J = self.compute_jacobian_matrix(x, d_n);
-        self.compute_b(x, &J, d_n) * u
+        let j = self.compute_jacobian_matrix(x, d_n);
+        self.compute_b(x, &j, d_n) * u
     }
 
     fn get_shape_functions(&self, xi: f64, eta: f64, zeta: f64) -> SVector<f64, 8> {
@@ -257,7 +257,7 @@ impl BaseElement for BrickElement {
 
     fn get_global_position(
         &self,
-        N: &DVector<f64>,
+        n: &DVector<f64>,
         simulation: &Simulation,
     ) -> na::Vector3<f64> {
         //compute global position of the element given shape functions N
@@ -265,22 +265,20 @@ impl BaseElement for BrickElement {
         let mut global_position = na::Vector3::<f64>::zeros();
         for (i, node_id) in self.connectivity.iter().enumerate() {
             let node = simulation.get_node(*node_id).unwrap();
-            global_position += N[i] * node.position;
+            global_position += n[i] * node.position;
         }
         global_position
     }
 
     fn get_x(&self, simulation: &Simulation) -> DMatrix<f64> { //get global position of each node
-        //compute X matrix
-        //return as a DMatrix<f64>
-        let mut X = DMatrix::<f64>::zeros(3, 8);
+        let mut x_global = DMatrix::<f64>::zeros(3, 8);
         for (i, node_id) in self.connectivity.iter().enumerate() {
             let node = simulation.get_node(*node_id).unwrap();
-            X[(0, i)] = node.position[0];
-            X[(1, i)] = node.position[1];
-            X[(2, i)] = node.position[2];
+            x_global[(0, i)] = node.position[0];
+            x_global[(1, i)] = node.position[1];
+            x_global[(2, i)] = node.position[2];
         }
-        X
+        x_global
     }
 
     fn get_u(&self, simulation: &Simulation) -> DVector<f64> {
@@ -356,7 +354,6 @@ impl BaseElement for BrickElement {
 
 
     fn get_stiffness(&self) -> DMatrix<f64> {
-        //construct dynamic matrix from fixed 24x24 matrix
         let mut k =  DMatrix::zeros(24, 24);
         for i in 0..24 {
             for j in 0..24 {

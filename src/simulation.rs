@@ -1,4 +1,4 @@
-use log::{debug, info, trace, warn};
+use log::{debug, error, info, trace, warn};
 use nalgebra::{geometry, DMatrix, DVector};
 use nalgebra_sparse::ops::Op;
 use serde::{Deserialize, Serialize};
@@ -276,9 +276,9 @@ impl Simulation {
 
     pub fn compute_all_element_stiffness(&mut self) {
         let mut elements = std::mem::take(&mut self.elements);
-        for (_, element) in &mut elements {
-            element.compute_stiffness(self);
-        }
+        elements.par_iter_mut().for_each(|(_, el)| {
+            el.compute_stiffness(self);
+        });
         self.elements = elements;
     }
 
@@ -366,41 +366,41 @@ impl Simulation {
     }
 
     pub fn compute_force_vector(&mut self, displacement: &DVector<f64>) -> DVector<f64> {
-        let n_dofs = self.nodes.len() * self.dofs;
         let active_ids = self.active_elements();
+        let mut force_vector = DVector::zeros(self.nodes.len() * self.dofs);
+        let elements = std::mem::take(&mut self.elements);
 
-        // Temporarily take ownership of elements to avoid synchronization issues
-        let mut elements = std::mem::take(&mut self.elements);
 
-        // Pre-allocate the vector
-        let mut element_forces = Vec::with_capacity(active_ids.len());
-
-        // Compute forces in parallel and collect results
-        element_forces.par_extend(
-            active_ids.par_iter().map(|&id| {
+        
+        active_ids.par_iter().map(|&id| {
                 let element = &elements[&id];
                 let force = element.compute_force(displacement);
                 let connectivity = element.get_connectivity().clone();
-                (connectivity, force.as_slice().to_vec())
-            })
-        );
-
-        // Restore the elements back to the simulation
-        self.elements = elements;
-
-        // Assemble the global force vector
-        let mut force_vector = DVector::zeros(n_dofs);
-        element_forces.into_iter().for_each(|(connectivity, element_force)| {
+                (id, connectivity, force)
+        }).collect::<Vec<(usize, Vec<usize>, DVector<f64>)>>().into_iter().for_each(|(el_id, connectivity, element_force)| {
             for (local_index, &global_node) in connectivity.iter().enumerate() {
-                let start = global_node * self.dofs;
-                let end = start + self.dofs;
-                let slice = &mut force_vector.as_mut_slice()[start..end];
-                for (i, val) in slice.iter_mut().enumerate() {
-                    *val += element_force[local_index * self.dofs + i];
+                for dof in 0..self.dofs {
+                    let global_index = self.get_global_index(global_node, dof);
+                    if global_index >= force_vector.len() {
+                        error!("Global index out of bounds: {}", global_index);
+                        error!("Force vector length: {}", force_vector.len());
+                        //print element id and type
+                        error!("Element ID: {}", el_id);
+                        error!("Connectivity: {:?}", connectivity);
+                        error!("Element force: {:?}", element_force);
+                        let element = elements.get(&el_id).unwrap();
+                        error!("Element type: {:?}", element.type_name());
+                        error!("Direct element connectivity: {:?}", element.get_connectivity());
+                    }
+                    force_vector[global_index ] += element_force[local_index * self.dofs + dof];
                 }
             }
         });
 
+
+
+
+        self.elements = elements;
         force_vector
     }
 
@@ -486,12 +486,13 @@ impl Simulation {
         let mut t = 0.0;
 
         let mut internal_force = self.compute_force_vector(&u);
-        let mut external_force = DVector::zeros(self.nodes.len() * self.dofs );
+        let mut external_force = DVector::zeros(self.nodes.len() * self.dofs);
 
+        let pb = indicatif::ProgressBar::new(time_steps as u64);
+        pb.set_style(indicatif::ProgressStyle::default_bar().template("{elapsed_precise}/{eta_precise} [{bar:40.cyan/blue}] {pos}/{len} {eta}").unwrap());//.progress_chars("#>-"));
         while i < time_steps {
 
             assert!(!check_for_nans(&u), "#1 Initial displacement vector contains NaNs, step: {}", i);
-            
             // Compute forces
             self.assemble_global_force(); //populates global force and fixed global nodal values
             external_force.copy_from_slice(&self.load_vector);
@@ -529,16 +530,20 @@ impl Simulation {
             }
             if print_steps > 0 && i % print_steps == 0 {
                 info!("[{}] Time: {}", i, t);
-                let res_vals: Vec<String> = residual_force.iter().map(|x| x.to_string()).collect();
-                info!("Residual force: {}", res_vals.join(", "));
-                let u_vals: Vec<String> = u.iter().map(|x| x.to_string()).collect();
-                info!("\n Displacment: {}", u_vals.join(", "));
-                for bc in &self.boundary_conditions {
-                    if let BoundaryConditionType::Contact = bc.type_name() {
-                        bc.print_stats();
-                    }
-                }
+                // let res_vals: Vec<String> = residual_force.iter().map(|x| x.to_string()).collect();
+                // info!("Residual force: {}", res_vals.join(", "));
+                // let u_vals: Vec<String> = u.iter().map(|x| x.to_string()).collect();
+                // info!("\n Displacment: {}", u_vals.join(", "));
+                // for bc in &self.boundary_conditions {
+                //     if let BoundaryConditionType::Contact = bc.type_name() {
+                //         bc.print_stats();
+                //     }
+                // }
+                //print max displacement
+                print_max_displacement(&u);
+            
             }
+            pb.inc(1);
             i += 1;
             t += dt;
         }
