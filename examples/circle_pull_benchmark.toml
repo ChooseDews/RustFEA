@@ -1,0 +1,24 @@
+name = "Circle Pull Simulation"
+dof = 3
+
+[[sim]]
+mesh = "meshes/circle_pull_big.inp"
+
+[[sim.boundary_conditions]]
+type = "fixed"
+name = "side1"
+values = [0.05, 0, false]
+
+[[sim.boundary_conditions]]
+type = "fixed"
+name = "side2"
+values = [0, 0.05, false]
+
+[[sim.boundary_conditions]]
+type = "fixed"
+name = "top"
+values = [false, false, 0]
+
+[sim.solver]
+method = "explicit"
+time_steps = 1000

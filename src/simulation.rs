@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::path::Path;
+use std::thread;
 
 use crate::bc::condition::BoundaryCondition;
 use crate::bc::BoundaryConditionType;
@@ -17,6 +18,8 @@ use crate::solver::{direct_choslky, direct_solve};
 use crate::io::vtk_writer::write_vtk;
 use crate::utilities::{Keywords, check_for_nans, safe_component_div, print_max_displacement};
 use rayon::prelude::*;
+use std::sync::atomic::{fence, Ordering};
+
 
 #[derive(Serialize, Deserialize)]
 pub struct Simulation {
@@ -276,9 +279,13 @@ impl Simulation {
 
     pub fn compute_all_element_stiffness(&mut self) {
         let mut elements = std::mem::take(&mut self.elements);
-        elements.par_iter_mut().for_each(|(_, el)| {
-            el.compute_stiffness(self);
-        });
+        //single threaded version:
+        for (_, element) in &mut elements {
+            element.compute_stiffness(self);
+        }
+        // elements.par_iter_mut().for_each(|(_, el)| {
+        //     el.compute_stiffness(self);
+        // });
         self.elements = elements;
     }
 
@@ -367,35 +374,56 @@ impl Simulation {
 
     pub fn compute_force_vector(&mut self, displacement: &DVector<f64>) -> DVector<f64> {
         let active_ids = self.active_elements();
-        let mut force_vector = DVector::zeros(self.nodes.len() * self.dofs);
-        let elements = std::mem::take(&mut self.elements);
+
+        //single threaded version
+        // let mut force_vector = DVector::zeros(self.nodes.len() * self.dofs);
+        // let mut elements = std::mem::take(&mut self.elements);
+        // for active_id in self.active_elements().iter() {
+        //     elements[active_id].add_force(self, &mut force_vector);
+        // }
 
 
         
-        active_ids.par_iter().map(|&id| {
-                let element = &elements[&id];
-                let force = element.compute_force(displacement);
-                let connectivity = element.get_connectivity().clone();
-                (id, connectivity, force)
-        }).collect::<Vec<(usize, Vec<usize>, DVector<f64>)>>().into_iter().for_each(|(el_id, connectivity, element_force)| {
-            for (local_index, &global_node) in connectivity.iter().enumerate() {
-                for dof in 0..self.dofs {
-                    let global_index = self.get_global_index(global_node, dof);
-                    if global_index >= force_vector.len() {
-                        error!("Global index out of bounds: {}", global_index);
-                        error!("Force vector length: {}", force_vector.len());
-                        //print element id and type
-                        error!("Element ID: {}", el_id);
-                        error!("Connectivity: {:?}", connectivity);
-                        error!("Element force: {:?}", element_force);
-                        let element = elements.get(&el_id).unwrap();
-                        error!("Element type: {:?}", element.type_name());
-                        error!("Direct element connectivity: {:?}", element.get_connectivity());
-                    }
-                    force_vector[global_index ] += element_force[local_index * self.dofs + dof];
-                }
-            }
-        });
+
+        
+
+        // let chunk_size = (active_ids.len() / rayon::current_num_threads()).max(1000);
+        // let chunks: Vec<_> = active_ids.chunks(chunk_size).collect();
+        // // Process chunks in parallel
+        // let forces: Vec<_> = chunks.par_iter()
+        //     .map(|chunk| {
+        //         chunk.iter().map(|&id| {
+        //             let element = &elements[&id];
+        //             // Force memory fence before critical operations
+        //             fence(Ordering::Acquire);
+        //             let connectivity = element.get_connectivity().clone();
+        //             let force = element.compute_force(displacement);
+        //             fence(Ordering::Release);
+        //             (id, connectivity, force)
+        //         }).collect::<Vec<_>>()
+        //     })
+        //     .flatten()
+        //     .collect();
+
+        // forces.into_iter().for_each(|(el_id, connectivity, element_force)| {
+        //     for (local_index, &global_node) in connectivity.iter().enumerate() {
+        //         for dof in 0..self.dofs {
+        //             let global_index = self.get_global_index(global_node, dof);
+        //             if global_index >= force_vector.len() {
+        //                 error!("Global index out of bounds: {}", global_index);
+        //                 error!("Force vector length: {}", force_vector.len());
+        //                 //print element id and type
+        //                 error!("Element ID: {}", el_id);
+        //                 error!("Connectivity: {:?}", connectivity);
+        //                 error!("Element force: {:?}", element_force);
+        //                 let element = elements.get(&el_id).unwrap();
+        //                 error!("Element type: {:?}", element.type_name());
+        //                 error!("Direct element connectivity: {:?}", element.get_connectivity());
+        //             }
+        //             force_vector[global_index ] += element_force[local_index * self.dofs + dof];
+        //         }
+        //     }
+        // });
 
 
 
@@ -423,8 +451,12 @@ impl Simulation {
             .unwrap_or(false);
         let output_vtk = self
             .keywords
-            .get_string("OUTPUT_VTK")
-            .expect("No output vtk specified");
+            .get_string("OUTPUT_VTK");
+        if output_vtk.is_none() {
+            warn!("No output vtk specified");
+            return;
+        }
+        let output_vtk = output_vtk.unwrap();
         let output_vtk_dir = Path::new(&output_vtk).parent().unwrap();
         if !output_vtk_dir.exists() {
             info!("Creating output directory: {}", output_vtk_dir.display());
@@ -442,9 +474,7 @@ impl Simulation {
         self.prep_output_directory();
         let output_vtk = self
             .keywords
-            .get_string("OUTPUT_VTK")
-            .expect("No output vtk specified");
-
+            .get_string("OUTPUT_VTK").clone();
         //compute fundumental dt
         let vel = self.get_element(self.active_elements()[0]).unwrap().get_material().get_wave_speed();
         let fundumental_dt = self.mesh.compute_dt(vel);
@@ -460,7 +490,10 @@ impl Simulation {
         }
         let time_steps = self.keywords.get_int("SOLVER_TIME_STEPS").unwrap_or(100);
         let print_steps = self.keywords.get_int("SOLVER_PRINT_STEPS").unwrap_or(0);
-        let vtk_save_steps = self.keywords.get_int("SOLVER_VTK_SAVE_STEPS").unwrap_or(0); //0 means no vtk saving
+        let mut vtk_save_steps = self.keywords.get_int("SOLVER_VTK_SAVE_STEPS").unwrap_or(0); //0 means no vtk saving
+        if output_vtk.is_none() {
+            vtk_save_steps = 0;
+        }
 
         //we will not assemble the global stiffness matrix
         let dof = 3;
@@ -523,25 +556,14 @@ impl Simulation {
 
             if vtk_save_steps > 0 && i % vtk_save_steps == 0 {
                 self.compute_result_fields();
-                let output_vtk = output_vtk.replace(".vtk", &format!("_step_{}.vtk", i));
-                write_vtk(output_vtk.as_str(), self);
+                let output_config = output_vtk.as_ref().unwrap();
+                let output_path = output_config.replace(".vtk", &format!("_step_{}.vtk", i));
+                write_vtk(output_path.as_str(), self);
                 print_max_displacement(&u);
-
             }
             if print_steps > 0 && i % print_steps == 0 {
                 info!("[{}] Time: {}", i, t);
-                // let res_vals: Vec<String> = residual_force.iter().map(|x| x.to_string()).collect();
-                // info!("Residual force: {}", res_vals.join(", "));
-                // let u_vals: Vec<String> = u.iter().map(|x| x.to_string()).collect();
-                // info!("\n Displacment: {}", u_vals.join(", "));
-                // for bc in &self.boundary_conditions {
-                //     if let BoundaryConditionType::Contact = bc.type_name() {
-                //         bc.print_stats();
-                //     }
-                // }
-                //print max displacement
                 print_max_displacement(&u);
-            
             }
             pb.inc(1);
             i += 1;
