@@ -9,7 +9,8 @@ use crate::io::input_reader::read_simulation_file;
 use crate::io::file::{seralized_write, seralized_read};
 use crate::utilities::Keywords;
 use super::vtk_writer::write_vtk;
-use log::{info, debug};
+use log::{debug, info, warn};
+
 
 #[derive(Serialize, Deserialize)]
 pub struct Project {
@@ -27,10 +28,17 @@ impl Project {
         Project { keywords, simulations }
     }
     /// Saves the project to a file via serialization.
-    pub fn save(&self) -> String {
-        let output = self.keywords.get_string("OUTPUT").expect("No output file specified");
-        self.save_to_file(output.as_str());
-        output
+    pub fn save(&self) -> Option<String> {
+        match self.keywords.get_string("OUTPUT") {
+            Some(output) => {
+                self.save_to_file(output.as_str());
+                Some(output)
+            },
+            None => {
+                warn!("🗄️ No output file specified. Skipping project save.");
+                None
+            }
+        }
     }
 
     pub fn save_to_file(&self, file_path: &str) {
@@ -56,7 +64,12 @@ impl Project {
 
     pub fn export_vtk(&self) {
         for (index, simulation) in self.simulations.iter().enumerate() {
-            let output_vtk: String = simulation.keywords.get_string("OUTPUT_VTK").expect("No output vtk specified");
+            let output_vtk = simulation.keywords.get_string("OUTPUT_VTK");
+            if output_vtk.is_none() {
+                warn!("No output vtk specified for simulation {}. Skipping export!", index);
+                continue;
+            }
+            let output_vtk = output_vtk.unwrap();
             info!("Exporting VTK for simulation {} to {}", index, output_vtk);
             write_vtk(output_vtk.as_str(), simulation);
         }
@@ -69,4 +82,5 @@ impl Project {
     }
 
 }
+
 

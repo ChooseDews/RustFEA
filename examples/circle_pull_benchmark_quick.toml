@@ -1,7 +1,5 @@
 name = "Circle Pull Simulation"
 dof = 3
-OUTPUT = "temp/circle_pull.json.xz"
-
 
 [[sim]]
 mesh = "meshes/circle_pull_big.inp"
@@ -21,14 +19,6 @@ type = "fixed"
 name = "top"
 values = [false, false, 0]
 
-[sim.output]
-file = "examples/output/circle_pull/circle_pull.bin.xz"
-vtk = "examples/output/circle_pull/circle_pull.vtk"
-clear_directory = true
-
 [sim.solver]
-extra_stiffness = 1e13
 method = "explicit"
-# time_step = 0.000001
-time_steps = 50000
-vtk_save_steps = 1000
+time_steps = 500

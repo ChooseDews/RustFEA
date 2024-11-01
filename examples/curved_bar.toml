@@ -1,0 +1,31 @@
+name = "BAR Simulation"
+output = "./temp/curved_bar.json.xz"
+
+[[sim]]
+name = "BAR Simulation"
+dof = 3
+
+[[sim.meshes]]
+file = "./meshes/curved_bar_big.inp"
+# example comment
+
+[sim.output]
+vtk = "./temp/curved_bar.vtk"
+
+[[sim.boundary_conditions]]
+type = "fixed"
+name = "side1"
+values = [-0.1, -0.1, false]
+
+[[sim.boundary_conditions]]
+type = "fixed"
+name = "side2"
+values = [0, 0, 0]
+
+[[sim.materials]]
+id = 1
+youngs_modulus = 200000
+poissons_ratio = 0.3
+
+[sim.solver]
+extra_stiffness = 1e13

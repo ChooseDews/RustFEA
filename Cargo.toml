@@ -23,6 +23,8 @@ hdf5 = "0.8.0"
 ndarray = "0.16.1"
 hdf5-sys = "0.8.1"      # !V
 rayon = "1.10.0"
+indicatif = "0.17.8"
+
 
 [lints.rust]
 unused = "allow"

@@ -12,7 +12,7 @@ pub enum BoundaryConditionType {
 
 /// Represents a boundary condition
 #[typetag::serde]
-pub trait BoundaryCondition {
+pub trait BoundaryCondition: Send + Sync {
     fn apply(&mut self, simulation: &mut Simulation);
     fn initalize(&mut self, simulation: &Simulation){}
     fn get_nodes(&self) -> &Vec<usize>;
