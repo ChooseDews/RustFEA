@@ -76,7 +76,7 @@ def test_error_count(total_runs=400):
     build_binary()
 
     # Use number of CPU cores minus 1 to avoid overloading
-    n_processes = max(1, int(os.cpu_count()/2))
+    n_processes = 4
     
     results = []
     error_count = 0
