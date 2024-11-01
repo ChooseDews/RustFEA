@@ -25,6 +25,7 @@ hdf5-sys = "0.8.1"      # !V
 rayon = "1.10.0"
 indicatif = "0.17.8"
 
+
 [lints.rust]
 unused = "allow"
 non_snake_case = "allow" #nice for fea vars

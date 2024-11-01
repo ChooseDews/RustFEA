@@ -21,4 +21,4 @@ values = [false, false, 0]
 
 [sim.solver]
 method = "explicit"
-time_steps = 100
+time_steps = 500

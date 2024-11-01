@@ -12,9 +12,16 @@ EXAMPLE_PATH = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__fi
 BINARY_PATH = "./../target/release/read_input"
 BINARY_PATH = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), BINARY_PATH))
 CMD = f"{BINARY_PATH} '{EXAMPLE_PATH}'"
-LOG_PATH = "./temp/benchmark/parallel_benchmark.log"
+
+
+timestamp = time.time()
+folder_name = f"parallel_benchmark_{timestamp}"
+OUTPUT_DIR = f"./temp/benchmark/"
+OUTPUT_DIR = os.path.join(OUTPUT_DIR, folder_name)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+LOG_PATH = f"{OUTPUT_DIR}/parallel_benchmark.log"
 MIN_EXPECTED_TIME = 10 #secs
-SAMPLE_SIZE = 3
+SAMPLE_SIZE = 1
 
 
 
@@ -29,10 +36,8 @@ def run_cmd(cmd=CMD, env_add={}, min_time=MIN_EXPECTED_TIME):
     env = os.environ.copy()
     env.update(env_add)
     start_time = time.time()
-    result = subprocess.run(cmd, shell=True, check=True, text=True, env=env, capture_output=True)
+    result = subprocess.run(cmd, shell=True, check=True, text=True, env=env)
     dt = time.time() - start_time
-    write_log(result.stdout)
-    write_log(result.stderr)
     if dt < min_time:
         raise ValueError(f"Command took {dt:.2f} seconds, expected at least {min_time} seconds. Unknown reason.")
     write_log(f"⌛ Command completed in {dt:.2f} seconds ⌛")
@@ -47,7 +52,7 @@ def test_time_over_thread_count(to_thread=10):
     os.makedirs("./temp/benchmark", exist_ok=True)
     if os.path.exists(LOG_PATH): os.remove(LOG_PATH)
     env = {
-        "RUST_BACKTRACE": "1"
+        "RUST_BACKTRACE": "full"
     }
     build_binary()
     thread_counts = list(range(1, min(to_thread, os.cpu_count()) + 1))
@@ -77,7 +82,7 @@ def test_time_over_thread_count(to_thread=10):
 
 
         df = pd.DataFrame(results)
-        output_path = './temp/benchmark/parallel_results.csv'   
+        output_path = os.path.join(OUTPUT_DIR, "parallel_results.csv")
         df.to_csv(output_path, index=False)
         parallel_benchmark_plotter.main(output_path)
 

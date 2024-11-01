@@ -1,25 +1,25 @@
-use log::{debug, error, info, trace, warn};
-use nalgebra::{geometry, DMatrix, DVector};
-use nalgebra_sparse::ops::Op;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::fmt;
-use std::path::Path;
-use std::thread;
-
 use crate::bc::condition::BoundaryCondition;
 use crate::bc::BoundaryConditionType;
 use crate::elements::base_element::{BaseElement, ElementFields};
 use crate::io::matrix_writer::{write_hashmap_sparse_matrix, write_vector};
+use crate::io::vtk_writer::write_vtk;
 use crate::mesh::MeshAssembly;
 use crate::node::Node;
 use crate::solver::{direct_choslky, direct_solve};
-
-use crate::io::vtk_writer::write_vtk;
-use crate::utilities::{Keywords, check_for_nans, safe_component_div, print_max_displacement};
+use crate::utilities::{check_for_nans, print_max_displacement, safe_component_div, Keywords};
+use log::{debug, error, info, trace, warn};
+use nalgebra::{geometry, DMatrix, DVector};
+use nalgebra_sparse::ops::Op;
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fmt;
+use std::path::Path;
 use std::sync::atomic::{fence, Ordering};
+use std::sync::{mpsc, Arc};
+use std::thread;
 
+// Get worker count from env var or use default of 8
 
 #[derive(Serialize, Deserialize)]
 pub struct Simulation {
@@ -39,97 +39,10 @@ pub struct Simulation {
 
     #[serde(skip, default = "Vec::new")]
     pub active_elements: Vec<usize>,
-}
-
-impl fmt::Display for Simulation {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Simulation [NodeCount: {}, ElementCount: {}, DOFs: {}]",
-            self.nodes.len(),
-            self.elements.len(),
-            self.dofs
-        )
-    }
-}
-
-#[derive(Debug)]
-pub struct NodeAvgValue {
-    value: f64,
-    count: usize,
-}
-
-impl Default for NodeAvgValue {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl NodeAvgValue {
-    pub fn new() -> Self {
-        NodeAvgValue {
-            value: 0.0,
-            count: 0,
-        }
-    }
-    pub fn add_value(&mut self, value: f64) {
-        self.value += value;
-        self.count += 1;
-    }
-    pub fn get_avg(&self) -> f64 {
-        if self.count == 0 {
-            return 0.0;
-        }
-        self.value / self.count as f64
-    }
-}
-
-impl Default for Simulation {
-    fn default() -> Self {
-        Self::new()
-    }
+    pub worker_count: usize,
 }
 
 impl Simulation {
-    pub fn new() -> Self {
-        Simulation {
-            nodes: Vec::new(),
-            elements: HashMap::new(),
-            node_fields: HashMap::new(),
-            boundary_conditions: Vec::new(),
-            load_vector: Vec::new(),
-            fixed_global_nodal_values: HashMap::new(),
-            keywords: Keywords::new(),
-            dofs: 3,
-            mesh: MeshAssembly::empty(),
-            active_elements: Vec::new(),
-        }
-    }
-
-    //create from array of nodes and elements
-    pub fn from_arrays(nodes: Vec<Node>, elements: Vec<Box<dyn BaseElement>>, dofs: usize) -> Self {
-        let mut simulation = Simulation::new();
-        simulation.set_dofs(dofs);
-        for node in nodes {
-            simulation.add_node(node);
-        }
-        for element in elements {
-            simulation.add_element(element);
-        }
-        simulation
-    }
-
-    pub fn check_node_ordering(&self) { //required for correct assembly. Not required for elements as you never need to assemble by index.
-        debug!("Checking node ordering");
-        let n_count = self.nodes.len();
-        for i in 0..n_count {
-            let node = self.get_node(i ).unwrap_or_else(|| panic!("Node {} out of {} not found", i, n_count));
-            if node.id != i  {
-                panic!("Internal Node Id {} is out of order from expected {}", node.id, i);
-            }
-        }
-    }
-
     pub fn set_mesh(&mut self, mesh: MeshAssembly) {
         self.mesh = mesh;
     }
@@ -160,7 +73,7 @@ impl Simulation {
 
     //initalize function for once nodes+elements are fixed
     pub fn initialize(&mut self) {
-        let n = self.nodes.len() * self.dofs ;
+        let n = self.nodes.len() * self.dofs;
         self.load_vector = vec![0.0; n];
     }
 
@@ -189,7 +102,7 @@ impl Simulation {
     }
 
     pub fn add_node(&mut self, node: Node) {
-        self.nodes.insert(node.id , node);
+        self.nodes.insert(node.id, node);
     }
 
     pub fn add_boundary_condition(&mut self, bc: Box<dyn BoundaryCondition>) {
@@ -201,11 +114,11 @@ impl Simulation {
     }
 
     pub fn get_node(&self, index: usize) -> Option<&Node> {
-        self.nodes.get(index )
+        self.nodes.get(index)
     }
 
     pub fn get_node_mut(&mut self, index: usize) -> Option<&mut Node> {
-        self.nodes.get_mut(index )
+        self.nodes.get_mut(index)
     }
 
     pub fn get_nodes(&self, ids: &[usize]) -> Vec<&Node> {
@@ -260,7 +173,7 @@ impl Simulation {
         self.initialize();
         self.handle_bc();
     }
-    
+
     pub fn set_active_elements(&mut self) {
         //collect element.id that are active
         self.active_elements = Vec::new();
@@ -276,16 +189,15 @@ impl Simulation {
         self.active_elements.clone()
     }
 
-
     pub fn compute_all_element_stiffness(&mut self) {
         let mut elements = std::mem::take(&mut self.elements);
         //single threaded version:
-        for (_, element) in &mut elements {
-            element.compute_stiffness(self);
-        }
-        // elements.par_iter_mut().for_each(|(_, el)| {
-        //     el.compute_stiffness(self);
-        // });
+        // for (_, element) in &mut elements {
+        //     element.compute_stiffness(self);
+        // }
+        elements.par_iter_mut().for_each(|(_, el)| {
+            el.compute_stiffness(self);
+        });
         self.elements = elements;
     }
 
@@ -311,7 +223,7 @@ impl Simulation {
     pub fn assemble(&mut self) -> (HashMap<(usize, usize), f64>, Vec<f64>) {
         debug!("Starting assembly process");
         let mut global_stiffness_matrix: HashMap<(usize, usize), f64> = HashMap::new();
-        let dof = self.dofs ;
+        let dof = self.dofs;
         self.assemble_global_force(); //populates global force and fixed global nodal values
         let mut global_force = self.get_global_force();
         let specified_bc = self.get_specified_bc();
@@ -328,9 +240,9 @@ impl Simulation {
                 for j in 0..node_count {
                     for k in 0..dof {
                         for l in 0..dof {
-                            let global_i = element_connectivity[i]  * dof + k;
-                            let global_j = element_connectivity[j]  * dof + l;
-                            let key = (global_i , global_j );
+                            let global_i = element_connectivity[i] * dof + k;
+                            let global_j = element_connectivity[j] * dof + l;
+                            let key = (global_i, global_j);
                             let value = element_stiffness_matrix[(i * dof + k, j * dof + l)];
                             *global_stiffness_matrix.entry(key).or_insert(0.0) += value;
                         }
@@ -347,7 +259,7 @@ impl Simulation {
             v += extra_stiffness;
             global_stiffness_matrix.insert((g_index, g_index), v);
             if value.abs() > 0.0 {
-                global_force[g_index ] += value * extra_stiffness; // F = K*u so K_extra*u_extra = -F_extra
+                global_force[g_index] += value * extra_stiffness; // F = K*u so K_extra*u_extra = -F_extra
             }
         }
 
@@ -356,7 +268,7 @@ impl Simulation {
     }
 
     pub fn compute_global_mass_matrix_diagonal(&self) -> DVector<f64> {
-        let total_dofs = self.nodes.len() * self.dofs ;
+        let total_dofs = self.nodes.len() * self.dofs;
         let mut global_mass_diagonal = DVector::zeros(total_dofs);
         for i in self.active_elements().iter() {
             let element = self.get_element(*i).unwrap();
@@ -365,118 +277,35 @@ impl Simulation {
             for (local_index, &node_id) in connectivity.iter().enumerate() {
                 for dof in 0..self.dofs {
                     let global_index = self.get_global_index(node_id, dof);
-                    global_mass_diagonal[global_index ] += element_mass[local_index];
+                    global_mass_diagonal[global_index] += element_mass[local_index];
                 }
             }
         }
         global_mass_diagonal
     }
 
-    pub fn compute_force_vector(&mut self, displacement: &DVector<f64>) -> DVector<f64> {
-        let active_ids = self.active_elements();
-
-        //single threaded version
-        // let mut force_vector = DVector::zeros(self.nodes.len() * self.dofs);
-        // let mut elements = std::mem::take(&mut self.elements);
-        // for active_id in self.active_elements().iter() {
-        //     elements[active_id].add_force(self, &mut force_vector);
-        // }
-
-
-        
-
-        
-
-        // let chunk_size = (active_ids.len() / rayon::current_num_threads()).max(1000);
-        // let chunks: Vec<_> = active_ids.chunks(chunk_size).collect();
-        // // Process chunks in parallel
-        // let forces: Vec<_> = chunks.par_iter()
-        //     .map(|chunk| {
-        //         chunk.iter().map(|&id| {
-        //             let element = &elements[&id];
-        //             // Force memory fence before critical operations
-        //             fence(Ordering::Acquire);
-        //             let connectivity = element.get_connectivity().clone();
-        //             let force = element.compute_force(displacement);
-        //             fence(Ordering::Release);
-        //             (id, connectivity, force)
-        //         }).collect::<Vec<_>>()
-        //     })
-        //     .flatten()
-        //     .collect();
-
-        // forces.into_iter().for_each(|(el_id, connectivity, element_force)| {
-        //     for (local_index, &global_node) in connectivity.iter().enumerate() {
-        //         for dof in 0..self.dofs {
-        //             let global_index = self.get_global_index(global_node, dof);
-        //             if global_index >= force_vector.len() {
-        //                 error!("Global index out of bounds: {}", global_index);
-        //                 error!("Force vector length: {}", force_vector.len());
-        //                 //print element id and type
-        //                 error!("Element ID: {}", el_id);
-        //                 error!("Connectivity: {:?}", connectivity);
-        //                 error!("Element force: {:?}", element_force);
-        //                 let element = elements.get(&el_id).unwrap();
-        //                 error!("Element type: {:?}", element.type_name());
-        //                 error!("Direct element connectivity: {:?}", element.get_connectivity());
-        //             }
-        //             force_vector[global_index ] += element_force[local_index * self.dofs + dof];
-        //         }
-        //     }
-        // });
-
-
-
-
-        self.elements = elements;
-        force_vector
-    }
-
     pub fn displacement_vector(&mut self) -> DVector<f64> {
-        let dofs = self.dofs ;
+        let dofs = self.dofs;
         let mut displacement_vector = DVector::zeros(self.nodes.len() * dofs);
         for (node_id, node) in self.nodes.iter().enumerate() {
             for dof in 0..dofs {
-                let global_index = self.get_global_index(node_id , dof );
-                displacement_vector[global_index ] = node.displacement[dof];
+                let global_index = self.get_global_index(node_id, dof);
+                displacement_vector[global_index] = node.displacement[dof];
             }
         }
         displacement_vector
     }
 
-    pub fn prep_output_directory(&self) {
-        let clear_directory = self
-            .keywords
-            .get_bool("OUTPUT_CLEAR_DIRECTORY")
-            .unwrap_or(false);
-        let output_vtk = self
-            .keywords
-            .get_string("OUTPUT_VTK");
-        if output_vtk.is_none() {
-            warn!("No output vtk specified");
-            return;
-        }
-        let output_vtk = output_vtk.unwrap();
-        let output_vtk_dir = Path::new(&output_vtk).parent().unwrap();
-        if !output_vtk_dir.exists() {
-            info!("Creating output directory: {}", output_vtk_dir.display());
-            std::fs::create_dir_all(output_vtk_dir).expect("Failed to create output directory")
-        }
-        if clear_directory {
-            info!("Clearing output directory: {}", output_vtk_dir.display());
-            std::fs::remove_dir_all(output_vtk_dir).expect("Failed to clear output directory");
-            std::fs::create_dir_all(output_vtk_dir).expect("Failed to create output directory")
-        }
-    }
-
     pub fn solve_explicit(&mut self) {
         // TODO: Multi threading of element force computation
         self.prep_output_directory();
-        let output_vtk = self
-            .keywords
-            .get_string("OUTPUT_VTK").clone();
+        let output_vtk = self.keywords.get_string("OUTPUT_VTK").clone();
         //compute fundumental dt
-        let vel = self.get_element(self.active_elements()[0]).unwrap().get_material().get_wave_speed();
+        let vel = self
+            .get_element(self.active_elements()[0])
+            .unwrap()
+            .get_material()
+            .get_wave_speed();
         let fundumental_dt = self.mesh.compute_dt(vel);
         let dt = self
             .keywords
@@ -503,17 +332,16 @@ impl Simulation {
         self.compute_all_element_mass();
         let global_mass_matrix_diagonal = self.compute_global_mass_matrix_diagonal();
         for i in 0..self.nodes.len() {
-            self.get_node_mut(i )
+            self.get_node_mut(i)
                 .expect("Node not found")
-                .set_mass(global_mass_matrix_diagonal[i ]);
+                .set_mass(global_mass_matrix_diagonal[i]);
         }
-        let n = self.nodes.len() * self.dofs ;
+        let n = self.nodes.len() * self.dofs;
         debug!("Steps: {}; dt: {}; DOF: {}", time_steps, dt, n);
         //start doing the time marching
         let mut u = self.displacement_vector();
-        let mut u_dot = DVector::zeros(self.nodes.len() * self.dofs );
-        let mut u_half_dot = DVector::zeros(self.nodes.len() * self.dofs );
-
+        let mut u_dot = DVector::zeros(self.nodes.len() * self.dofs);
+        let mut u_half_dot = DVector::zeros(self.nodes.len() * self.dofs);
 
         let mut i = 0;
         let mut t = 0.0;
@@ -522,10 +350,17 @@ impl Simulation {
         let mut external_force = DVector::zeros(self.nodes.len() * self.dofs);
 
         let pb = indicatif::ProgressBar::new(time_steps as u64);
-        pb.set_style(indicatif::ProgressStyle::default_bar().template("{elapsed_precise}/{eta_precise} [{bar:40.cyan/blue}] {pos}/{len} {eta}").unwrap());//.progress_chars("#>-"));
+        pb.set_style(
+            indicatif::ProgressStyle::default_bar()
+                .template("{elapsed_precise}/{eta_precise} [{bar:40.cyan/blue}] {pos}/{len} {eta}")
+                .unwrap(),
+        ); //.progress_chars("#>-"));
         while i < time_steps {
-
-            assert!(!check_for_nans(&u), "#1 Initial displacement vector contains NaNs, step: {}", i);
+            assert!(
+                !check_for_nans(&u),
+                "#1 Initial displacement vector contains NaNs, step: {}",
+                i
+            );
             // Compute forces
             self.assemble_global_force(); //populates global force and fixed global nodal values
             external_force.copy_from_slice(&self.load_vector);
@@ -537,20 +372,24 @@ impl Simulation {
 
             // Apply boundary conditions
             for (global_index, value) in &specified_bc {
-                u[*global_index ] = *value;
-                u_dot[*global_index ] = (value - u[*global_index ]) / dt;
-                u_half_dot[*global_index ] = u_dot[*global_index ];
+                u[*global_index] = *value;
+                u_dot[*global_index] = (value - u[*global_index]) / dt;
+                u_half_dot[*global_index] = u_dot[*global_index];
             }
 
             // Update nodal displacements
-            self.nodes_mut().par_iter_mut().enumerate().for_each(|(node_id, node)| {
-                node.set_displacement(u[node_id * 3], u[node_id * 3 + 1], u[node_id * 3 + 2]);
-            });
+            self.nodes_mut()
+                .par_iter_mut()
+                .enumerate()
+                .for_each(|(node_id, node)| {
+                    node.set_displacement(u[node_id * 3], u[node_id * 3 + 1], u[node_id * 3 + 2]);
+                });
 
             // Compute new forces and update velocity
             internal_force = self.compute_force_vector(&u);
             let new_residual_force = &external_force - &internal_force;
-            let new_u_dotdot = safe_component_div(&new_residual_force, &global_mass_matrix_diagonal);
+            let new_u_dotdot =
+                safe_component_div(&new_residual_force, &global_mass_matrix_diagonal);
             u_dot = &u_half_dot + 0.5 * dt * &new_u_dotdot;
             u_dot *= 0.9995;
 
@@ -604,103 +443,4 @@ impl Simulation {
         }
         self.compute_result_fields();
     }
-
-    pub fn compute_result_fields(&mut self) {
-        let element_count = self.elements.len();
-
-        //average element fields for each node
-        let mut fields: Vec<String> = Vec::new();
-        let mut node_fields: HashMap<String, Vec<NodeAvgValue>> = HashMap::new();
-
-
-        for i in self.active_elements().iter() {
-
-            if fields.is_empty() { //use first element to get & initalize fields
-                fields = self.compute_element_properties(*i).get_field_names();
-                if !fields.is_empty() {
-                    for field in &fields {
-                        let mut node_avg_values: Vec<NodeAvgValue> = Vec::new();
-                        for _ in 0..self.nodes.len() {
-                        node_avg_values.push(NodeAvgValue::new());
-                        }
-                        node_fields.insert(field.to_string(), node_avg_values);
-                    }
-                }else{
-                    warn!("No fields found for first element {}", i);
-                    continue;
-                }
-            }
-
-
-
-            let element = self.get_element(*i).unwrap();
-            let element_props = element.compute_element_nodal_properties(self);
-            let connectivity = element.get_connectivity();
-            for field in &fields {
-                let field_values = element_props.field.get(field).unwrap();
-                for (j, value) in field_values.iter().enumerate() {
-                    let node_id = connectivity[j];
-                    node_fields.get_mut(field).unwrap()[node_id ].add_value(*value);
-                }
-            }
-        }
-
-        self.node_fields = HashMap::new();
-        //avg node_fields
-        for field in &fields {
-            let node_avg_values = node_fields.get_mut(field).unwrap();
-            let mut node_fields_value: Vec<f64> = Vec::new();
-            for node_avg_value in node_avg_values {
-                node_fields_value.push(node_avg_value.get_avg());
-            }
-            self.node_fields.insert(field.to_string(), node_fields_value);
-        }
-    }
-
-    pub fn compute_element_properties(&self, id: usize) -> ElementFields {
-        let element = self.get_element(id).unwrap();
-        element.compute_element_nodal_properties(self)
-    }
-
-    pub fn print(&self) {
-        debug!("{}", self);
-        debug!("Boundary Conditions: {}", self.boundary_conditions.len());
-        debug!("Node Fields: {}", self.node_fields.len());
-
-        if !self.node_fields.is_empty() {
-            debug!("Field names:");
-            for field_name in self.node_fields.keys() {
-                debug!("  - {}", field_name);
-            }
-        }
-
-        debug!("Load Vector Size: {}", self.load_vector.len());
-        debug!(
-            "Fixed Nodal Values: {}",
-            self.fixed_global_nodal_values.len()
-        );
-
-        // Print element types and counts
-        let mut element_types = std::collections::HashMap::new();
-        for (_index, element) in self.elements.iter() {
-            let type_name = element.type_name();
-            *element_types.entry(type_name).or_insert(0) += 1;
-        }
-        debug!("Element Types:");
-        for (type_name, count) in element_types {
-            debug!("  - {:?}: {}", type_name, count);
-        }
-
-        // Print boundary condition types and counts
-        let mut bc_types = std::collections::HashMap::new();
-        for bc in &self.boundary_conditions {
-            let type_name = bc.type_name();
-            *bc_types.entry(type_name).or_insert(0) += 1;
-        }
-        debug!("Boundary Condition Types:");
-        for (type_name, count) in bc_types {
-            debug!("  - {:?}: {}", type_name, count);
-        }
-    }
 }
-

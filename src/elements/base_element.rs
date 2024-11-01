@@ -129,7 +129,6 @@ impl Material {
 
 }
 
-
 #[typetag::serde]
 pub trait BaseElement: Send + Sync {
 

@@ -76,7 +76,8 @@ def main(file='./temp/benchmark/parallel_results.csv'):
     plt.xlabel('Threads')
     plt.ylabel('Speedup Factor')
     plt.legend()
-    plt.savefig('./temp/benchmark/parallel_benchmark_plot.png')
+    output = file.replace('.csv', '_plot.png')
+    plt.savefig(output)
     plt.close()
 
 if __name__ == "__main__":
