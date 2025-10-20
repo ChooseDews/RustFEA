@@ -1,0 +1,40 @@
+# Torque Boundary Condition Example
+# This example demonstrates how to apply a torque boundary condition
+# to a surface. The torque applies forces tangent to an axis following
+# the right-hand rule.
+
+name = "Torque Example Simulation"
+dof = 3
+OUTPUT = "temp/torque_example.json.xz"
+
+[[sim]]
+mesh = "meshes/bar.inp"
+
+# Fix one end of the bar
+[[sim.boundary_conditions]]
+type = "fixed"
+name = "side1"
+values = [0, 0, 0]
+
+# Apply torque to the other end
+# The torque will rotate the bar around the specified axis
+[[sim.boundary_conditions]]
+type = "torque"
+name = "side2"
+# Point on the axis of rotation [x, y, z]
+axis_point = [0.0, 0.0, 0.0]
+# Direction of the axis (will be normalized) [x, y, z]
+# Using right-hand rule: thumb points along axis, fingers curl in direction of torque
+axis_direction = [1.0, 0.0, 0.0]
+# Magnitude of the torque (N·m or appropriate units)
+magnitude = 100.0
+
+[sim.output]
+file = "examples/output/torque_example/torque_example.bin.xz"
+vtk = "examples/output/torque_example/torque_example.vtk"
+clear_directory = true
+
+[sim.solver]
+extra_stiffness = 1e13
+method = "direct"
+

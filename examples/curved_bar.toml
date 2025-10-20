@@ -29,3 +29,4 @@ poissons_ratio = 0.3
 
 [sim.solver]
 extra_stiffness = 1e13
+save_stiffness_matrix_path = "./temp/curved_bar_stiffness.smat"

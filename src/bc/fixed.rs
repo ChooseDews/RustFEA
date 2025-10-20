@@ -41,6 +41,8 @@ impl BoundaryCondition for FixedCondition {
             for (i, value) in self.fixed_values.iter().enumerate() {
                 if value.is_none() { continue };
                 let global_index: usize = simulation.get_global_index(node_id, i );
+                let value = Option::from(value.unwrap() as f64);
+                if value.is_none() { continue };
                 simulation.fixed_global_nodal_values.insert(global_index, value.unwrap());
             }
         }

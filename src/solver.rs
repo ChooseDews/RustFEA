@@ -1,10 +1,11 @@
 //takes in let mut global_stiffness_matrix: HashMap<(usize, usize), f64> = HashMap::new();
 use russell_lab::{Matrix, Vector};
-use russell_sparse::{ConfigSolver, Solver, SparseTriplet, StrError, LinSolKind};
+use russell_sparse::prelude::*;
 use std::collections::HashMap;
 use nalgebra as na;
 use std::time::Instant;
 use log::{info, debug, trace};
+use crate::simulation::Simulation;
 
 pub fn get_max_row_col(global_stiffness_matrix: &HashMap<(usize, usize), f64>) -> (usize, usize) {
     let mut max_row = 0;
@@ -21,28 +22,33 @@ pub fn get_max_row_col(global_stiffness_matrix: &HashMap<(usize, usize), f64>) -
     (max_row, max_col)
 }
 
-pub fn direct_solve(global_stiffness_matrix: &HashMap<(usize, usize), f64>, global_force_vector: &Vec<f64>) -> Vec<f64> {
+pub fn direct_solve(simulation: &Simulation, global_stiffness_matrix: &HashMap<(usize, usize), f64>, global_force_vector: &Vec<f64>) -> Vec<f64> {
     let (max_row, max_col) = get_max_row_col(global_stiffness_matrix);
     debug!("Allocating matrix of size: {}x{}", max_row+1, max_col+1);
-    
-    //find max row and col
     let neq = max_row + 1; // number of equations
     let nnz = global_stiffness_matrix.len();
-    let mut trip = SparseTriplet::new(neq , nnz ).unwrap();
-    for key in global_stiffness_matrix.keys() {
-        let row = key.0;
-        let col = key.1;
-        let value = global_stiffness_matrix[key];
-        trip.put(row , col , value).unwrap();
-    }    
-    //allocate rhs
+    let mut umfpack = SolverUMFPACK::new().unwrap();
+    let mut coo = SparseMatrix::new_coo(neq, neq, nnz, Sym::YesFull).unwrap();
+    for ((row, col), value) in global_stiffness_matrix.iter() {
+        coo.put(*row, *col, *value).unwrap();
+    } 
+    let save_matrix = simulation.keywords.get_keyword("SOLVER_SAVE_STIFFNESS_MATRIX_PATH");
+    if save_matrix.is_some() {
+        let start = Instant::now();
+        let coo = coo.get_coo().unwrap();
+        let path = save_matrix.unwrap().value.as_str().unwrap();
+        let csc = CscMatrix::from_coo(&coo).unwrap();
+        csc.write_matrix_market(path, true).unwrap();
+        let duration = start.elapsed();
+        info!("Saved matrix to {} in {:?}", path, duration);
+    }
+
     let rhs = Vector::from(global_force_vector);
-    //calculate solution
-    let mut config = ConfigSolver::new();
-    config.lin_sol_kind(LinSolKind::Mmp);
+    let mut x = Vector::new(neq);
     info!("Solving system of size: {}", neq);
     let start = Instant::now();
-    let (mut solver, x) = Solver::compute(config, &trip, &rhs).unwrap();
+    umfpack.factorize(&mut coo, None).unwrap();
+    umfpack.solve(&mut x, &coo, &rhs, false).unwrap();
     let duration = start.elapsed();
     info!("Solved System: Time elapsed in direct_solve() is: {:?}", duration);
     x.as_data().to_vec()

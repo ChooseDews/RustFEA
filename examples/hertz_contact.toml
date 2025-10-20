@@ -8,9 +8,9 @@ name = "BAR Simulation"
 dof = 3
 
 [[sim.meshes]]
-file = "meshes/hertz.inp"
+file = "meshes/hertz_v2.inp"
 volumes = ["cylinder" , "block"]
-active_volumes = ["cylinder"]
+active_volumes = ["cylinder", "block"]
 
 [[sim.boundary_conditions]]
 type = "fixed"
@@ -29,7 +29,7 @@ values = [-1000000, 0.0, 0.0]
 
 [[sim.boundary_conditions]]
 type = "fixed"
-name = "block"
+name = "bottom"
 values = [0.0, 0.0, 0.0]
 
 
@@ -40,7 +40,7 @@ secondary = "contact_b"
 
 
 [sim.output]
-file = "examples/output/hertz_contact/hertz_contact.bin.xz"
+file = "examples/output/hertz_contact/hertz_contact.bin.zst"
 vtk = "examples/output/hertz_contact/hertz_contact.vtk"
 clear_directory = true
 
@@ -48,8 +48,8 @@ clear_directory = true
 extra_stiffness = 1e13
 method = "explicit"
 time_step = 0.0000001
-time_steps = 2000000
-vtk_save_steps = 100000
+time_steps = 200000
+vtk_save_steps = 10000
 
 #How To Run
 #cargo run --bin read_input -- examples/hertz_contact.toml -v

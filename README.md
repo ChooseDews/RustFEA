@@ -89,6 +89,10 @@ This struct represents a project. Which can contain mulitple simulations. Any pr
 - [~] add tests for common elements and assemblies
 - [x] add nodal property outputs
 - [ ] Use better solver for Ax=b. Upgrade to newest russell library
+- [ ] Large Deformation
+    - [ ] Add large deformation elements
+    - [ ] Handle local material propertie updates
+    - [ ] Plasticity?
 - [ ] add intergrations with paraview?
 - [x] add an explict solving scheme
 - [x] contact

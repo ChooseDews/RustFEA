@@ -4,7 +4,7 @@ use std::path::Path;
 use std::collections::HashMap;
 use crate::io::file;
 use crate::simulation::Simulation;
-use crate::bc::{BoundaryCondition, NormalContact, FixedCondition, LoadCondition};
+use crate::bc::{BoundaryCondition, NormalContact, FixedCondition, LoadCondition, TorqueCondition};
 use crate::io::mesh_reader::{read_file_single_body, read_file_multiple_bodies};
 use std::error::Error;
 use nalgebra::DVector;
@@ -33,7 +33,7 @@ fn remove_comments(line: &str) -> String {
 /// Finally, it returns the keywords, a single simulation, and the mesh.
 ///
 /// # Arguments
-/// * `file_path`: The path to the simulation file. .sim
+/// * `file_path`: The path to the simulation file in the .toml format
 /// 
 /// # Returns
 /// A tuple containing the keywords, a single simulation, and the mesh.
@@ -205,6 +205,50 @@ pub fn read_toml_file(file_path: &str) -> Project {
                     let secondary_surface_elements = simulation.mesh.get_elements_in_group(secondary_surface);
                     debug!("Primary surface elements: {}", primary_surface_elements.len());
                     bc.set_contact_surfaces_elements(primary_surface_elements, secondary_surface_elements);
+                    simulation.add_boundary_condition(Box::new(bc));
+                }
+                "torque" => {
+                    // Expected format in TOML:
+                    // [[boundary_conditions]]
+                    // type = "torque"
+                    // name = "surface_name"
+                    // axis_point = [0.0, 0.0, 0.0]
+                    // axis_direction = [0.0, 0.0, 1.0]
+                    // magnitude = 100.0
+                    let axis_point_arr = bc_table.get("axis_point")
+                        .expect("Torque BC missing 'axis_point' field")
+                        .as_array()
+                        .expect("Torque BC 'axis_point' must be an array");
+                    
+                    let axis_point: Vec<f64> = axis_point_arr.iter()
+                        .map(|v| {
+                            v.as_float()
+                                .or_else(|| v.as_integer().map(|i| i as f64))
+                                .expect("Torque BC 'axis_point' values must be numbers")
+                        })
+                        .collect();
+                    
+                    let axis_dir_arr = bc_table.get("axis_direction")
+                        .expect("Torque BC missing 'axis_direction' field")
+                        .as_array()
+                        .expect("Torque BC 'axis_direction' must be an array");
+                    
+                    let axis_direction: Vec<f64> = axis_dir_arr.iter()
+                        .map(|v| {
+                            v.as_float()
+                                .or_else(|| v.as_integer().map(|i| i as f64))
+                                .expect("Torque BC 'axis_direction' values must be numbers")
+                        })
+                        .collect();
+                    
+                    let magnitude = bc_table.get("magnitude")
+                        .expect("Torque BC missing 'magnitude' field")
+                        .as_float()
+                        .or_else(|| bc_table.get("magnitude").and_then(|v| v.as_integer()).map(|i| i as f64))
+                        .expect("Torque BC 'magnitude' must be a number");
+                    
+                    let bc = TorqueCondition::new_from_vec(bc_node_ids, axis_point, axis_direction, magnitude);
+                    debug!("Adding torque boundary condition: {} nodes, magnitude: {}", bc_name, magnitude);
                     simulation.add_boundary_condition(Box::new(bc));
                 }
                 _ => {

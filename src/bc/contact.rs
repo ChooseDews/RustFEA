@@ -92,8 +92,9 @@ impl BoundaryCondition for NormalContact {
         for primary_node_index in &self.active_primary_nodes {
             let primary_node = simulation.get_node(*primary_node_index).unwrap();
             let mut load_vector = None;
-            for secondary_element in &self.active_secondary_elements {
-                let secondary_element = simulation.get_element(*secondary_element).unwrap();
+            let mut contact_secondary_element_id = None;
+            for secondary_element_id in &self.active_secondary_elements {
+                let secondary_element = simulation.get_element(*secondary_element_id).unwrap();
                 let point = primary_node.position + primary_node.displacement;
                 let distance = secondary_element.get_signed_distance_vector(&point, simulation);
                 if distance.is_some() {
@@ -102,6 +103,7 @@ impl BoundaryCondition for NormalContact {
                     let contact_stiffness = self.contact_stiffness;
                     let contact_force = contact_stiffness * signed_distance;
                     load_vector = Some(contact_force);
+                    contact_secondary_element_id = Some(*secondary_element_id);
                     let magnitude = signed_distance.magnitude();
                     if magnitude > max_penetration {
                         max_penetration = magnitude;
@@ -111,10 +113,28 @@ impl BoundaryCondition for NormalContact {
                 }
             }
             if load_vector.is_some() {
+                let force = load_vector.unwrap();
+                
+                // Apply force to primary node
                 for i in 0..3 {
                     let global_index = simulation.get_global_index(*primary_node_index, i);
-                    // assert!(!check_for_nans(&load_vector.unwrap()), "#2 contactforce vector contains NaNs, node: {} dof: {}", *primary_node_index, i);
-                    simulation.load_vector[global_index ] += load_vector.unwrap()[i ];
+                    // assert!(!check_for_nans(&force), "#2 contactforce vector contains NaNs, node: {} dof: {}", *primary_node_index, i);
+                    simulation.load_vector[global_index] += force[i];
+                }
+                
+                // Apply equal and opposite force to secondary element nodes (Newton's 3rd law)
+                if let Some(sec_elem_id) = contact_secondary_element_id {
+                    let secondary_element = simulation.get_element(sec_elem_id).unwrap();
+                    let secondary_nodes = secondary_element.get_connectivity().clone();
+                    let num_nodes = secondary_nodes.len() as f64;
+                    
+                    // Distribute the reaction force equally among all nodes of the secondary element
+                    for secondary_node_id in &secondary_nodes {
+                        for i in 0..3 {
+                            let global_index = simulation.get_global_index(*secondary_node_id, i);
+                            simulation.load_vector[global_index] -= force[i] / num_nodes;
+                        }
+                    }
                 }
             }
 

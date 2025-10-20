@@ -67,8 +67,29 @@ pub fn write_vtk(filename: &str, simulation: &Simulation) -> std::io::Result<()>
         writeln!(file, "{} {} {}", node.displacement.x, node.displacement.y, node.displacement.z)?;
     }
 
+    // Write boundary condition forces as vector field
+    let load_vector = simulation.get_global_force();
+    writeln!(file, "VECTORS force float")?;
+    for node_id in 0..nodes.len() {
+        let fx = if node_id * 3 < load_vector.len() { load_vector[node_id * 3] } else { 0.0 };
+        let fy = if node_id * 3 + 1 < load_vector.len() { load_vector[node_id * 3 + 1] } else { 0.0 };
+        let fz = if node_id * 3 + 2 < load_vector.len() { load_vector[node_id * 3 + 2] } else { 0.0 };
+        writeln!(file, "{} {} {}", fx, fy, fz)?;
+    }
+
+    // Write force magnitude as scalar field
+    writeln!(file, "SCALARS f_mag float")?;
+    writeln!(file, "LOOKUP_TABLE default")?;
+    for node_id in 0..nodes.len() {
+        let fx = if node_id * 3 < load_vector.len() { load_vector[node_id * 3] } else { 0.0 };
+        let fy = if node_id * 3 + 1 < load_vector.len() { load_vector[node_id * 3 + 1] } else { 0.0 };
+        let fz = if node_id * 3 + 2 < load_vector.len() { load_vector[node_id * 3 + 2] } else { 0.0 };
+        let f_mag = (fx * fx + fy * fy + fz * fz).sqrt();
+        writeln!(file, "{}", f_mag)?;
+    }
+
     // Write node_fields as scalar data
-    let node_fields = &simulation.node_fields; // Consider renaming `node_fields` to `node_fields`
+    let node_fields = &simulation.node_fields;
     for (name, field) in node_fields.iter() {
         writeln!(file, "SCALARS {} float", name)?;
         writeln!(file, "LOOKUP_TABLE default")?;
@@ -169,6 +190,27 @@ pub fn write_vtkhdf(filename: &str, simulation: &Simulation) -> std::io::Result<
     let u = simulation.nodes().iter().map(|node| node.displacement.as_slice()).collect::<Vec<&[f64]>>();
     displacement_ds.write_raw(u.concat().as_slice()).expect("Failed to write dataset");
 
+    // Add boundary condition forces as vector field
+    let load_vector = simulation.get_global_force();
+    let mut force_data = Array2::<f64>::zeros((n_points, 3));
+    let mut f_mag = Vec::with_capacity(n_points);
+    
+    for node_id in 0..n_points {
+        let fx = if node_id * 3 < load_vector.len() { load_vector[node_id * 3] } else { 0.0 };
+        let fy = if node_id * 3 + 1 < load_vector.len() { load_vector[node_id * 3 + 1] } else { 0.0 };
+        let fz = if node_id * 3 + 2 < load_vector.len() { load_vector[node_id * 3 + 2] } else { 0.0 };
+        
+        force_data[[node_id, 0]] = fx;
+        force_data[[node_id, 1]] = fy;
+        force_data[[node_id, 2]] = fz;
+        f_mag.push((fx * fx + fy * fy + fz * fz).sqrt());
+    }
+    let force_ds = point_data_group.new_dataset::<f64>().shape((n_points, 3)).create("force").expect("Failed to create dataset");
+    force_ds.write_raw(force_data.as_slice().unwrap()).expect("Failed to write dataset");
+
+    // Add force magnitude as scalar field
+    let f_mag_ds = point_data_group.new_dataset::<f64>().shape((n_points,)).create("f_mag").expect("Failed to create dataset");
+    f_mag_ds.write_raw(f_mag.as_slice()).expect("Failed to write dataset");
 
     //handle all node fields
     let node_fields = &simulation.node_fields;

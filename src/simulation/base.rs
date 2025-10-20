@@ -21,6 +21,20 @@ use std::thread;
 
 // Get worker count from env var or use default of 8
 
+pub enum AssemblyOutputType {
+    SymmetricUpper,
+    SymmetricLower,
+    SymmetricFull,
+    Unsymmetric
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct SimulationStep {
+    pub iteration: u64,
+    pub time: f64,
+    pub element_fields: HashMap<usize, ElementFields>,
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct Simulation {
     pub nodes: Vec<Node>,
@@ -40,6 +54,8 @@ pub struct Simulation {
     #[serde(skip, default = "Vec::new")]
     pub active_elements: Vec<usize>,
     pub worker_count: usize,
+    
+    pub steps: Vec<SimulationStep>, // Timestep data
 }
 
 impl Simulation {
@@ -220,7 +236,9 @@ impl Simulation {
         debug!("Total mass: {}", total_mass);
     }
 
-    pub fn assemble(&mut self) -> (HashMap<(usize, usize), f64>, Vec<f64>) {
+
+
+    pub fn assemble(&mut self, output_type: AssemblyOutputType) -> (HashMap<(usize, usize), f64>, Vec<f64>) {
         debug!("Starting assembly process");
         let mut global_stiffness_matrix: HashMap<(usize, usize), f64> = HashMap::new();
         let dof = self.dofs;
@@ -243,6 +261,23 @@ impl Simulation {
                             let global_i = element_connectivity[i] * dof + k;
                             let global_j = element_connectivity[j] * dof + l;
                             let key = (global_i, global_j);
+
+
+                            match output_type { 
+                                AssemblyOutputType::SymmetricUpper => { 
+                                    if global_i > global_j {
+                                        continue;
+                                    }
+                                }
+                                AssemblyOutputType::SymmetricLower => {
+                                    if global_i < global_j {
+                                        continue;
+                                    }
+                                }
+                                _ => {}
+                            }
+
+
                             let value = element_stiffness_matrix[(i * dof + k, j * dof + l)];
                             *global_stiffness_matrix.entry(key).or_insert(0.0) += value;
                         }
@@ -320,6 +355,7 @@ impl Simulation {
         let time_steps = self.keywords.get_int("SOLVER_TIME_STEPS").unwrap_or(100);
         let print_steps = self.keywords.get_int("SOLVER_PRINT_STEPS").unwrap_or(0);
         let mut vtk_save_steps = self.keywords.get_int("SOLVER_VTK_SAVE_STEPS").unwrap_or(0); //0 means no vtk saving
+        let state_save_steps = self.keywords.get_int("SOLVER_STATE_SAVE_STEPS").unwrap_or(0); //0 means no state saving
         if output_vtk.is_none() {
             vtk_save_steps = 0;
         }
@@ -349,10 +385,10 @@ impl Simulation {
         let mut internal_force = self.compute_force_vector(&u);
         let mut external_force = DVector::zeros(self.nodes.len() * self.dofs);
 
-        let pb = indicatif::ProgressBar::new(time_steps as u64);
+        let pb: indicatif::ProgressBar = indicatif::ProgressBar::new(time_steps as u64);
         pb.set_style(
             indicatif::ProgressStyle::default_bar()
-                .template("{elapsed_precise}/{eta_precise} [{bar:40.cyan/blue}] {pos}/{len} {eta}")
+                .template("{elapsed_precise}/{eta_precise} [{bar:40.cyan/blue}] {pos}/{len} {eta} | Simulation Time: {msg}s")
                 .unwrap(),
         ); //.progress_chars("#>-"));
         while i < time_steps {
@@ -400,10 +436,32 @@ impl Simulation {
                 write_vtk(output_path.as_str(), self);
                 print_max_displacement(&u);
             }
+            if state_save_steps > 0 && i % state_save_steps == 0 {
+                self.compute_result_fields();
+                
+                // Collect element fields for this timestep
+                let mut element_fields_map = HashMap::new();
+                for element_id in self.active_elements() {
+                    if let Some(element) = self.get_element(element_id) {
+                        let fields = element.compute_element_nodal_properties(self);
+                        element_fields_map.insert(element_id, fields);
+                    }
+                }
+                
+                // Add step to simulation
+                let step = SimulationStep {
+                    iteration: i as u64,
+                    time: t,
+                    element_fields: element_fields_map,
+                };
+                self.steps.push(step);
+                info!("Added timestep at time {:.6} (step {}) to simulation", t, i);
+            }
             if print_steps > 0 && i % print_steps == 0 {
                 info!("[{}] Time: {}", i, t);
                 print_max_displacement(&u);
             }
+            pb.set_message(format!("{:.6}", t));
             pb.inc(1);
             i += 1;
             t += dt;
@@ -433,9 +491,9 @@ impl Simulation {
         //direct solve
         info!("Starting simulation solve process");
         debug!("Assembling system");
-        let (mut global_stiffness_matrix, mut global_force) = self.assemble();
+        let (mut global_stiffness_matrix, mut global_force) = self.assemble(AssemblyOutputType::SymmetricFull);
         info!("Solving system");
-        let u = direct_solve(&global_stiffness_matrix, &global_force);
+        let u = direct_solve(&self, &global_stiffness_matrix, &global_force);
         info!("Performing post-solve computations");
         //populate node displacements
         for (node_id, node) in self.nodes_mut().iter_mut().enumerate() {

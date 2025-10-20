@@ -146,14 +146,15 @@ impl BrickElement {
                  n_i[m] =  j_inv.row(m).dot(&d_n.row(i));
             }
             //new method to handle B_I
+            // Strain vector: [ε_xx, ε_yy, ε_zz, γ_xy, γ_yz, γ_xz]
+            // where γ_xy = ∂u/∂y + ∂v/∂x, γ_yz = ∂v/∂z + ∂w/∂y, γ_xz = ∂u/∂z + ∂w/∂x
             let b_i = SMatrix::<f64, 6, 3>::new(
-                n_i[0], 0.0, 0.0,
-                0.0, n_i[1], 0.0,
-                0.0, 0.0, n_i[2],
-
-                0.0, n_i[2], n_i[1],
-                n_i[2], 0.0, n_i[0],
-                n_i[1], n_i[0], 0.0
+                n_i[0], 0.0, 0.0,      // ε_xx = ∂u/∂x
+                0.0, n_i[1], 0.0,      // ε_yy = ∂v/∂y  
+                0.0, 0.0, n_i[2],      // ε_zz = ∂w/∂z
+                n_i[1], n_i[0], 0.0,    // γ_xy = ∂u/∂y + ∂v/∂x
+                0.0, n_i[2], n_i[1],   // γ_yz = ∂v/∂z + ∂w/∂y
+                n_i[2], 0.0, n_i[0]    // γ_xz = ∂u/∂z + ∂w/∂x
             );
 
             for j in 0..6 {

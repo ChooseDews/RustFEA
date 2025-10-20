@@ -9,7 +9,7 @@ use serde::{Serialize, Deserialize};
 use bincode;
 use serde::de::DeserializeOwned;
 use log::{debug, error};
-
+use std::time::Instant;
 /// Returns a writer for the specified file.
 /// Supports `.json`, `.bin`, and `.xz` (compressed) file extensions.
 ///
@@ -25,7 +25,17 @@ fn get_writer(filename: &str) -> Box<dyn Write> {
     let file = File::create(filename).unwrap();
     match file_extension {
         "json" | "bin" => Box::new(BufWriter::new(file)),
-        "xz" => Box::new(xz2::write::XzEncoder::new(file, 6)),
+        "xz" => {
+            // Use level 1 for much faster compression (vs level 6)
+            // Level 1: ~10x faster than level 6, still good compression
+            Box::new(xz2::write::XzEncoder::new(file, 1))
+        },
+        "zst" => {
+            // Zstandard compression - often faster than xz
+            // Level 1: Very fast compression with good ratio
+            // auto_finish() ensures internal buffer (~128kb) is flushed on drop
+            Box::new(zstd::Encoder::new(file, 1).unwrap().auto_finish())
+        },
         _ => panic!("Unsupported file extension: {}", file_extension),
     }
 }
@@ -46,6 +56,7 @@ fn get_reader(filename: &str) -> Box<dyn Read> {
     match file_extension {
         "json" | "bin" => Box::new(BufReader::new(file)),
         "xz" => Box::new(xz2::read::XzDecoder::new(file)),
+        "zst" => Box::new(zstd::Decoder::new(file).unwrap()),
         _ => panic!("Unsupported file extension: {}", file_extension),
     }
 }
@@ -90,6 +101,7 @@ pub fn seralized_read<T: DeserializeOwned>(filename: &str) -> T {
 /// Panics if the file extension is unsupported or if serialization fails.
 pub fn seralized_write<T: Serialize>(filename: &str, data: &T) {
     debug!("Writing serialized data to file: {}", filename);
+    let start_time = Instant::now();
     if filename.contains(".json") {
         serde_json::to_writer(&mut get_writer(filename), &data).expect("Failed to serialize data to JSON")
     } else if filename.contains(".bin") {
@@ -98,4 +110,7 @@ pub fn seralized_write<T: Serialize>(filename: &str, data: &T) {
         error!("Unsupported file extension for: {}", filename);
         panic!("Unsupported file extension for: {}", filename)
     }
+    let end_time = Instant::now();
+    let duration = end_time - start_time;
+    debug!("Serialization time: {:.6} seconds", duration.as_secs_f64());
 }

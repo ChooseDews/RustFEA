@@ -21,6 +21,13 @@ DEFAULT_RESULT_ROOT = "./temp"
 MIN_EXPECTED_TIME = 10 #secs
 SAMPLE_SIZE = 3
 
+
+n_processes = 4
+RAYON_NUM_THREADS = 3
+
+#total num cores = n_processes * RAYON_NUM_THREADS = 9
+
+
 time_stamp = time.strftime("%Y-%m-%d_%H-%M-%S")
 analysis_name = f"error_check_{time_stamp}"
 output_dir = os.path.join(DEFAULT_RESULT_ROOT, analysis_name)
@@ -71,12 +78,11 @@ def test_error_count(total_runs=400):
     if os.path.exists(ERROR_LOG_PATH): os.remove(ERROR_LOG_PATH)
     env = {
         "RUST_BACKTRACE": "1",
-        "RAYON_NUM_THREADS": "3"
+        "RAYON_NUM_THREADS": str(RAYON_NUM_THREADS)
     }
     build_binary()
 
     # Use number of CPU cores minus 1 to avoid overloading
-    n_processes = 4
     
     results = []
     error_count = 0

@@ -1,5 +1,5 @@
 name = "Tube Simulation Project"
-output = "examples/output/tube.json.xz"
+output = "examples/output/tube/tube.json.zst"
 
 [[sim]]
 name = "BAR Simulation"
@@ -12,10 +12,22 @@ name= "tube_body"
 [sim.output]
 vtk = "examples/output/tube/tube_direct.vtk"
 
+[sim.solver]
+method = "direct"
+save_stiffness_matrix_path = "./temp/tube_stiffness.smat"
+
+
+# The torque will rotate the bar around the specified axis
 [[sim.boundary_conditions]]
-type = "load"
+type = "torque"
 name = "end1"
-values = [20000, 20000, 0]
+# Point on the axis of rotation [x, y, z]
+axis_point = [0.0, 0.0, 0.0]
+# Direction of the axis (will be normalized) [x, y, z]
+# Using right-hand rule: thumb points along axis, fingers curl in direction of torque
+axis_direction = [0.0, 0.0, 1.0]
+# Magnitude of the torque (N·m or appropriate units)
+magnitude = 10000.0
 
 [[sim.boundary_conditions]]
 type = "fixed"
@@ -28,6 +40,7 @@ youngs_modulus = 200000
 poissons_ratio = 0.3
 
 
+# Explicit Simulation
 [[sim]]
 name = "BAR Simulation 2"
 mesh = "meshes/example_tube.inp.xz"
@@ -38,17 +51,36 @@ method = "explicit"
 # time_step = 0.000011
 time_steps = 10000
 vtk_save_steps = 1000
+state_save_steps = 1000
 
 [sim.output]
-vtk = "examples/output/tube/tube_explicit.vtk"
+vtk = "examples/output/tube/vtk/tube_explicit.vtk"
 clear_directory = true
 
+# [[sim.boundary_conditions]]
+# type = "load"
+# name = "end1"
+# values = [20000, 20000, 0]
+
+# The torque will rotate the bar around the specified axis
 [[sim.boundary_conditions]]
-type = "load"
+type = "torque"
 name = "end1"
-values = [20000, 20000, 0]
+# Point on the axis of rotation [x, y, z]
+axis_point = [0.0, 0.0, 0.0]
+# Direction of the axis (will be normalized) [x, y, z]
+# Using right-hand rule: thumb points along axis, fingers curl in direction of torque
+axis_direction = [0.0, 0.0, 1.0]
+# Magnitude of the torque (N·m or appropriate units)
+magnitude = 10000.0
 
 [[sim.boundary_conditions]]
 type = "fixed"
 name = "end2"
 values = [0, 0, 0]
+
+
+[[sim.boundary_conditions]]
+type = "fixed"
+name = "end2"
+values = ["None","None",1]

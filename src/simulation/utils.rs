@@ -8,6 +8,7 @@ use crate::node::Node;
 use crate::utilities::Keywords;
 
 use super::Simulation;
+use crate::simulation::base::SimulationStep;
 
 impl fmt::Display for Simulation {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -74,6 +75,7 @@ impl Simulation {
             worker_count: std::env::var("RAYON_NUM_THREADS")
                 .map(|s| s.parse::<usize>().unwrap_or(8))
                 .unwrap_or(8),
+            steps: Vec::new(),
         }
     }
 
@@ -88,6 +90,35 @@ impl Simulation {
             simulation.add_element(element);
         }
         simulation
+    }
+
+    /// Get all timesteps
+    pub fn get_steps(&self) -> &Vec<SimulationStep> {
+        &self.steps
+    }
+
+    /// Get element fields for a specific time
+    pub fn get_step_at_time(&self, time: f64, tolerance: f64) -> Option<&HashMap<usize, ElementFields>> {
+        self.steps.iter()
+            .find(|step| (step.time - time).abs() < tolerance)
+            .map(|step| &step.element_fields)
+    }
+
+    /// Get element fields for a specific iteration
+    pub fn get_step_at_iteration(&self, iteration: u64) -> Option<&HashMap<usize, ElementFields>> {
+        self.steps.iter()
+            .find(|step| step.iteration == iteration)
+            .map(|step| &step.element_fields)
+    }
+
+    /// Get the latest timestep
+    pub fn get_latest_step(&self) -> Option<&SimulationStep> {
+        self.steps.last()
+    }
+
+    /// Clear all timesteps
+    pub fn clear_steps(&mut self) {
+        self.steps.clear();
     }
 
     pub fn check_node_ordering(&self) {
