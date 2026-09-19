@@ -8,7 +8,8 @@ pub enum BoundaryConditionType {
     Contact,
     Pressure,
     Traction,
-    Torque
+    Torque,
+    BodyForce,
 }
 
 /// Represents a boundary condition
