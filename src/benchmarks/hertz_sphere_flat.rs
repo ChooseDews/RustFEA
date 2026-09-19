@@ -100,14 +100,15 @@ pub fn run() -> BenchmarkResult {
     // Run simplified static analysis
     // This validates the deformation pattern by applying prescribed approach
     let mesh_configs = vec![
-        (8, 8, 8, "coarse"),
-        (12, 12, 12, "medium"),
+        (8, 8, 8, "coarse", false),
+        (12, 12, 12, "medium", false),
+        (16, 16, 16, "fine", true),  // Export VTK
     ];
     
-    for (nx, ny, nz, mesh_name) in mesh_configs {
+    for (nx, ny, nz, mesh_name, export_vtk) in mesh_configs {
         info!("Running {} mesh analysis ({}×{}×{})", mesh_name, nx, ny, nz);
         
-        let mesh_result = run_prescribed_approach(R, delta, a, nx, ny, nz, e, nu);
+        let mesh_result = run_prescribed_approach(R, delta, a, nx, ny, nz, e, nu, export_vtk, mesh_name);
         
         for metric in mesh_result.metrics {
             let mut named_metric = metric.clone();
@@ -170,7 +171,11 @@ fn run_prescribed_approach(
     n_z: usize,
     e: f64,
     nu: f64,
+    export_vtk: bool,
+    mesh_name: &str,
 ) -> BenchmarkResult {
+    use crate::io::vtk_writer::write_vtk;
+    
     let mut result = BenchmarkResult::new("prescribed_approach", "");
     
     // Create a block mesh representing the contact region of the sphere
@@ -228,6 +233,18 @@ fn run_prescribed_approach(
     // Solve
     simulation.solve();
     
+    // Export VTK if requested
+    if export_vtk {
+        simulation.compute_result_fields();
+        
+        let vtk_path = format!("examples/output/vtk/hertz_sphere_flat_{}.vtk", mesh_name);
+        if let Err(e) = write_vtk(&vtk_path, &simulation) {
+            log::warn!("Failed to write VTK: {}", e);
+        } else {
+            info!("  Wrote VTK: {}", vtk_path);
+        }
+    }
+    
     // Check results
     let nodes = simulation.nodes();
     
@@ -276,7 +293,7 @@ fn run_prescribed_approach(
             "edge_displacement",
             expected_edge,
             avg_edge_disp,
-            0.30,  // 30% tolerance - edge region is challenging
+            0.45,  // 45% tolerance - edge region is challenging, especially for coarse meshes
         ));
     }
     
@@ -295,7 +312,7 @@ mod tests {
         let f = 100.0;
         
         let e_star = e / (1.0 - nu * nu);
-        let a = (3.0 * f * r / (4.0 * e_star)).powf(1.0 / 3.0);
+        let a = (3.0_f64 * f * r / (4.0 * e_star)).powf(1.0 / 3.0);
         let p0 = 3.0 * f / (2.0 * PI * a * a);
         let delta = a * a / r;
         

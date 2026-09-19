@@ -4,8 +4,9 @@
 use rust_fea::benchmarks::{
     BenchmarkResult, BenchmarkSuite,
     uniaxial_tension, pure_shear, hydrostatic_compression,
-    torsion_shaft, cantilever_beam, spherical_cavity,
-    boussinesq, hertz_sphere_flat, hertz_sphere_sphere,
+    torsion_shaft, torsion_explicit, cantilever_beam, spherical_cavity,
+    boussinesq, hertz_sphere_flat, hertz_sphere_sphere, contact_explicit,
+    gravity,
     plotting::{format_with_units, ConvergenceStudy, generate_convergence_table},
 };
 use std::fs::File;
@@ -66,6 +67,11 @@ fn main() {
         // Level 3: Contact Verification (analytical validation)
         ("hertz_sphere_flat", hertz_sphere_flat::run),
         ("hertz_sphere_sphere", hertz_sphere_sphere::run),
+        // Level 4: Explicit Solver Verification
+        ("torsion_explicit", torsion_explicit::run),
+        ("contact_explicit", contact_explicit::run),
+        // Level 5: Body Force Verification
+        ("gravity", gravity::run),
     ];
     
     for (name, run_fn) in benchmarks_to_run.iter() {

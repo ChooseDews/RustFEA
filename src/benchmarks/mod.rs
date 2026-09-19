@@ -5,12 +5,15 @@ pub mod uniaxial_tension;
 pub mod pure_shear;
 pub mod hydrostatic_compression;
 pub mod torsion_shaft;
+pub mod torsion_explicit;
 pub mod hollow_sphere;
 pub mod cantilever_beam;
 pub mod spherical_cavity;
 pub mod boussinesq;
 pub mod hertz_sphere_flat;
 pub mod hertz_sphere_sphere;
+pub mod contact_explicit;
+pub mod gravity;
 pub mod mesh_utils;
 pub mod plotting;
 

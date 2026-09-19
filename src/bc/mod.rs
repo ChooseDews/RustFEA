@@ -5,11 +5,16 @@ pub mod contact;
 pub mod pressure;
 pub mod traction;
 pub mod torque;
+pub mod body_force;
+pub mod node_to_segment_contact;
 
 pub use condition::BoundaryCondition;
 pub use fixed::FixedCondition;
 pub use force::LoadCondition;
 pub use contact::NormalContact;
 pub use condition::BoundaryConditionType;
-pub use traction::Traction;
+pub use traction::{Traction, TractionType};
 pub use torque::TorqueCondition;
+pub use pressure::PressureCondition;
+pub use body_force::{BodyForce, BodyForceType};
+pub use node_to_segment_contact::{NodeToSegmentContact, ContactAlgorithm, FrictionModel};
