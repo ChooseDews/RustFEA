@@ -28,17 +28,16 @@ pub fn direct_solve(simulation: &Simulation, global_stiffness_matrix: &HashMap<(
     let neq = max_row + 1; // number of equations
     let nnz = global_stiffness_matrix.len();
     let mut umfpack = SolverUMFPACK::new().unwrap();
-    let mut coo = SparseMatrix::new_coo(neq, neq, nnz, Sym::YesFull).unwrap();
+    let mut coo = CooMatrix::new(neq, neq, nnz, Sym::YesFull).unwrap();
     for ((row, col), value) in global_stiffness_matrix.iter() {
         coo.put(*row, *col, *value).unwrap();
     } 
     let save_matrix = simulation.keywords.get_keyword("SOLVER_SAVE_STIFFNESS_MATRIX_PATH");
     if save_matrix.is_some() {
         let start = Instant::now();
-        let coo = coo.get_coo().unwrap();
         let path = save_matrix.unwrap().value.as_str().unwrap();
         let csc = CscMatrix::from_coo(&coo).unwrap();
-        csc.write_matrix_market(path, true).unwrap();
+        csc.write_matrix_market(path, true, 1e-15).unwrap();
         let duration = start.elapsed();
         info!("Saved matrix to {} in {:?}", path, duration);
     }
@@ -47,8 +46,8 @@ pub fn direct_solve(simulation: &Simulation, global_stiffness_matrix: &HashMap<(
     let mut x = Vector::new(neq);
     info!("Solving system of size: {}", neq);
     let start = Instant::now();
-    umfpack.factorize(&mut coo, None).unwrap();
-    umfpack.solve(&mut x, &coo, &rhs, false).unwrap();
+    umfpack.factorize(&coo, None).unwrap();
+    umfpack.solve(&mut x, &rhs, false).unwrap();
     let duration = start.elapsed();
     info!("Solved System: Time elapsed in direct_solve() is: {:?}", duration);
     x.as_data().to_vec()
