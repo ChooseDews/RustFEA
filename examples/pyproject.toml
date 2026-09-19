@@ -1,0 +1,10 @@
+[project]
+name = "examples"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.11"
+dependencies = [
+    "matplotlib>=3.11.2",
+    "numpy>=2.4.6",
+    "pyvista>=0.49.0",
+]

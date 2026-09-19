@@ -7,3 +7,5 @@ pub mod utilities;
 pub mod mesh;
 pub mod solver;
 pub mod bc;
+pub mod benchmarks;
+pub mod mesh_generation;
