@@ -100,7 +100,8 @@ pub fn run() -> BenchmarkResult {
         (6, "coarse", false),
         (10, "medium", false),
         (14, "fine", false),
-        (20, "very_fine", true),  // Export VTK
+        (20, "very_fine", false),
+        (26, "ultra_fine", true),  // Export VTK
     ];
     
     for (n, mesh_name, export_vtk) in mesh_configs {

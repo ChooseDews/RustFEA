@@ -293,7 +293,8 @@ impl BaseElement for TetElement {
     fn compute_stiffness(&mut self, simulation: &Simulation){
         trace!("Computing stiffness matrix for tetrahedral element");
         let mut k = empty_element_matrix();
-        let gauss_points = TetElement::get_corner_points();
+        // Use proper Gauss quadrature (NOT corner points!)
+        let gauss_points = TetElement::get_gauss_points();
         let x = self.get_x_local(simulation);
         let c = self.material.get_3d_matrix();
 

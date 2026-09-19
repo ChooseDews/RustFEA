@@ -65,7 +65,8 @@ pub fn run() -> BenchmarkResult {
         (10, 2, 2, "coarse", false),
         (20, 4, 4, "medium", false),
         (40, 6, 6, "fine", false),
-        (60, 8, 8, "very_fine", true),  // Export VTK for visualization
+        (60, 8, 8, "very_fine", false),
+        (80, 10, 10, "ultra_fine", true),  // Export VTK for visualization
     ];
     
     for (nx, ny, nz, mesh_name, export_vtk) in refinements {

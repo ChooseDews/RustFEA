@@ -166,6 +166,50 @@ impl BrickElement {
         b
     }
 
+    /// Compute B matrix for volumetric (normal) strains only [rows 0,1,2]
+    fn compute_b_volumetric(&self, x: &SMatrix<f64, 8, 3>, j: &Matrix3<f64>, d_n: &SMatrix<f64, 8, 3>) -> SMatrix<f64, 3, 24> {
+        let mut b = SMatrix::<f64, 3, 24>::zeros();
+        let j_inv = j.try_inverse().unwrap();
+        let mut n_i = [0.0; 3];
+        
+        for i in 0..8 {
+            for m in 0..3 {
+                n_i[m] = j_inv.row(m).dot(&d_n.row(i));
+            }
+            // Only normal strains: ε_xx, ε_yy, ε_zz
+            b[(0, 3 * i + 0)] = n_i[0];  // ε_xx = ∂u/∂x
+            b[(1, 3 * i + 1)] = n_i[1];  // ε_yy = ∂v/∂y
+            b[(2, 3 * i + 2)] = n_i[2];  // ε_zz = ∂w/∂z
+        }
+        b
+    }
+
+    /// Compute B matrix for deviatoric (shear) strains only [rows 3,4,5]
+    fn compute_b_deviatoric(&self, x: &SMatrix<f64, 8, 3>, j: &Matrix3<f64>, d_n: &SMatrix<f64, 8, 3>) -> SMatrix<f64, 3, 24> {
+        let mut b = SMatrix::<f64, 3, 24>::zeros();
+        let j_inv = j.try_inverse().unwrap();
+        let mut n_i = [0.0; 3];
+        
+        for i in 0..8 {
+            for m in 0..3 {
+                n_i[m] = j_inv.row(m).dot(&d_n.row(i));
+            }
+            // Only shear strains: γ_xy, γ_yz, γ_xz
+            b[(0, 3 * i + 0)] = n_i[1];  // γ_xy term: ∂u/∂y
+            b[(0, 3 * i + 1)] = n_i[0];  // γ_xy term: ∂v/∂x
+            b[(1, 3 * i + 1)] = n_i[2];  // γ_yz term: ∂v/∂z
+            b[(1, 3 * i + 2)] = n_i[1];  // γ_yz term: ∂w/∂y
+            b[(2, 3 * i + 0)] = n_i[2];  // γ_xz term: ∂u/∂z
+            b[(2, 3 * i + 2)] = n_i[0];  // γ_xz term: ∂w/∂x
+        }
+        b
+    }
+
+    /// Get single center point for reduced integration
+    fn get_center_point() -> (f64, f64, f64, f64) {
+        (0.0, 0.0, 0.0, 8.0)  // weight = 8.0 for single point in [-1,1]^3
+    }
+
 
     fn compute_jacobian_matrix(&self, x: &SMatrix<f64, 8, 3>, d_n: &SMatrix<f64, 8, 3>) -> Matrix3<f64>  {
         d_n.transpose() * x
@@ -340,7 +384,8 @@ impl BaseElement for BrickElement {
     fn compute_stiffness(&mut self, simulation: &Simulation){
         trace!("Computing stiffness matrix for brick element");
         let mut k = empty_element_matrix();
-        let gauss_points = BrickElement::get_corner_points();
+        // Use proper 2x2x2 Gauss quadrature (NOT corner points!)
+        let gauss_points = BrickElement::get_gauss_points();
         let x = self.get_x_local(simulation);
         let c = self.material.get_3d_matrix();
 
