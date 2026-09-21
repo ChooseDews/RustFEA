@@ -40,7 +40,7 @@ impl MeshNode {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MeshElement {
     pub connectivity: Vec<usize>,
     pub name: String,
@@ -107,7 +107,7 @@ impl MeshElement {
 
 
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ElementGroup {
     pub elements: Vec<usize>, //indices of elements in the mesh
     pub name: String,
@@ -123,7 +123,7 @@ impl ElementGroup {
         }
     }
 }
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct NodeGroup {
     pub nodes: Vec<usize>, //indices of nodes in the mesh
     pub name: String,
@@ -138,7 +138,7 @@ impl NodeGroup {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Body {
     pub elements: Vec<usize>,
     pub nodes: Vec<usize>,
@@ -155,7 +155,7 @@ impl Body {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MeshAssembly {
     pub nodes: HashMap<usize, MeshNode>,
     pub elements: HashMap<usize, MeshElement>,

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RustFEA - Finite Element Analysis</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #1e1e1e;
+        }
+        
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        #loading h1 {
+            margin-bottom: 20px;
+            font-weight: 300;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid #333;
+            border-top-color: #6495ed;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        #rustfea_canvas {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <div class="spinner"></div>
+        <h1>RustFEA</h1>
+        <p>Loading Finite Element Analysis Engine...</p>
+    </div>
+    
+    <canvas id="rustfea_canvas"></canvas>
+    
+    <script type="module">
+        import init from './pkg/rust_fea_gui.js';
+        
+        async function main() {
+            try {
+                await init();
+                document.getElementById('loading').classList.add('hidden');
+            } catch (e) {
+                console.error('Failed to load RustFEA:', e);
+                document.getElementById('loading').innerHTML = `
+                    <h1>Error Loading RustFEA</h1>
+                    <p style="color: #ff6b6b;">Failed to initialize: ${e.message}</p>
+                    <p>Please check the browser console for details.</p>
+                `;
+            }
+        }
+        
+        main();
+    </script>
+</body>
+</html>

@@ -6,16 +6,27 @@ use log::{info, debug, trace, error};
 use std::io::{BufReader, Read, BufRead};
 use std::path::Path;
 use std::fs::File;
+
+#[cfg(feature = "native")]
 use xz2::read::XzDecoder;
 
 fn get_reader(filename: &str) -> BufReader<Box<dyn Read>>{
     let file_extension = Path::new(filename).extension().expect("Issue parsing file extension").to_str().unwrap();
     let file = File::open(filename).unwrap();
+    
+    #[cfg(feature = "native")]
     let reader: Box<dyn Read> = match file_extension {
         "inp" => Box::new(file),
         "xz" => Box::new(XzDecoder::new(file)),
         _ => panic!("Unsupported file extension: {}", file_extension),
     };
+    
+    #[cfg(not(feature = "native"))]
+    let reader: Box<dyn Read> = match file_extension {
+        "inp" => Box::new(file),
+        _ => panic!("Unsupported file extension for WASM: {}. Only .inp files are supported.", file_extension),
+    };
+    
     BufReader::new(reader)
 }
 

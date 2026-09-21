@@ -62,6 +62,10 @@ impl Project {
         &mut self.simulations[0]
     }
 
+    pub fn simulations(&self) -> &[Simulation] {
+        &self.simulations
+    }
+
     pub fn export_vtk(&self) {
         for (index, simulation) in self.simulations.iter().enumerate() {
             let output_vtk = simulation.keywords.get_string("OUTPUT_VTK");

@@ -10,8 +10,9 @@ use bincode;
 use serde::de::DeserializeOwned;
 use log::{debug, error};
 use std::time::Instant;
+
 /// Returns a writer for the specified file.
-/// Supports `.json`, `.bin`, and `.xz` (compressed) file extensions.
+/// Supports `.json`, `.bin`, and `.xz`/`.zst` (compressed) file extensions.
 ///
 /// # Arguments
 ///
@@ -25,23 +26,29 @@ fn get_writer(filename: &str) -> Box<dyn Write> {
     let file = File::create(filename).unwrap();
     match file_extension {
         "json" | "bin" => Box::new(BufWriter::new(file)),
+        #[cfg(feature = "native")]
         "xz" => {
             // Use level 1 for much faster compression (vs level 6)
             // Level 1: ~10x faster than level 6, still good compression
             Box::new(xz2::write::XzEncoder::new(file, 1))
         },
+        #[cfg(feature = "native")]
         "zst" => {
             // Zstandard compression - often faster than xz
             // Level 1: Very fast compression with good ratio
             // auto_finish() ensures internal buffer (~128kb) is flushed on drop
             Box::new(zstd::Encoder::new(file, 1).unwrap().auto_finish())
         },
+        #[cfg(not(feature = "native"))]
+        "xz" | "zst" => {
+            panic!("Compressed file formats (xz, zst) are not supported in WASM builds. Use .json or .bin instead.");
+        },
         _ => panic!("Unsupported file extension: {}", file_extension),
     }
 }
 
 /// Returns a reader for the specified file.
-/// Supports `.json`, `.bin`, and `.xz` (compressed) file extensions.
+/// Supports `.json`, `.bin`, and `.xz`/`.zst` (compressed) file extensions.
 ///
 /// # Arguments
 ///
@@ -55,8 +62,14 @@ fn get_reader(filename: &str) -> Box<dyn Read> {
     let file = File::open(filename).unwrap();
     match file_extension {
         "json" | "bin" => Box::new(BufReader::new(file)),
+        #[cfg(feature = "native")]
         "xz" => Box::new(xz2::read::XzDecoder::new(file)),
+        #[cfg(feature = "native")]
         "zst" => Box::new(zstd::Decoder::new(file).unwrap()),
+        #[cfg(not(feature = "native"))]
+        "xz" | "zst" => {
+            panic!("Compressed file formats (xz, zst) are not supported in WASM builds. Use .json or .bin instead.");
+        },
         _ => panic!("Unsupported file extension: {}", file_extension),
     }
 }

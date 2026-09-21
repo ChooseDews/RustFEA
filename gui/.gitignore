@@ -1,0 +1,13 @@
+# WASM build output
+web/pkg/
+web/dist/
+
+# wasm-bindgen / wasm-pack generated files
+*.wasm
+*.wasm.d.ts
+
+# Build artifacts
+*.profraw
+
+# OS files
+.DS_Store
