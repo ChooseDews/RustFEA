@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use crate::node::Node;
-use crate::elements::{ BaseElement, BrickElement, Material, FourNodeElement};
+use crate::elements::{ BaseElement, BrickElement, Brick20Element, TetElement, Material, FourNodeElement};
 use serde::{Serialize, Deserialize};
 use crate::io::file::{seralized_read, seralized_write};
 use std::fmt;
@@ -59,6 +59,22 @@ impl MeshElement {
                 }
                 let mut el_id = self.id;
                 Box::new(BrickElement::new(el_id, self.connectivity.clone(), Material::aluminum()))
+            }
+            "C3D20" => {
+                let mut connectivity = Vec::new();
+                for node_id in &self.connectivity {
+                    connectivity.push(*node_id);
+                }
+                let mut el_id = self.id;
+                Box::new(Brick20Element::new(el_id, self.connectivity.clone(), Material::aluminum()))
+            }
+            "C3D4" => {
+                let mut connectivity = Vec::new();
+                for node_id in &self.connectivity {
+                    connectivity.push(*node_id);
+                }
+                let mut el_id = self.id;
+                Box::new(TetElement::new(el_id, self.connectivity.clone(), Material::aluminum()))
             }
             "CPS4" => {
                 let mut connectivity = Vec::new();
@@ -308,16 +324,16 @@ impl MeshAssembly {
         let mut elements = Vec::new();
         let mut element_index = 0;
 
-        // Collect all C3D8 element groups
+        // Collect all volume element groups (C3D8, C3D20, and C3D4)
         let volume_groups: Vec<&ElementGroup> = self.element_groups.values()
-            .filter(|group| group.el_type == "C3D8")
+            .filter(|group| group.el_type == "C3D8" || group.el_type == "C3D20" || group.el_type == "C3D4")
             .collect();
 
         if volume_groups.is_empty() {
-            panic!("No volume elements (C3D8) found in mesh!");
+            panic!("No volume elements (C3D8, C3D20, or C3D4) found in mesh!");
         }
 
-        // Process all C3D8 elements from all relevant groups
+        // Process all volume elements from all relevant groups
         for group in volume_groups {
             for element_id in &group.elements {
                 if let Some(mesh_element) = self.elements.get(element_id) {
@@ -329,7 +345,7 @@ impl MeshAssembly {
             }
         }
 
-        debug!("Converted {} C3D8 elements", elements.len());
+        debug!("Converted {} volume elements (C3D8/C3D20/C3D4)", elements.len());
         elements
     }
 

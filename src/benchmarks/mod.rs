@@ -14,6 +14,8 @@ pub mod hertz_sphere_flat;
 pub mod hertz_sphere_sphere;
 pub mod contact_explicit;
 pub mod gravity;
+pub mod c3d20_uniaxial_tension;
+pub mod c3d4_uniaxial_tension;
 pub mod mesh_utils;
 pub mod plotting;
 

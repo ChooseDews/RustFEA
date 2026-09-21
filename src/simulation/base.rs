@@ -290,9 +290,9 @@ impl Simulation {
             .get_float("SOLVER_EXTRA_STIFFNESS")
             .unwrap_or(1e12);
         for (g_index, value) in specified_bc {
-            let mut v = global_stiffness_matrix[&(g_index, g_index)];
-            v += extra_stiffness;
-            global_stiffness_matrix.insert((g_index, g_index), v);
+            // Get existing diagonal entry, or use 0.0 if not yet assembled
+            let v = *global_stiffness_matrix.get(&(g_index, g_index)).unwrap_or(&0.0);
+            global_stiffness_matrix.insert((g_index, g_index), v + extra_stiffness);
             if value.abs() > 0.0 {
                 global_force[g_index] += value * extra_stiffness; // F = K*u so K_extra*u_extra = -F_extra
             }

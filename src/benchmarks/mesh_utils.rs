@@ -117,6 +117,209 @@ pub fn generate_block_mesh(
     }
 }
 
+/// Generate a rectangular block mesh with C3D20 (20-node quadratic hexahedral) elements
+/// Returns a MeshAssembly with node groups for each face
+/// 
+/// Note: C3D20 (serendipity) elements only have corner and mid-edge nodes,
+/// NOT face-center or body-center nodes. This generator only creates the 
+/// nodes that are actually used by the elements.
+pub fn generate_block_mesh_c3d20(
+    l_x: f64, l_y: f64, l_z: f64,
+    n_x: usize, n_y: usize, n_z: usize,
+) -> MeshAssembly {
+    // For C3D20 elements, we use a 2n+1 grid per direction for reference,
+    // but only create nodes at corner and mid-edge positions
+    let nn_x = 2 * n_x + 1;
+    let nn_y = 2 * n_y + 1;
+    let nn_z = 2 * n_z + 1;
+    
+    let dx = l_x / (2 * n_x) as f64;
+    let dy = l_y / (2 * n_y) as f64;
+    let dz = l_z / (2 * n_z) as f64;
+    
+    let mut nodes = HashMap::new();
+    let mut elements = HashMap::new();
+    let mut node_groups: HashMap<String, NodeGroup> = HashMap::new();
+    let mut element_groups: HashMap<String, ElementGroup> = HashMap::new();
+    
+    // Helper to compute grid index (for reference)
+    let grid_index = |i: usize, j: usize, k: usize| -> usize {
+        i + j * nn_x + k * nn_x * nn_y
+    };
+    
+    // First pass: collect all unique node grid positions used by C3D20 elements
+    let mut grid_positions = std::collections::BTreeSet::new();
+    
+    for k in 0..n_z {
+        for j in 0..n_y {
+            for i in 0..n_x {
+                let i0 = 2 * i;
+                let j0 = 2 * j;
+                let k0 = 2 * k;
+                
+                // Corner nodes
+                grid_positions.insert(grid_index(i0, j0, k0));
+                grid_positions.insert(grid_index(i0 + 2, j0, k0));
+                grid_positions.insert(grid_index(i0 + 2, j0 + 2, k0));
+                grid_positions.insert(grid_index(i0, j0 + 2, k0));
+                grid_positions.insert(grid_index(i0, j0, k0 + 2));
+                grid_positions.insert(grid_index(i0 + 2, j0, k0 + 2));
+                grid_positions.insert(grid_index(i0 + 2, j0 + 2, k0 + 2));
+                grid_positions.insert(grid_index(i0, j0 + 2, k0 + 2));
+                
+                // Mid-edge nodes on bottom and top faces
+                grid_positions.insert(grid_index(i0 + 1, j0, k0));
+                grid_positions.insert(grid_index(i0 + 2, j0 + 1, k0));
+                grid_positions.insert(grid_index(i0 + 1, j0 + 2, k0));
+                grid_positions.insert(grid_index(i0, j0 + 1, k0));
+                grid_positions.insert(grid_index(i0 + 1, j0, k0 + 2));
+                grid_positions.insert(grid_index(i0 + 2, j0 + 1, k0 + 2));
+                grid_positions.insert(grid_index(i0 + 1, j0 + 2, k0 + 2));
+                grid_positions.insert(grid_index(i0, j0 + 1, k0 + 2));
+                
+                // Mid-edge nodes on vertical edges
+                grid_positions.insert(grid_index(i0, j0, k0 + 1));
+                grid_positions.insert(grid_index(i0 + 2, j0, k0 + 1));
+                grid_positions.insert(grid_index(i0 + 2, j0 + 2, k0 + 1));
+                grid_positions.insert(grid_index(i0, j0 + 2, k0 + 1));
+            }
+        }
+    }
+    
+    // Create mapping from grid index to consecutive node ID
+    let mut grid_to_node: HashMap<usize, usize> = HashMap::new();
+    let mut node_id = 0;
+    for &grid_idx in &grid_positions {
+        grid_to_node.insert(grid_idx, node_id);
+        node_id += 1;
+    }
+    
+    // Create nodes with consecutive IDs
+    let mut x_min_nodes = Vec::new();
+    let mut x_max_nodes = Vec::new();
+    let mut y_min_nodes = Vec::new();
+    let mut y_max_nodes = Vec::new();
+    let mut z_min_nodes = Vec::new();
+    let mut z_max_nodes = Vec::new();
+    
+    for &grid_idx in &grid_positions {
+        let node_id = grid_to_node[&grid_idx];
+        
+        // Compute coordinates from grid index
+        let i = grid_idx % nn_x;
+        let j = (grid_idx / nn_x) % nn_y;
+        let k = grid_idx / (nn_x * nn_y);
+        
+        let x = i as f64 * dx;
+        let y = j as f64 * dy;
+        let z = k as f64 * dz;
+        
+        nodes.insert(node_id, MeshNode {
+            coordinates: vec![x, y, z],
+            id: node_id,
+        });
+        
+        // Categorize by face
+        if x.abs() < 1e-10 { x_min_nodes.push(node_id); }
+        if (x - l_x).abs() < 1e-10 { x_max_nodes.push(node_id); }
+        if y.abs() < 1e-10 { y_min_nodes.push(node_id); }
+        if (y - l_y).abs() < 1e-10 { y_max_nodes.push(node_id); }
+        if z.abs() < 1e-10 { z_min_nodes.push(node_id); }
+        if (z - l_z).abs() < 1e-10 { z_max_nodes.push(node_id); }
+    }
+    
+    // Generate C3D20 elements with remapped node IDs
+    let mut elem_id = 0;
+    let mut all_elements = Vec::new();
+    
+    for k in 0..n_z {
+        for j in 0..n_y {
+            for i in 0..n_x {
+                let i0 = 2 * i;
+                let j0 = 2 * j;
+                let k0 = 2 * k;
+                
+                // Map grid indices to consecutive node IDs
+                let n0 = grid_to_node[&grid_index(i0, j0, k0)];
+                let n1 = grid_to_node[&grid_index(i0 + 2, j0, k0)];
+                let n2 = grid_to_node[&grid_index(i0 + 2, j0 + 2, k0)];
+                let n3 = grid_to_node[&grid_index(i0, j0 + 2, k0)];
+                let n4 = grid_to_node[&grid_index(i0, j0, k0 + 2)];
+                let n5 = grid_to_node[&grid_index(i0 + 2, j0, k0 + 2)];
+                let n6 = grid_to_node[&grid_index(i0 + 2, j0 + 2, k0 + 2)];
+                let n7 = grid_to_node[&grid_index(i0, j0 + 2, k0 + 2)];
+                
+                let n8 = grid_to_node[&grid_index(i0 + 1, j0, k0)];
+                let n9 = grid_to_node[&grid_index(i0 + 2, j0 + 1, k0)];
+                let n10 = grid_to_node[&grid_index(i0 + 1, j0 + 2, k0)];
+                let n11 = grid_to_node[&grid_index(i0, j0 + 1, k0)];
+                let n12 = grid_to_node[&grid_index(i0 + 1, j0, k0 + 2)];
+                let n13 = grid_to_node[&grid_index(i0 + 2, j0 + 1, k0 + 2)];
+                let n14 = grid_to_node[&grid_index(i0 + 1, j0 + 2, k0 + 2)];
+                let n15 = grid_to_node[&grid_index(i0, j0 + 1, k0 + 2)];
+                
+                let n16 = grid_to_node[&grid_index(i0, j0, k0 + 1)];
+                let n17 = grid_to_node[&grid_index(i0 + 2, j0, k0 + 1)];
+                let n18 = grid_to_node[&grid_index(i0 + 2, j0 + 2, k0 + 1)];
+                let n19 = grid_to_node[&grid_index(i0, j0 + 2, k0 + 1)];
+                
+                elements.insert(elem_id, MeshElement {
+                    connectivity: vec![
+                        n0, n1, n2, n3, n4, n5, n6, n7,
+                        n8, n9, n10, n11, n12, n13, n14, n15,
+                        n16, n17, n18, n19
+                    ],
+                    name: "block_body".to_string(),
+                    el_type: "C3D20".to_string(),
+                    id: elem_id,
+                });
+                
+                all_elements.push(elem_id);
+                elem_id += 1;
+            }
+        }
+    }
+    
+    // Sort node groups for consistent ordering
+    x_min_nodes.sort();
+    x_max_nodes.sort();
+    y_min_nodes.sort();
+    y_max_nodes.sort();
+    z_min_nodes.sort();
+    z_max_nodes.sort();
+    
+    node_groups.insert("x_min".to_string(), NodeGroup { nodes: x_min_nodes.clone(), name: "x_min".to_string() });
+    node_groups.insert("x_max".to_string(), NodeGroup { nodes: x_max_nodes.clone(), name: "x_max".to_string() });
+    node_groups.insert("y_min".to_string(), NodeGroup { nodes: y_min_nodes.clone(), name: "y_min".to_string() });
+    node_groups.insert("y_max".to_string(), NodeGroup { nodes: y_max_nodes.clone(), name: "y_max".to_string() });
+    node_groups.insert("z_min".to_string(), NodeGroup { nodes: z_min_nodes.clone(), name: "z_min".to_string() });
+    node_groups.insert("z_max".to_string(), NodeGroup { nodes: z_max_nodes.clone(), name: "z_max".to_string() });
+    
+    // Create element group
+    element_groups.insert("block_body".to_string(), ElementGroup {
+        elements: all_elements.clone(),
+        name: "block_body".to_string(),
+        el_type: "C3D20".to_string(),
+    });
+    
+    // Create body
+    let all_nodes: Vec<usize> = nodes.keys().cloned().collect();
+    let body = Body {
+        elements: all_elements,
+        nodes: all_nodes,
+        name: "block_body".to_string(),
+    };
+    
+    MeshAssembly {
+        nodes,
+        elements,
+        element_groups,
+        node_groups,
+        bodies: vec![body],
+        name: "block_mesh_c3d20".to_string(),
+    }
+}
+
 /// Generate a cylindrical mesh (for torsion shaft)
 /// Axis aligned with Z direction, centered at origin
 pub fn generate_cylinder_mesh(
