@@ -1,8 +1,7 @@
 use log::{debug, warn};
 use nalgebra::DVector;
-use rayon::iter::IntoParallelRefIterator;
-use std::sync::{mpsc, Arc};
-use std::thread;
+use rayon::prelude::*;
+use std::sync::Arc;
 
 use super::Simulation;
 
@@ -27,45 +26,34 @@ impl Simulation {
 
     pub fn compute_force_vector_threaded(&mut self, displacement: &DVector<f64>) -> DVector<f64> {
         let active_ids = self.active_elements();
-        let elements_count = active_ids.len();
         let elements = Arc::new(std::mem::take(&mut self.elements));
-        let mut handles = Vec::new();
-        let chunk_size = (active_ids.len() + self.worker_count - 1) / self.worker_count;
-        let chunks = self
-            .active_elements()
-            .chunks(chunk_size)
-            .map(|c| c.to_vec())
-            .collect::<Vec<_>>();
         let dofs = self.dofs;
-        let displacement = Arc::new(displacement.clone());
         let n_dofs = self.nodes.len() * dofs;
 
-        for chunk in chunks {
-            let elements = Arc::clone(&elements);
-            let mut force_vector = DVector::zeros(n_dofs);
-            let displacement = Arc::clone(&displacement);
-            let handle = thread::spawn(move || {
-                for &id in &chunk {
-                    let element = &elements[&id];
-                    let connectivity = element.get_connectivity();
-                    let f = element.compute_force(&displacement);
-                    for (i, &node_id) in connectivity.iter().enumerate() {
-                        for dof in 0..dofs {
-                            force_vector[node_id * dofs + dof] += f[i * dofs + dof];
-                        }
+        // Use rayon parallel iterator with map-reduce pattern
+        let force_vector = active_ids
+            .par_iter()
+            .map(|&id| {
+                let element = &elements[&id];
+                let connectivity = element.get_connectivity();
+                let f = element.compute_force(displacement);
+                
+                // Create a sparse contribution for this element
+                let mut local_force = DVector::zeros(n_dofs);
+                for (i, &node_id) in connectivity.iter().enumerate() {
+                    for dof in 0..dofs {
+                        local_force[node_id * dofs + dof] += f[i * dofs + dof];
                     }
                 }
-                force_vector
-            });
-            handles.push(handle);
-        }
-        let force_vector = handles
-            .into_iter()
-            .map(|handle| handle.join().unwrap())
-            .fold(DVector::zeros(n_dofs), |mut acc, result| {
-                acc += result;
-                acc
-            });
+                local_force
+            })
+            .reduce(
+                || DVector::zeros(n_dofs),
+                |mut acc, local| {
+                    acc += local;
+                    acc
+                },
+            );
 
         self.elements = Arc::try_unwrap(elements).ok().unwrap();
         force_vector

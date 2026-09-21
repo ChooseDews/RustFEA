@@ -5,7 +5,7 @@ use crate::io::matrix_writer::{write_hashmap_sparse_matrix, write_vector};
 use crate::io::vtk_writer::write_vtk;
 use crate::mesh::MeshAssembly;
 use crate::node::Node;
-use crate::solver::{direct_choslky, direct_solve};
+use crate::solver::direct_solve;
 use crate::utilities::{check_for_nans, print_max_displacement, safe_component_div, Keywords};
 use log::{debug, error, info, trace, warn};
 use nalgebra::{geometry, DMatrix, DVector};
@@ -18,8 +18,6 @@ use std::path::Path;
 use std::sync::atomic::{fence, Ordering};
 use std::sync::{mpsc, Arc};
 use std::thread;
-
-// Get worker count from env var or use default of 8
 
 pub enum AssemblyOutputType {
     SymmetricUpper,
@@ -480,6 +478,7 @@ impl Simulation {
         self.one_time_init();
         match method.as_str() {
             "direct" => self.solve_direct(),
+            "faer" => self.solve_faer(),
             "explicit" => self.solve_explicit(),
             _ => panic!("Invalid solve method"),
         };
@@ -488,17 +487,20 @@ impl Simulation {
     }
 
     pub fn solve_direct(&mut self) {
-        //direct solve
-        info!("Starting simulation solve process");
+        info!("Starting simulation solve process (faer)");
         debug!("Assembling system");
-        let (mut global_stiffness_matrix, mut global_force) = self.assemble(AssemblyOutputType::SymmetricFull);
+        let (global_stiffness_matrix, global_force) = self.assemble(AssemblyOutputType::SymmetricFull);
         info!("Solving system");
-        let u = direct_solve(&self, &global_stiffness_matrix, &global_force);
+        let u = direct_solve(&global_stiffness_matrix, &global_force);
         info!("Performing post-solve computations");
         //populate node displacements
         for (node_id, node) in self.nodes_mut().iter_mut().enumerate() {
             node.set_displacement(u[node_id * 3], u[node_id * 3 + 1], u[node_id * 3 + 2])
         }
         self.compute_result_fields();
+    }
+
+    pub fn solve_faer(&mut self) {
+        self.solve_direct();
     }
 }

@@ -1,6 +1,3 @@
-// Benchmark runner for FEA accuracy validation
-// Runs a suite of analytical benchmarks and compares FEA results to exact solutions
-
 use rust_fea::benchmarks::{
     BenchmarkResult, BenchmarkSuite,
     uniaxial_tension, pure_shear, hydrostatic_compression,
@@ -126,7 +123,25 @@ fn generate_markdown_report(results: &[BenchmarkResult]) -> String {
     let mut report = String::new();
     
     report.push_str("# FEA Benchmark Report\n\n");
-    report.push_str(&format!("**Generated:** {}\n\n", chrono::Local::now().format("%Y-%m-%d %H:%M:%S")));
+    
+    // Use std::time instead of chrono
+    let now = std::time::SystemTime::now();
+    let datetime = now.duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+    // Simple date formatting: just show Unix timestamp or a basic format
+    let secs_per_day = 86400u64;
+    let secs_per_hour = 3600u64;
+    let secs_per_min = 60u64;
+    let days_since_epoch = datetime / secs_per_day;
+    let time_of_day = datetime % secs_per_day;
+    let hours = time_of_day / secs_per_hour;
+    let minutes = (time_of_day % secs_per_hour) / secs_per_min;
+    let seconds = time_of_day % secs_per_min;
+    // Approximate year/month/day calculation (not accounting for leap years perfectly, but close enough for a report)
+    let years = 1970 + (days_since_epoch / 365);
+    let day_of_year = days_since_epoch % 365;
+    let month = day_of_year / 30 + 1;
+    let day = day_of_year % 30 + 1;
+    report.push_str(&format!("**Generated:** {}-{:02}-{:02} {:02}:{:02}:{:02} UTC\n\n", years, month, day, hours, minutes, seconds));
     
     // Quick summary table
     report.push_str("## Summary\n\n");

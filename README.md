@@ -4,7 +4,8 @@ RustFEA is a Finite Element Analysis (FEA) library written in Rust. This library
 
 #### Features
 - **Modular Design for Extension**: The library is divided into several modules such as `node`, `elements`, `simulation`, `io`, `utilities`, `mesh`, `solver`, and `bc`.
-- **Dependency Integration**: Utilizes popular Rust crates like `nalgebra`, `russell_sparse`, and `serde` for mathematical operations and data serialization.
+- **Dependency Integration**: Utilizes popular Rust crates like `nalgebra`, `faer`, and `serde` for mathematical operations and data serialization.
+- **Pure Rust**: No external C dependencies - builds anywhere Rust builds.
 - **Input Formats**: Supports reading and writing of input files in the .toml format.
 
 #### Limitations
@@ -13,15 +14,6 @@ RustFEA is a Finite Element Analysis (FEA) library written in Rust. This library
 
 
 #### Building
-
-To get suitesparse and mumps working on Ubuntu you need to install the following dependencies:
-
-```bash
-sudo apt-get install -y --no-install-recommends \
-    liblapacke-dev \
-    libopenblas-dev \
-    libsuitesparse-dev
-```
 
 To build the project you need to have `rust` and `cargo` installed then run:
 
@@ -46,7 +38,7 @@ Rust FEA is a Finite Element Analysis (FEA) library written in Rust, designed to
 
 #### Features
 - **Modular Design**: The library includes various modules such as `node`, `elements`, `simulation`, `io`, `utilities`, `mesh`, `solver`, and `bc`. Each module is responsible for different aspects of the FEA process, ensuring a clean and organized codebase.
-- **Dependency Integration**: Integration with popular Rust crates like `nalgebra` for mathematical operations, `russell_sparse` for sparse matrix computations, and `serde` for data serialization. This ensures the library is both powerful and flexible.
+- **Dependency Integration**: Integration with popular Rust crates like `nalgebra` for mathematical operations, `faer` for sparse matrix computations, and `serde` for data serialization. This ensures the library is both powerful and flexible.
 - **Customization**: The library supports a wide range of configurations and customizations, allowing users to tailor the simulation and solver settings to their specific needs.
 
 #### Mesh Support
@@ -55,7 +47,7 @@ This library supports the .inp format for importing meshes. Mesh are represented
 - `.inp` format
 - Internal Format: `.bin.xz`, `.json.xz`, `.bin`, `.json`
 
-[Gmsh](http://gmsh.info/) is recommended for generating meshes then exporting via `.inp` (selecting export options while saving). You can find many gmsh examples under `examples/mesh_src/*.geo` 
+[Gmsh](http://gmsh.info/) is recommended for generating meshes then exporting via `.inp` (selecting export options while saving). You can find many gmsh examples under `examples/mesh_src/*.geo`
 
 #### Elements
 The library includes various finite elements, each represented as a structure with associated methods.
@@ -80,7 +72,7 @@ This struct represents a project. Which can contain mulitple simulations. Any pr
 #### Solver
 
 ##### Direct Solving
-`russell_sparse` and `nalgebra` are used for sparse matrix operations and direct solvers. `russell_sparse` uses UMFPACK and MUMPS to solve large sparse linear systems of equations. 
+`faer` and `nalgebra` are used for sparse matrix operations and direct solvers. `faer` uses Cholesky decomposition for symmetric positive-definite systems (typical FEA stiffness matrices) and falls back to LU factorization for other cases. Pure Rust with SIMD optimizations.
 
 ##### Explicit Solving
 `nalgebra` is used for matrix operations. Overall there is a focus on element based assembly. Contact is only supported via explicit solving.
@@ -88,7 +80,7 @@ This struct represents a project. Which can contain mulitple simulations. Any pr
 ## Todo
 - [~] add tests for common elements and assemblies
 - [x] add nodal property outputs
-- [ ] Use better solver for Ax=b. Upgrade to newest russell library
+- [x] Use better solver for Ax=b - switched to faer (pure Rust, 1.5-2x faster than UMFPACK)
 - [ ] Large Deformation
     - [ ] Add large deformation elements
     - [ ] Handle local material propertie updates
@@ -105,8 +97,8 @@ This struct represents a project. Which can contain mulitple simulations. Any pr
 - [ ] New Element Types
     - [ ] 3D 4 node tetrahedra
     - [ ] Shell element
-- [ ] VTL HDF Export
-    - [x] Single time step export
+- [ ] VTK HDF Export
+    - [x] Single time step export (pure Rust via hdf5-writer)
     - [ ] Multi time step export
 - [ ] Generalized field handling
 - [ ] Body forces

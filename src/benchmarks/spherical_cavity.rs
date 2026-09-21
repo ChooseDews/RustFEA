@@ -242,7 +242,7 @@ fn run_block_validation(
     }).collect();
     
     // Done with immutable borrow
-    drop(nodes);
+    let _ = nodes;
     
     // Compute field data for visualization
     let mut disp_mag = vec![0.0; n_nodes];

@@ -13,12 +13,12 @@ pub struct FourNodeElement {
     connectivity: Vec<usize>,
     material: Material,
     #[serde(skip, default = "default_deformation_gradient")]
-    deformation_gradient: DMatrix<f64>, // 2x2 for 2D elements
+    deformation_gradient: DMatrix<f64>,
     #[serde(skip, default = "default_zero_matrix")]
     stiffness: DMatrix<f64>,
     #[serde(skip, default = "default_zero_matrix")]
     mass: DMatrix<f64>,
-    #[serde(skip, default = "Vec::new")]//lumped mass matrix
+    #[serde(skip, default = "Vec::new")]
     lumped_mass: Vec<f64>,
     active: bool,
 }
@@ -63,11 +63,10 @@ impl FourNodeElement {
         (x_pos[0] + x_pos[1] + x_pos[2] + x_pos[3]) / 4.0  
     }
 
-    fn get_gauss_points() -> Vec<(f64, f64, f64)> { // xi, eta, weight
+    fn get_gauss_points() -> Vec<(f64, f64, f64)> {
         trace!("Generating Gauss points for four-node element");
         let mut gauss_points: Vec<(f64, f64, f64)> = Vec::new();
         let a = 1.0 / 3.0_f64.sqrt();
-        // Gauss points for 2x2 quadrature in a plane
         gauss_points.push((-a, -a, 1.0));
         gauss_points.push((a, -a, 1.0));
         gauss_points.push((a, a, 1.0));
@@ -133,7 +132,6 @@ impl FourNodeElement {
 
     
     fn get_shape_functions(&self, xi: f64, eta: f64, _zeta: f64) -> DVector<f64> {
-        // Shape functions for 2D bilinear quadrilateral element
         let mut shape_functions: DVector<f64> = DVector::<f64>::zeros(4);
         shape_functions[0] = 0.25 * (1.0 - xi) * (1.0 - eta);
         shape_functions[1] = 0.25 * (1.0 + xi) * (1.0 - eta);
@@ -184,7 +182,6 @@ impl BaseElement for FourNodeElement {
     }
 
     fn get_x(&self, simulation: &Simulation) -> DMatrix<f64> {
-        // Compute X matrix in 3D coordinates for each node
         let mut x = DMatrix::<f64>::zeros(3, 4);
         for (i, node_id) in self.connectivity.iter().enumerate() {
             let node = simulation.get_node(*node_id).unwrap();
@@ -196,8 +193,7 @@ impl BaseElement for FourNodeElement {
     }
 
     fn get_u(&self, simulation: &Simulation) -> DVector<f64> {
-        // Compute displacement vector u in 3D (though we're using 2D calculations)
-        let mut u = DVector::<f64>::zeros(12); // 4 nodes * 3 DOF per node (in 3D)
+        let mut u = DVector::<f64>::zeros(12);
         for (i, node_id) in self.connectivity.iter().enumerate() {
             let node = simulation.get_node(*node_id).unwrap();
             u[3 * i] = node.displacement[0];
@@ -208,7 +204,6 @@ impl BaseElement for FourNodeElement {
     }
 
     fn get_shape_derivatives(&self, xi: f64, eta: f64, _zeta: f64) -> DMatrix<f64> {
-        // Return 2x4 matrix of shape function derivatives (for plane elements)
         let matrix_data = [[-0.25 * (1.0 - eta), -0.25 * (1.0 - xi)],
             [0.25 * (1.0 - eta), -0.25 * (1.0 + xi)],
             [0.25 * (1.0 + eta), 0.25 * (1.0 + xi)],
@@ -219,8 +214,8 @@ impl BaseElement for FourNodeElement {
     fn get_b(&self, xi: f64, eta: f64, _zeta: f64, simulation: &Simulation) -> DMatrix<f64> {
         unimplemented!()
     }
-    fn get_stiffness(&self) -> DMatrix<f64> {
-        unimplemented!()
+    fn get_stiffness(&self) -> &DMatrix<f64> {
+        &self.stiffness
     }
     fn compute_mass(&self, simulation: &Simulation) -> DMatrix<f64> {
         unimplemented!()

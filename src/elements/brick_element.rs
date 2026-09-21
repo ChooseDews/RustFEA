@@ -1,4 +1,3 @@
-// src/elements/brick_element.rs
 use crate::{simulation::Simulation, utilities::check_for_nans};
 use super::base_element::{BaseElement, Material, ElementFields, ElementType};
 use nalgebra as na;
@@ -14,12 +13,14 @@ pub struct BrickElement {
     connectivity: Vec<usize>,
     material: Material,
     #[serde(skip, default = "default_deformation_gradient")]
-    deformation_gradient: DMatrix<f64>, // ... other properties specific to the 8-node brick element
+    deformation_gradient: DMatrix<f64>,
     #[serde(skip, default = "empty_element_matrix")]
     stiffness: SMatrix<f64, 24, 24>,
     #[serde(skip, default = "default_zero_matrix")]
+    stiffness_dmatrix: DMatrix<f64>,
+    #[serde(skip, default = "default_zero_matrix")]
     mass: DMatrix<f64>,
-    #[serde(skip, default = "Vec::new")]//lumped mass matrix
+    #[serde(skip, default = "Vec::new")]
     lumped_mass: Vec<f64>,
     active: bool,
     #[serde(skip, default = "nodal_positions")]
@@ -61,6 +62,7 @@ impl BrickElement {
             material,
             deformation_gradient: DMatrix::<f64>::identity(3, 3),
             stiffness: empty_element_matrix(),
+            stiffness_dmatrix: default_zero_matrix(),
             mass: default_zero_matrix(),
             lumped_mass: Vec::new(),
             active: true,
@@ -69,7 +71,7 @@ impl BrickElement {
         }
     }
 
-    fn get_x_local(&self, simulation: &Simulation) -> &SMatrix<f64, 8, 3> { //get global position of each node
+    fn get_x_local(&self, simulation: &Simulation) -> &SMatrix<f64, 8, 3> {
         self.nodal_positions.as_ref().expect("Nodal positions not initialized")
     }
 
@@ -86,7 +88,7 @@ impl BrickElement {
 
 
     fn get_gauss_points() -> &'static [(f64, f64, f64, f64)] {
-        static A: f64 = 0.5773502691896257; // 1/sqrt(3)
+        static A: f64 = 0.5773502691896257;
         static GAUSS_POINTS: [(f64, f64, f64, f64); 8] = [
             (-A, -A, -A, 1.0),
             (A, -A, -A, 1.0),
@@ -139,22 +141,18 @@ impl BrickElement {
         let mut b = SMatrix::<f64, 6, 24>::zeros();
         let j_inv = j.try_inverse().unwrap();
         let mut n_i = [0.0; 3];
-        //compute B_i for each node [6x3] 6 strains and 3 displacements per node
         for i in 0..8 {
-            //Compute N_I for each node N_I,M = (delta_N_I/delta_local_J)*J_inv(j,M)
             for m in 0..3 {
                  n_i[m] =  j_inv.row(m).dot(&d_n.row(i));
             }
-            //new method to handle B_I
-            // Strain vector: [ε_xx, ε_yy, ε_zz, γ_xy, γ_yz, γ_xz]
-            // where γ_xy = ∂u/∂y + ∂v/∂x, γ_yz = ∂v/∂z + ∂w/∂y, γ_xz = ∂u/∂z + ∂w/∂x
+            // B_i: Strain = [ε_xx, ε_yy, ε_zz, γ_xy, γ_yz, γ_xz]
             let b_i = SMatrix::<f64, 6, 3>::new(
-                n_i[0], 0.0, 0.0,      // ε_xx = ∂u/∂x
-                0.0, n_i[1], 0.0,      // ε_yy = ∂v/∂y  
-                0.0, 0.0, n_i[2],      // ε_zz = ∂w/∂z
-                n_i[1], n_i[0], 0.0,    // γ_xy = ∂u/∂y + ∂v/∂x
-                0.0, n_i[2], n_i[1],   // γ_yz = ∂v/∂z + ∂w/∂y
-                n_i[2], 0.0, n_i[0]    // γ_xz = ∂u/∂z + ∂w/∂x
+                n_i[0], 0.0, 0.0,
+                0.0, n_i[1], 0.0,
+                0.0, 0.0, n_i[2],
+                n_i[1], n_i[0], 0.0,
+                0.0, n_i[2], n_i[1],
+                n_i[2], 0.0, n_i[0]
             );
 
             for j in 0..6 {
@@ -166,7 +164,7 @@ impl BrickElement {
         b
     }
 
-    /// Compute B matrix for volumetric (normal) strains only [rows 0,1,2]
+    /// B matrix for normal strains only [rows 0,1,2]
     fn compute_b_volumetric(&self, x: &SMatrix<f64, 8, 3>, j: &Matrix3<f64>, d_n: &SMatrix<f64, 8, 3>) -> SMatrix<f64, 3, 24> {
         let mut b = SMatrix::<f64, 3, 24>::zeros();
         let j_inv = j.try_inverse().unwrap();
@@ -176,15 +174,14 @@ impl BrickElement {
             for m in 0..3 {
                 n_i[m] = j_inv.row(m).dot(&d_n.row(i));
             }
-            // Only normal strains: ε_xx, ε_yy, ε_zz
-            b[(0, 3 * i + 0)] = n_i[0];  // ε_xx = ∂u/∂x
-            b[(1, 3 * i + 1)] = n_i[1];  // ε_yy = ∂v/∂y
-            b[(2, 3 * i + 2)] = n_i[2];  // ε_zz = ∂w/∂z
+            b[(0, 3 * i + 0)] = n_i[0];
+            b[(1, 3 * i + 1)] = n_i[1];
+            b[(2, 3 * i + 2)] = n_i[2];
         }
         b
     }
 
-    /// Compute B matrix for deviatoric (shear) strains only [rows 3,4,5]
+    /// B matrix for shear strains only [rows 3,4,5]
     fn compute_b_deviatoric(&self, x: &SMatrix<f64, 8, 3>, j: &Matrix3<f64>, d_n: &SMatrix<f64, 8, 3>) -> SMatrix<f64, 3, 24> {
         let mut b = SMatrix::<f64, 3, 24>::zeros();
         let j_inv = j.try_inverse().unwrap();
@@ -194,20 +191,18 @@ impl BrickElement {
             for m in 0..3 {
                 n_i[m] = j_inv.row(m).dot(&d_n.row(i));
             }
-            // Only shear strains: γ_xy, γ_yz, γ_xz
-            b[(0, 3 * i + 0)] = n_i[1];  // γ_xy term: ∂u/∂y
-            b[(0, 3 * i + 1)] = n_i[0];  // γ_xy term: ∂v/∂x
-            b[(1, 3 * i + 1)] = n_i[2];  // γ_yz term: ∂v/∂z
-            b[(1, 3 * i + 2)] = n_i[1];  // γ_yz term: ∂w/∂y
-            b[(2, 3 * i + 0)] = n_i[2];  // γ_xz term: ∂u/∂z
-            b[(2, 3 * i + 2)] = n_i[0];  // γ_xz term: ∂w/∂x
+            b[(0, 3 * i + 0)] = n_i[1];
+            b[(0, 3 * i + 1)] = n_i[0];
+            b[(1, 3 * i + 1)] = n_i[2];
+            b[(1, 3 * i + 2)] = n_i[1];
+            b[(2, 3 * i + 0)] = n_i[2];
+            b[(2, 3 * i + 2)] = n_i[0];
         }
         b
     }
 
-    /// Get single center point for reduced integration
     fn get_center_point() -> (f64, f64, f64, f64) {
-        (0.0, 0.0, 0.0, 8.0)  // weight = 8.0 for single point in [-1,1]^3
+        (0.0, 0.0, 0.0, 8.0)
     }
 
 
@@ -218,7 +213,6 @@ impl BrickElement {
 
 
     fn get_shape_derivatives_local(&self, xi: f64, eta: f64, zeta: f64) -> SMatrix<f64, 8, 3> {
-        // Pre-compute common terms
         let xi_m = xi - 1.0;
         let xi_p = xi + 1.0;
         let eta_m = eta - 1.0;
@@ -252,7 +246,6 @@ impl BrickElement {
     }
 
     fn get_shape_functions(&self, xi: f64, eta: f64, zeta: f64) -> SVector<f64, 8> {
-        // Pre-compute common terms
         let xi_m = 1.0 - xi;
         let xi_p = 1.0 + xi;
         let eta_m = 1.0 - eta;
@@ -315,7 +308,7 @@ impl BaseElement for BrickElement {
         global_position
     }
 
-    fn get_x(&self, simulation: &Simulation) -> DMatrix<f64> { //get global position of each node
+    fn get_x(&self, simulation: &Simulation) -> DMatrix<f64> {
         let mut x_global = DMatrix::<f64>::zeros(3, 8);
         for (i, node_id) in self.connectivity.iter().enumerate() {
             let node = simulation.get_node(*node_id).unwrap();
@@ -338,7 +331,6 @@ impl BaseElement for BrickElement {
     }
 
     fn get_shape_derivatives(&self, xi: f64, eta: f64, zeta: f64) -> DMatrix<f64> {
-        // Pre-compute common terms
         let xi_m = xi - 1.0;
         let xi_p = xi + 1.0;
         let eta_m = eta - 1.0;
@@ -384,7 +376,6 @@ impl BaseElement for BrickElement {
     fn compute_stiffness(&mut self, simulation: &Simulation){
         trace!("Computing stiffness matrix for brick element");
         let mut k = empty_element_matrix();
-        // Use proper 2x2x2 Gauss quadrature (NOT corner points!)
         let gauss_points = BrickElement::get_gauss_points();
         let x = self.get_x_local(simulation);
         let c = self.material.get_3d_matrix();
@@ -396,17 +387,12 @@ impl BaseElement for BrickElement {
             k += b.transpose() * c * b * j.determinant() * weight;
         }
         self.stiffness = k;
+        self.stiffness_dmatrix = DMatrix::from_fn(24, 24, |i, j| self.stiffness[(i, j)]);
     }
 
 
-    fn get_stiffness(&self) -> DMatrix<f64> {
-        let mut k =  DMatrix::zeros(24, 24);
-        for i in 0..24 {
-            for j in 0..24 {
-                k[(i, j)] = self.stiffness[(i, j)];
-            }
-        }
-        k
+    fn get_stiffness(&self) -> &DMatrix<f64> {
+        &self.stiffness_dmatrix
     }
 
 
@@ -426,7 +412,6 @@ impl BaseElement for BrickElement {
     }
 
     fn set_lumped_mass(&mut self, mass: &DMatrix<f64>) -> f64 {
-        //sum rows and save to lumped_mass
         let mut total_mass = 0.0;
         for i in 0..8 {
             let row_sum: f64 = mass.row(i).sum();

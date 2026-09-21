@@ -3,34 +3,30 @@ name = "rust_fea"
 version = "0.1.0"
 edition = "2021"
 
-
 [dependencies]
-clap = { version = "4.3.21", features = ["derive"] }
+clap = { version = "4.5", features = ["derive"] }
 nalgebra = { version = "0.35.0", features = ["serde-serialize"] }
 nalgebra-sparse = "0.12"
-russell_sparse = "2.8.1"
-russell_lab = "2.8.3"
+faer = { version = "0.24", features = ["sparse-linalg"] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 xz2 = "0.1"
-zstd = "0.13"
+zstd = "0.14"
 typetag = "0.2"
 bincode = "1.3"
 log = "0.4"
 env_logger = "0.11"
-toml = "0.8.19"
-criterion = "0.5.1"
-hdf5 = "0.8.0"
-hdf5-sys = { version = "0.8.1", features = ["static"] }
-ndarray = "0.16.1"
-rayon = "1.10.0"
-indicatif = "0.17.8"
-chrono = "0.4"
+toml = "1.0"
+rayon = "1.10"
+indicatif = "0.18"
+hdf5-writer = "0.9.1"
 
+[dev-dependencies]
+criterion = "0.5"
 
 [lints.rust]
 unused = "allow"
-non_snake_case = "allow" #nice for fea vars
+non_snake_case = "allow"
 
 [profile.release]
 opt-level = 3

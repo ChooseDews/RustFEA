@@ -187,7 +187,7 @@ fn run_single_mesh(nx: usize, ny: usize, nz: usize, g: f64, export_vtk: bool, me
         .fold(0.0_f64, f64::max);
     
     // Done with immutable borrow of nodes
-    drop(nodes);
+    let _ = nodes;
     
     // Compute and store field data
     let mut vm_stress = vec![0.0; n_nodes];

@@ -152,7 +152,7 @@ pub trait BaseElement: Send + Sync {
     fn is_active(&self) -> bool {false}
     fn set_active(&mut self, active: bool){}
 
-    fn get_stiffness(&self) -> DMatrix<f64>;
+    fn get_stiffness(&self) -> &DMatrix<f64>;
     fn compute_stiffness(&mut self, simulation: &Simulation){}
 
 

@@ -135,12 +135,11 @@ impl Brick20Element {
         &COORDS
     }
 
-    /// 3x3x3 Gauss quadrature points for 20-node element
+    /// 3x3x3 Gauss quadrature (27 points)
     fn get_gauss_points() -> &'static [(f64, f64, f64, f64)] {
-        // 3x3x3 Gauss quadrature (27 points)
-        static GP: f64 = 0.7745966692414834; // sqrt(3/5)
-        static W1: f64 = 0.5555555555555556; // 5/9
-        static W2: f64 = 0.8888888888888889; // 8/9
+        static GP: f64 = 0.7745966692414834;
+        static W1: f64 = 0.5555555555555556;
+        static W2: f64 = 0.8888888888888889;
         
         static GAUSS_POINTS: [(f64, f64, f64, f64); 27] = [
             (-GP, -GP, -GP, W1 * W1 * W1),
@@ -176,20 +175,11 @@ impl Brick20Element {
         &GAUSS_POINTS
     }
 
-    /// Compute shape functions for 20-node serendipity element
-    /// 
-    /// For corner nodes (i = 0..7):
-    ///   N_i = (1/8)(1 + ξ_i*ξ)(1 + η_i*η)(1 + ζ_i*ζ)(ξ_i*ξ + η_i*η + ζ_i*ζ - 2)
-    /// 
-    /// For mid-edge nodes (i = 8..19):
-    ///   - Nodes 8,10,12,14 (ξ_i = 0): N_i = (1/4)(1 - ξ²)(1 + η_i*η)(1 + ζ_i*ζ)
-    ///   - Nodes 9,11,13,15 (η_i = 0): N_i = (1/4)(1 + ξ_i*ξ)(1 - η²)(1 + ζ_i*ζ)
-    ///   - Nodes 16,17,18,19 (ζ_i = 0): N_i = (1/4)(1 + ξ_i*ξ)(1 + η_i*η)(1 - ζ²)
+    /// 20-node serendipity shape functions
     fn get_shape_functions(&self, xi: f64, eta: f64, zeta: f64) -> DVector<f64> {
         let mut n = DVector::zeros(NUM_NODES);
         let node_coords = Self::get_node_coordinates();
         
-        // Precompute terms
         let xi2 = xi * xi;
         let eta2 = eta * eta;
         let zeta2 = zeta * zeta;
@@ -203,52 +193,37 @@ impl Brick20Element {
             n[i] = 0.125 * xi_term * eta_term * zeta_term * (xi_i * xi + eta_i * eta + zeta_i * zeta - 2.0);
         }
         
-        // Mid-edge nodes on bottom face (z = -1): 8, 9, 10, 11
-        // Node 8: between 0-1, at (0, -1, -1)
+        // Mid-edge nodes on bottom face (z = -1)
         n[8] = 0.25 * (1.0 - xi2) * (1.0 - eta) * (1.0 - zeta);
-        // Node 9: between 1-2, at (1, 0, -1)
         n[9] = 0.25 * (1.0 + xi) * (1.0 - eta2) * (1.0 - zeta);
-        // Node 10: between 2-3, at (0, 1, -1)
         n[10] = 0.25 * (1.0 - xi2) * (1.0 + eta) * (1.0 - zeta);
-        // Node 11: between 3-0, at (-1, 0, -1)
         n[11] = 0.25 * (1.0 - xi) * (1.0 - eta2) * (1.0 - zeta);
         
-        // Mid-edge nodes on top face (z = +1): 12, 13, 14, 15
-        // Node 12: between 4-5, at (0, -1, 1)
+        // Mid-edge nodes on top face (z = +1)
         n[12] = 0.25 * (1.0 - xi2) * (1.0 - eta) * (1.0 + zeta);
-        // Node 13: between 5-6, at (1, 0, 1)
         n[13] = 0.25 * (1.0 + xi) * (1.0 - eta2) * (1.0 + zeta);
-        // Node 14: between 6-7, at (0, 1, 1)
         n[14] = 0.25 * (1.0 - xi2) * (1.0 + eta) * (1.0 + zeta);
-        // Node 15: between 7-4, at (-1, 0, 1)
         n[15] = 0.25 * (1.0 - xi) * (1.0 - eta2) * (1.0 + zeta);
         
-        // Mid-edge nodes on vertical edges: 16, 17, 18, 19
-        // Node 16: between 0-4, at (-1, -1, 0)
+        // Mid-edge nodes on vertical edges
         n[16] = 0.25 * (1.0 - xi) * (1.0 - eta) * (1.0 - zeta2);
-        // Node 17: between 1-5, at (1, -1, 0)
         n[17] = 0.25 * (1.0 + xi) * (1.0 - eta) * (1.0 - zeta2);
-        // Node 18: between 2-6, at (1, 1, 0)
         n[18] = 0.25 * (1.0 + xi) * (1.0 + eta) * (1.0 - zeta2);
-        // Node 19: between 3-7, at (-1, 1, 0)
         n[19] = 0.25 * (1.0 - xi) * (1.0 + eta) * (1.0 - zeta2);
         
         n
     }
 
-    /// Compute shape function derivatives with respect to natural coordinates (ξ, η, ζ)
-    /// Returns a 20x3 matrix: [∂N_i/∂ξ, ∂N_i/∂η, ∂N_i/∂ζ]
+    /// Shape function derivatives w.r.t. natural coordinates (ξ, η, ζ). Returns 20x3 matrix.
     fn get_shape_derivatives_local(&self, xi: f64, eta: f64, zeta: f64) -> DMatrix<f64> {
         let mut dn = DMatrix::zeros(NUM_NODES, 3);
         let node_coords = Self::get_node_coordinates();
         
-        // Precompute terms
         let xi2 = xi * xi;
         let eta2 = eta * eta;
         let zeta2 = zeta * zeta;
         
         // Corner nodes (0-7)
-        // N_i = (1/8)(1 + ξ_i*ξ)(1 + η_i*η)(1 + ζ_i*ζ)(ξ_i*ξ + η_i*η + ζ_i*ζ - 2)
         for i in 0..8 {
             let (xi_i, eta_i, zeta_i) = node_coords[i];
             
@@ -257,77 +232,59 @@ impl Brick20Element {
             let c = 1.0 + zeta_i * zeta;
             let d = xi_i * xi + eta_i * eta + zeta_i * zeta - 2.0;
             
-            // ∂N_i/∂ξ = (1/8) * [ξ_i * b * c * d + a * b * c * ξ_i]
-            //         = (1/8) * ξ_i * b * c * (d + a)
-            //         = (1/8) * ξ_i * b * c * (2*ξ_i*ξ + η_i*η + ζ_i*ζ - 1)
+            // ∂N_i/∂ξ
             dn[(i, 0)] = 0.125 * xi_i * b * c * (2.0 * xi_i * xi + eta_i * eta + zeta_i * zeta - 1.0);
-            
-            // ∂N_i/∂η
             dn[(i, 1)] = 0.125 * eta_i * a * c * (xi_i * xi + 2.0 * eta_i * eta + zeta_i * zeta - 1.0);
-            
-            // ∂N_i/∂ζ
             dn[(i, 2)] = 0.125 * zeta_i * a * b * (xi_i * xi + eta_i * eta + 2.0 * zeta_i * zeta - 1.0);
         }
         
-        // Mid-edge nodes on bottom face (z = -1): 8, 9, 10, 11
-        // Node 8: N_8 = (1/4)(1 - ξ²)(1 - η)(1 - ζ)
+        // Mid-edge nodes on bottom face (z = -1)
         dn[(8, 0)] = -0.5 * xi * (1.0 - eta) * (1.0 - zeta);
         dn[(8, 1)] = -0.25 * (1.0 - xi2) * (1.0 - zeta);
         dn[(8, 2)] = -0.25 * (1.0 - xi2) * (1.0 - eta);
         
-        // Node 9: N_9 = (1/4)(1 + ξ)(1 - η²)(1 - ζ)
         dn[(9, 0)] = 0.25 * (1.0 - eta2) * (1.0 - zeta);
         dn[(9, 1)] = -0.5 * eta * (1.0 + xi) * (1.0 - zeta);
         dn[(9, 2)] = -0.25 * (1.0 + xi) * (1.0 - eta2);
         
-        // Node 10: N_10 = (1/4)(1 - ξ²)(1 + η)(1 - ζ)
         dn[(10, 0)] = -0.5 * xi * (1.0 + eta) * (1.0 - zeta);
         dn[(10, 1)] = 0.25 * (1.0 - xi2) * (1.0 - zeta);
         dn[(10, 2)] = -0.25 * (1.0 - xi2) * (1.0 + eta);
         
-        // Node 11: N_11 = (1/4)(1 - ξ)(1 - η²)(1 - ζ)
         dn[(11, 0)] = -0.25 * (1.0 - eta2) * (1.0 - zeta);
         dn[(11, 1)] = -0.5 * eta * (1.0 - xi) * (1.0 - zeta);
         dn[(11, 2)] = -0.25 * (1.0 - xi) * (1.0 - eta2);
         
-        // Mid-edge nodes on top face (z = +1): 12, 13, 14, 15
-        // Node 12: N_12 = (1/4)(1 - ξ²)(1 - η)(1 + ζ)
+        // Mid-edge nodes on top face (z = +1)
         dn[(12, 0)] = -0.5 * xi * (1.0 - eta) * (1.0 + zeta);
         dn[(12, 1)] = -0.25 * (1.0 - xi2) * (1.0 + zeta);
         dn[(12, 2)] = 0.25 * (1.0 - xi2) * (1.0 - eta);
         
-        // Node 13: N_13 = (1/4)(1 + ξ)(1 - η²)(1 + ζ)
         dn[(13, 0)] = 0.25 * (1.0 - eta2) * (1.0 + zeta);
         dn[(13, 1)] = -0.5 * eta * (1.0 + xi) * (1.0 + zeta);
         dn[(13, 2)] = 0.25 * (1.0 + xi) * (1.0 - eta2);
         
-        // Node 14: N_14 = (1/4)(1 - ξ²)(1 + η)(1 + ζ)
         dn[(14, 0)] = -0.5 * xi * (1.0 + eta) * (1.0 + zeta);
         dn[(14, 1)] = 0.25 * (1.0 - xi2) * (1.0 + zeta);
         dn[(14, 2)] = 0.25 * (1.0 - xi2) * (1.0 + eta);
         
-        // Node 15: N_15 = (1/4)(1 - ξ)(1 - η²)(1 + ζ)
         dn[(15, 0)] = -0.25 * (1.0 - eta2) * (1.0 + zeta);
         dn[(15, 1)] = -0.5 * eta * (1.0 - xi) * (1.0 + zeta);
         dn[(15, 2)] = 0.25 * (1.0 - xi) * (1.0 - eta2);
         
-        // Mid-edge nodes on vertical edges: 16, 17, 18, 19
-        // Node 16: N_16 = (1/4)(1 - ξ)(1 - η)(1 - ζ²)
+        // Mid-edge nodes on vertical edges
         dn[(16, 0)] = -0.25 * (1.0 - eta) * (1.0 - zeta2);
         dn[(16, 1)] = -0.25 * (1.0 - xi) * (1.0 - zeta2);
         dn[(16, 2)] = -0.5 * zeta * (1.0 - xi) * (1.0 - eta);
         
-        // Node 17: N_17 = (1/4)(1 + ξ)(1 - η)(1 - ζ²)
         dn[(17, 0)] = 0.25 * (1.0 - eta) * (1.0 - zeta2);
         dn[(17, 1)] = -0.25 * (1.0 + xi) * (1.0 - zeta2);
         dn[(17, 2)] = -0.5 * zeta * (1.0 + xi) * (1.0 - eta);
         
-        // Node 18: N_18 = (1/4)(1 + ξ)(1 + η)(1 - ζ²)
         dn[(18, 0)] = 0.25 * (1.0 + eta) * (1.0 - zeta2);
         dn[(18, 1)] = 0.25 * (1.0 + xi) * (1.0 - zeta2);
         dn[(18, 2)] = -0.5 * zeta * (1.0 + xi) * (1.0 + eta);
         
-        // Node 19: N_19 = (1/4)(1 - ξ)(1 + η)(1 - ζ²)
         dn[(19, 0)] = -0.25 * (1.0 + eta) * (1.0 - zeta2);
         dn[(19, 1)] = 0.25 * (1.0 - xi) * (1.0 - zeta2);
         dn[(19, 2)] = -0.5 * zeta * (1.0 - xi) * (1.0 + eta);
@@ -381,29 +338,25 @@ impl Brick20Element {
         )
     }
 
-    /// Compute strain-displacement matrix B (6 x 60)
-    /// B relates nodal displacements to strains: ε = B * u
+    /// Compute B matrix (6 x 60). B relates nodal displacements to strains: ε = B * u
     fn compute_b(&self, x: &DMatrix<f64>, j: &Matrix3<f64>, d_n: &DMatrix<f64>) -> DMatrix<f64> {
         let mut b = DMatrix::zeros(6, NUM_DOFS);
         let j_inv = j.try_inverse().expect("Jacobian matrix is singular");
         
         for i in 0..NUM_NODES {
-            // Compute global shape function derivatives: ∂N_i/∂x_j = (J^-1)_jk * ∂N_i/∂ξ_k
-            // d_n is 20x3 where row i is [∂N_i/∂ξ, ∂N_i/∂η, ∂N_i/∂ζ]
+            // Global shape function derivatives: ∂N_i/∂x_j = (J^-1)_jk * ∂N_i/∂ξ_k
             let dn_dxi = na::Vector3::new(d_n[(i, 0)], d_n[(i, 1)], d_n[(i, 2)]);
-            let n_i = j_inv * dn_dxi;  // [∂N_i/∂x, ∂N_i/∂y, ∂N_i/∂z]
+            let n_i = j_inv * dn_dxi;
             
-            // Build B_i block (6x3) for node i
-            // Strain vector: [ε_xx, ε_yy, ε_zz, γ_xy, γ_yz, γ_xz]
-            b[(0, 3 * i)] = n_i[0];     // ε_xx = ∂u/∂x
-            b[(1, 3 * i + 1)] = n_i[1]; // ε_yy = ∂v/∂y
-            b[(2, 3 * i + 2)] = n_i[2]; // ε_zz = ∂w/∂z
-            b[(3, 3 * i)] = n_i[1];     // γ_xy: ∂u/∂y
-            b[(3, 3 * i + 1)] = n_i[0]; // γ_xy: ∂v/∂x
-            b[(4, 3 * i + 1)] = n_i[2]; // γ_yz: ∂v/∂z
-            b[(4, 3 * i + 2)] = n_i[1]; // γ_yz: ∂w/∂y
-            b[(5, 3 * i)] = n_i[2];     // γ_xz: ∂u/∂z
-            b[(5, 3 * i + 2)] = n_i[0]; // γ_xz: ∂w/∂x
+            b[(0, 3 * i)] = n_i[0];
+            b[(1, 3 * i + 1)] = n_i[1];
+            b[(2, 3 * i + 2)] = n_i[2];
+            b[(3, 3 * i)] = n_i[1];
+            b[(3, 3 * i + 1)] = n_i[0];
+            b[(4, 3 * i + 1)] = n_i[2];
+            b[(4, 3 * i + 2)] = n_i[1];
+            b[(5, 3 * i)] = n_i[2];
+            b[(5, 3 * i + 2)] = n_i[0];
         }
         b
     }
@@ -501,8 +454,8 @@ impl BaseElement for Brick20Element {
         self.stiffness = k;
     }
 
-    fn get_stiffness(&self) -> DMatrix<f64> {
-        self.stiffness.clone()
+    fn get_stiffness(&self) -> &DMatrix<f64> {
+        &self.stiffness
     }
 
     fn compute_mass(&self, simulation: &Simulation) -> DMatrix<f64> {
