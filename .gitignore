@@ -20,6 +20,7 @@ temp/*
 *.data.*
 *.txt
 
+# OS and editor files
 .DS_Store
 **/.DS_Store
 .kiro/
