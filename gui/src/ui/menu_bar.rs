@@ -4,30 +4,31 @@ use eframe::egui;
 use crate::app::FeaApp;
 use crate::examples::{ExampleType, load_example, load_example_with_config, MeshResolution};
 use crate::project_io;
+use crate::state::ActivePanel;
 
 pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
     egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
         egui::menu::bar(ui, |ui| {
             // File menu
             ui.menu_button("File", |ui| {
-                if ui.button("📂 Open Project...").clicked() {
+                if ui.button("Open Project...").clicked() {
                     open_project_dialog(app);
                     ui.close_menu();
                 }
                 
-                if ui.button("💾 Save Project").clicked() {
+                if ui.button("Save Project").clicked() {
                     save_project(app);
                     ui.close_menu();
                 }
                 
-                if ui.button("💾 Save Project As...").clicked() {
+                if ui.button("Save Project As...").clicked() {
                     save_project_as(app);
                     ui.close_menu();
                 }
                 
                 ui.separator();
                 
-                if ui.button("📥 Import Mesh...").clicked() {
+                if ui.button("Import Mesh...").clicked() {
                     import_mesh_dialog(app);
                     ui.close_menu();
                 }
@@ -35,7 +36,7 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                 // Recent files submenu
                 #[cfg(not(target_arch = "wasm32"))]
                 if !app.state.ui_state.recent_files.files.is_empty() {
-                    ui.menu_button("📋 Recent Files", |ui| {
+                    ui.menu_button("Recent Files", |ui| {
                         let mut file_to_load: Option<std::path::PathBuf> = None;
                         
                         for recent in &app.state.ui_state.recent_files.files {
@@ -53,10 +54,10 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                 }
                 
                 // Load Example submenu
-                ui.menu_button("📚 Load Example", |ui| {
+                ui.menu_button("Load Example", |ui| {
                     // Cantilever Beam
                     ui.horizontal(|ui| {
-                        if ui.button("🔩 Cantilever Beam").clicked() {
+                        if ui.button("Cantilever Beam").clicked() {
                             app.state.ui_state.example_config.example_type = crate::examples::ExampleType::CantileverBeam;
                             app.state.ui_state.example_dialog_open = true;
                             ui.close_menu();
@@ -68,7 +69,7 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                     
                     // Torque Shaft
                     ui.horizontal(|ui| {
-                        if ui.button("🔧 Torque Shaft").clicked() {
+                        if ui.button("Torque Shaft").clicked() {
                             app.state.ui_state.example_config.example_type = crate::examples::ExampleType::TorqueShaft;
                             app.state.ui_state.example_dialog_open = true;
                             ui.close_menu();
@@ -80,7 +81,7 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                     
                     // Contact Blocks
                     ui.horizontal(|ui| {
-                        if ui.button("📦 Contact Blocks").clicked() {
+                        if ui.button("Contact Blocks").clicked() {
                             app.state.ui_state.example_config.example_type = crate::examples::ExampleType::ContactBlocks;
                             app.state.ui_state.example_dialog_open = true;
                             ui.close_menu();
@@ -94,13 +95,13 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                 
                 ui.separator();
                 
-                if ui.button("📤 Export Results...").clicked() {
+                if ui.button("Export Results...").clicked() {
                     export_results_dialog(app);
                     ui.close_menu();
                 }
                 
                 #[cfg(not(target_arch = "wasm32"))]
-                if ui.button("📷 Save Screenshot...").clicked() {
+                if ui.button("Save Screenshot...").clicked() {
                     app.state.ui_state.screenshot_dialog_open = true;
                     ui.close_menu();
                 }
@@ -108,33 +109,33 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                 ui.separator();
                 
                 #[cfg(not(target_arch = "wasm32"))]
-                if ui.button("🚪 Exit").clicked() {
+                if ui.button("Exit").clicked() {
                     std::process::exit(0);
                 }
             });
             
             // Edit menu
             ui.menu_button("Edit", |ui| {
-                if ui.button("⟲ Undo").on_hover_text("Coming soon").clicked() {
+                if ui.button("Undo").on_hover_text("Coming soon").clicked() {
                     app.state.status_message = "Undo not yet implemented".to_string();
                     ui.close_menu();
                 }
                 
-                if ui.button("⟳ Redo").on_hover_text("Coming soon").clicked() {
+                if ui.button("Redo").on_hover_text("Coming soon").clicked() {
                     app.state.status_message = "Redo not yet implemented".to_string();
                     ui.close_menu();
                 }
                 
                 ui.separator();
                 
-                if ui.button("⚙ Preferences...").clicked() {
+                if ui.button("Preferences...").clicked() {
                     app.state.ui_state.preferences_dialog_open = true;
                     ui.close_menu();
                 }
                 
                 ui.separator();
                 
-                if ui.button("🗑 Clear Workspace").on_hover_text("Remove all meshes and reset to default state").clicked() {
+                if ui.button("Clear Workspace").on_hover_text("Remove all meshes and reset to default state").clicked() {
                     // Reset state to default while preserving UI preferences
                     let display_settings = app.state.ui_state.display_settings.clone();
                     app.state = crate::state::AppState::new();
@@ -163,7 +164,7 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                 ui.separator();
                 
                 // Clipping plane
-                if ui.checkbox(&mut app.state.ui_state.clipping_plane.enabled, "✂ Clipping Plane")
+                if ui.checkbox(&mut app.state.ui_state.clipping_plane.enabled, "Clipping Plane")
                     .on_hover_text("Section view (C)")
                     .changed() 
                 {
@@ -172,7 +173,7 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                 
                 ui.separator();
                 
-                if ui.button("🎯 Reset Camera").on_hover_text("(Home)").clicked() {
+                if ui.button("Reset Camera").on_hover_text("(Home)").clicked() {
                     if let Some(mesh) = app.state.current_mesh() {
                         let bounds = mesh.bounds;
                         app.state.ui_state.camera.fit_to_bounds(&bounds);
@@ -182,29 +183,29 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                 
                 ui.separator();
                 
-                if ui.button("📐 Front View").on_hover_text("(1)").clicked() {
+                if ui.button("Front View").on_hover_text("(1)").clicked() {
                     app.state.ui_state.camera.set_front_view();
                     ui.close_menu();
                 }
                 
-                if ui.button("📐 Top View").on_hover_text("(3)").clicked() {
+                if ui.button("Top View").on_hover_text("(3)").clicked() {
                     app.state.ui_state.camera.set_top_view();
                     ui.close_menu();
                 }
                 
-                if ui.button("📐 Side View").on_hover_text("(2)").clicked() {
+                if ui.button("Side View").on_hover_text("(2)").clicked() {
                     app.state.ui_state.camera.set_side_view();
                     ui.close_menu();
                 }
                 
-                if ui.button("📐 Isometric").on_hover_text("(0)").clicked() {
+                if ui.button("Isometric").on_hover_text("(0)").clicked() {
                     app.state.ui_state.camera.set_iso_view();
                     ui.close_menu();
                 }
                 
                 ui.separator();
                 
-                if ui.button("⌨ Keyboard Shortcuts...").on_hover_text("(?)").clicked() {
+                if ui.button("Keyboard Shortcuts...").on_hover_text("(?)").clicked() {
                     app.state.ui_state.show_shortcuts_help = true;
                     ui.close_menu();
                 }
@@ -222,7 +223,7 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                 });
                 
                 ui.add_enabled_ui(app.state.is_running, |ui| {
-                    if ui.button("⏹ Stop Simulation").clicked() {
+                    if ui.button("■ Stop Simulation").clicked() {
                         app.stop_simulation();
                         ui.close_menu();
                     }
@@ -230,30 +231,40 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                 
                 ui.separator();
                 
-                if ui.button("🔧 Solver Settings...").clicked() {
-                    // TODO: Open solver settings dialog
+                if ui.button("Solver Settings...").clicked() {
+                    app.state.ui_state.active_panel = ActivePanel::Setup;
                     ui.close_menu();
                 }
             });
             
             // Help menu
             ui.menu_button("Help", |ui| {
-                if ui.button("⌨ Keyboard Shortcuts").clicked() {
+                if ui.button("Keyboard Shortcuts").clicked() {
                     app.state.ui_state.show_shortcuts_help = true;
                     ui.close_menu();
                 }
                 
                 ui.separator();
                 
-                if ui.button("📖 Documentation").clicked() {
-                    // Open browser to documentation (can add URL open later)
-                    app.state.status_message = "Documentation: https://github.com/your-repo/rust_fea".to_string();
+                if ui.button("Documentation").clicked() {
+                    let url = "https://github.com/ChooseDews/RustFEA";
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        let _ = open::that(url);
+                    }
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        if let Some(window) = web_sys::window() {
+                            let _ = window.open_with_url_and_target(url, "_blank");
+                        }
+                    }
+                    app.state.status_message = "Opening GitHub documentation...".to_string();
                     ui.close_menu();
                 }
                 
                 ui.separator();
                 
-                if ui.button("ℹ About RustFEA").clicked() {
+                if ui.button("About RustFEA").clicked() {
                     app.state.ui_state.about_dialog_open = true;
                     ui.close_menu();
                 }
@@ -266,7 +277,7 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                 
                 if app.state.is_running {
                     // Show stop button when running
-                    if ui.button("⏹ Stop").clicked() {
+                    if ui.button("■ Stop").clicked() {
                         app.stop_simulation();
                     }
                     // Show progress
@@ -539,6 +550,9 @@ fn load_example_into_app(app: &mut FeaApp, example_type: ExampleType) {
         app.state.ui_state.camera.fit_to_bounds(&bounds);
     }
     
+    // Disable wireframe for cleaner view on examples
+    app.state.ui_state.show_wireframe = false;
+    
     // Invalidate renderer
     app.renderer = None;
     
@@ -572,6 +586,9 @@ fn load_example_with_custom_config(app: &mut FeaApp) {
         app.state.ui_state.camera.fit_to_bounds(&bounds);
     }
     
+    // Disable wireframe for cleaner view on examples
+    app.state.ui_state.show_wireframe = false;
+    
     // Invalidate renderer
     app.renderer = None;
     
@@ -590,7 +607,7 @@ pub fn show_example_dialog(ctx: &egui::Context, app: &mut FeaApp) {
     
     let mut open = app.state.ui_state.example_dialog_open;
     
-    egui::Window::new("📚 Load Example")
+    egui::Window::new("Load Example")
         .open(&mut open)
         .resizable(false)
         .collapsible(false)
@@ -602,16 +619,16 @@ pub fn show_example_dialog(ctx: &egui::Context, app: &mut FeaApp) {
             ui.heading("Select Example");
             ui.horizontal(|ui| {
                 let prev_type = config.example_type;
-                if ui.selectable_value(&mut config.example_type, ExampleType::CantileverBeam, "🔧 Cantilever Beam").clicked() 
+                if ui.selectable_value(&mut config.example_type, ExampleType::CantileverBeam, "Cantilever Beam").clicked() 
                     && prev_type != ExampleType::CantileverBeam {
                     // Reset to default params for this example
                     config.load_magnitude = 10000.0;
                 }
-                if ui.selectable_value(&mut config.example_type, ExampleType::TorqueShaft, "⚙ Torque Shaft").clicked()
+                if ui.selectable_value(&mut config.example_type, ExampleType::TorqueShaft, "Torque Shaft").clicked()
                     && prev_type != ExampleType::TorqueShaft {
                     config.load_magnitude = 5000.0;
                 }
-                if ui.selectable_value(&mut config.example_type, ExampleType::ContactBlocks, "📦 Contact Blocks").clicked()
+                if ui.selectable_value(&mut config.example_type, ExampleType::ContactBlocks, "Contact Blocks").clicked()
                     && prev_type != ExampleType::ContactBlocks {
                     config.load_magnitude = 50000.0;
                 }
@@ -751,7 +768,7 @@ pub fn show_example_dialog(ctx: &egui::Context, app: &mut FeaApp) {
             
             // Action buttons
             ui.horizontal(|ui| {
-                if ui.button("✓ Load Example").clicked() {
+                if ui.button("Load Example").clicked() {
                     app.state.ui_state.example_dialog_open = false;
                     load_example_with_custom_config(app);
                 }

@@ -14,7 +14,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut FeaApp) {
     ui.add_space(8.0);
     
     if app.state.current_mesh().is_none() {
-        ui.label("⚠ No mesh loaded. Import a mesh first.");
+        ui.label("No mesh loaded. Import a mesh first.");
         return;
     }
     
@@ -96,7 +96,7 @@ fn show_materials(ui: &mut egui::Ui, app: &mut FeaApp) {
     let config = &mut app.state.simulation_config;
     
     // Add material button
-    if ui.button("➕ Add Material").clicked() {
+    if ui.button("+ Add Material").clicked() {
         let new_id = config.materials.len() + 1;
         config.materials.push(MaterialConfig {
             id: new_id,
@@ -117,7 +117,7 @@ fn show_materials(ui: &mut egui::Ui, app: &mut FeaApp) {
             ui.group(|ui| {
                 ui.horizontal(|ui| {
                     ui.strong(&material.name);
-                    if ui.small_button("🗑").clicked() && num_materials > 1 {
+                    if ui.small_button("x").clicked() && num_materials > 1 {
                         remove_idx = Some(idx);
                     }
                 });
@@ -207,12 +207,12 @@ fn show_boundary_conditions(ui: &mut egui::Ui, app: &mut FeaApp) {
                 ui.selectable_value(&mut app.state.ui_state.bc_editor.new_bc_type, NewBcType::Torque, "Torque");
                 ui.selectable_value(&mut app.state.ui_state.bc_editor.new_bc_type, NewBcType::Contact, "Contact");
                 ui.separator();
-                ui.selectable_value(&mut app.state.ui_state.bc_editor.new_bc_type, NewBcType::Pressure, "⬇ Pressure (surface)");
+                ui.selectable_value(&mut app.state.ui_state.bc_editor.new_bc_type, NewBcType::Pressure, "Pressure (surface)");
                 ui.selectable_value(&mut app.state.ui_state.bc_editor.new_bc_type, NewBcType::Traction, "↗ Traction (surface)");
                 ui.selectable_value(&mut app.state.ui_state.bc_editor.new_bc_type, NewBcType::BodyForce, "🌍 Body Force (volume)");
             });
         
-        if ui.button("➕").clicked() {
+        if ui.button("+").clicked() {
             let new_bc = match app.state.ui_state.bc_editor.new_bc_type {
                 NewBcType::Fixed => BoundaryConditionConfig::Fixed(FixedBcConfig::default()),
                 NewBcType::Load => BoundaryConditionConfig::Load(LoadBcConfig::default()),
@@ -277,7 +277,7 @@ fn show_fixed_bc(
 ) {
     ui.horizontal(|ui| {
         ui.strong("🔒 Fixed BC");
-        if ui.small_button("🗑").clicked() {
+        if ui.small_button("x").clicked() {
             *remove_idx = Some(idx);
         }
     });
@@ -358,8 +358,8 @@ fn show_load_bc(
     idx: usize
 ) {
     ui.horizontal(|ui| {
-        ui.strong("⬇ Load BC");
-        if ui.small_button("🗑").clicked() {
+        ui.strong("Load BC");
+        if ui.small_button("x").clicked() {
             *remove_idx = Some(idx);
         }
     });
@@ -404,8 +404,8 @@ fn show_torque_bc(
     idx: usize
 ) {
     ui.horizontal(|ui| {
-        ui.strong("🔄 Torque BC");
-        if ui.small_button("🗑").clicked() {
+        ui.strong("Torque BC");
+        if ui.small_button("x").clicked() {
             *remove_idx = Some(idx);
         }
     });
@@ -460,7 +460,7 @@ fn show_contact_bc(
 ) {
     ui.horizontal(|ui| {
         ui.strong("👆 Contact BC");
-        if ui.small_button("🗑").clicked() {
+        if ui.small_button("x").clicked() {
             *remove_idx = Some(idx);
         }
     });
@@ -503,8 +503,8 @@ fn show_pressure_bc(
     idx: usize
 ) {
     ui.horizontal(|ui| {
-        ui.strong("⬇ Pressure BC");
-        if ui.small_button("🗑").clicked() {
+        ui.strong("Pressure BC");
+        if ui.small_button("x").clicked() {
             *remove_idx = Some(idx);
         }
     });
@@ -554,7 +554,7 @@ fn show_traction_bc(
 ) {
     ui.horizontal(|ui| {
         ui.strong("↗ Traction BC");
-        if ui.small_button("🗑").clicked() {
+        if ui.small_button("x").clicked() {
             *remove_idx = Some(idx);
         }
     });
@@ -647,7 +647,7 @@ fn show_body_force_bc(
 ) {
     ui.horizontal(|ui| {
         ui.strong("🌍 Body Force BC");
-        if ui.small_button("🗑").clicked() {
+        if ui.small_button("x").clicked() {
             *remove_idx = Some(idx);
         }
     });

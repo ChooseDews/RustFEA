@@ -746,6 +746,8 @@ pub struct CameraState {
     pub distance: f32,
     pub target: [f32; 3],
     pub fov: f32,
+    /// Use orthographic projection instead of perspective
+    pub orthographic: bool,
 }
 
 impl Default for CameraState {
@@ -762,6 +764,7 @@ impl CameraState {
             distance: 5.0,
             target: [0.0, 0.0, 0.0],
             fov: 45.0_f32.to_radians(),
+            orthographic: false,
         }
     }
     

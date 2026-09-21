@@ -359,22 +359,22 @@ pub fn generate_section_cut_shapes(
             continue;
         }
         
-        // Project vertices
+        // Project vertices using project_close for better near-plane handling
         let mut projected: Vec<egui::Pos2> = Vec::new();
         let mut all_valid = true;
         let mut avg_field = 0.0f64;
         
         for vertex in &polygon.vertices {
-            if let Some(screen_pos) = view_transform.project(
+            if let Some(screen_pos) = view_transform.project_close(
                 vertex.position,
                 rect_center,
                 half_width,
                 half_height,
                 aspect,
             ) {
-                // Check for valid screen position
+                // Check for valid screen position (allow larger bounds for section cuts)
                 if screen_pos.x.is_finite() && screen_pos.y.is_finite() 
-                   && rect.expand(100.0).contains(screen_pos) {
+                   && rect.expand(200.0).contains(screen_pos) {
                     projected.push(screen_pos);
                     avg_field += vertex.field_value;
                 } else {

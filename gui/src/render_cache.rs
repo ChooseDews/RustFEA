@@ -280,6 +280,10 @@ pub struct ViewTransform {
     pub near_plane: f32,
     /// Camera state hash for change detection
     pub camera_hash: u64,
+    /// Use orthographic projection
+    pub orthographic: bool,
+    /// Camera distance (for orthographic scale)
+    pub distance: f32,
 }
 
 impl ViewTransform {
@@ -329,7 +333,7 @@ impl ViewTransform {
         ];
         
         let fov_factor = (camera.fov / 2.0).tan();
-        let near_plane = camera.distance * 0.05;
+        let near_plane = (camera.distance * 0.01).max(0.001);
         
         // Simple hash of camera state for change detection
         let camera_hash = {
@@ -337,6 +341,7 @@ impl ViewTransform {
             bits(camera.yaw) ^ bits(camera.pitch).rotate_left(16) 
                 ^ bits(camera.distance).rotate_left(32) 
                 ^ bits(camera.target[0]).rotate_left(48)
+                ^ if camera.orthographic { 1 } else { 0 }
         };
         
         Some(Self {
@@ -347,6 +352,8 @@ impl ViewTransform {
             fov_factor,
             near_plane,
             camera_hash,
+            orthographic: camera.orthographic,
+            distance: camera.distance,
         })
     }
     
@@ -365,15 +372,21 @@ impl ViewTransform {
         let cam_y = rel[0] * self.up[0] + rel[1] * self.up[1] + rel[2] * self.up[2];
         let cam_z = rel[0] * self.forward[0] + rel[1] * self.forward[1] + rel[2] * self.forward[2];
         
-        // Behind camera or near plane
-        if cam_z < self.near_plane.max(0.2) {
+        // Behind camera or near plane (for perspective) - orthographic shows everything
+        if !self.orthographic && cam_z < self.near_plane {
             return None;
         }
         
-        // Perspective projection
-        let inv_z = 1.0 / (cam_z * self.fov_factor);
-        let ndc_x = cam_x * inv_z / aspect;
-        let ndc_y = cam_y * inv_z;
+        let (ndc_x, ndc_y) = if self.orthographic {
+            // Orthographic projection: scale by camera distance to maintain size
+            // The view size is distance * tan(fov/2) * 2 for perspective, use same scale
+            let ortho_scale = 1.0 / (self.distance * self.fov_factor);
+            (cam_x * ortho_scale / aspect, cam_y * ortho_scale)
+        } else {
+            // Perspective projection
+            let inv_z = 1.0 / (cam_z * self.fov_factor);
+            (cam_x * inv_z / aspect, cam_y * inv_z)
+        };
         
         // Convert to screen coordinates
         let screen_x = rect_center.x + ndc_x * half_width;
@@ -381,6 +394,54 @@ impl ViewTransform {
         
         // Reject extreme values
         let max_extent = half_width.max(half_height) * 4.0;
+        if screen_x.abs() > max_extent + rect_center.x.abs() || 
+           screen_y.abs() > max_extent + rect_center.y.abs() ||
+           !screen_x.is_finite() || !screen_y.is_finite() {
+            return None;
+        }
+        
+        Some(egui::pos2(screen_x, screen_y))
+    }
+    
+    /// Project a 3D point with a very small near plane - for section cuts and clip planes
+    /// that need to be visible even when very close to the camera.
+    #[inline]
+    pub fn project_close(&self, point: [f32; 3], rect_center: egui::Pos2, half_width: f32, half_height: f32, aspect: f32) -> Option<egui::Pos2> {
+        // Vector from eye to point
+        let rel = [
+            point[0] - self.eye[0],
+            point[1] - self.eye[1],
+            point[2] - self.eye[2],
+        ];
+        
+        // Camera space coordinates
+        let cam_x = rel[0] * self.right[0] + rel[1] * self.right[1] + rel[2] * self.right[2];
+        let cam_y = rel[0] * self.up[0] + rel[1] * self.up[1] + rel[2] * self.up[2];
+        let cam_z = rel[0] * self.forward[0] + rel[1] * self.forward[1] + rel[2] * self.forward[2];
+        
+        // Use a much smaller near plane for section cuts (0.0001 instead of distance*0.01)
+        // Orthographic mode has no near plane culling
+        let min_near = 0.0001;
+        if !self.orthographic && cam_z < min_near {
+            return None;
+        }
+        
+        let (ndc_x, ndc_y) = if self.orthographic {
+            let ortho_scale = 1.0 / (self.distance * self.fov_factor);
+            (cam_x * ortho_scale / aspect, cam_y * ortho_scale)
+        } else {
+            // For very close points, clamp cam_z to avoid extreme perspective distortion
+            let safe_z = cam_z.max(min_near);
+            let inv_z = 1.0 / (safe_z * self.fov_factor);
+            (cam_x * inv_z / aspect, cam_y * inv_z)
+        };
+        
+        // Convert to screen coordinates
+        let screen_x = rect_center.x + ndc_x * half_width;
+        let screen_y = rect_center.y - ndc_y * half_height;
+        
+        // Allow a larger extent for close objects that may appear large on screen
+        let max_extent = half_width.max(half_height) * 10.0;
         if screen_x.abs() > max_extent + rect_center.x.abs() || 
            screen_y.abs() > max_extent + rect_center.y.abs() ||
            !screen_x.is_finite() || !screen_y.is_finite() {

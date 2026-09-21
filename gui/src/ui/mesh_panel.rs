@@ -10,14 +10,14 @@ pub fn show(ui: &mut egui::Ui, app: &mut FeaApp) {
     
     // Import buttons with tooltips
     ui.horizontal(|ui| {
-        if ui.button("📥 Import Mesh")
+        if ui.button("Import Mesh")
             .on_hover_text("Import mesh from file\nSupported: .inp (Abaqus), .bin, .json")
             .clicked() 
         {
             import_mesh(app);
         }
         
-        if ui.button("➕ New Primitive")
+        if ui.button("+ New Primitive")
             .on_hover_text("Create a new primitive mesh\n(Block or Cylinder)")
             .clicked() 
         {
@@ -37,8 +37,8 @@ pub fn show(ui: &mut egui::Ui, app: &mut FeaApp) {
         // Quick start tips
         ui.add_space(8.0);
         ui.group(|ui| {
-            ui.label("💡 Quick Start:");
-            ui.label("• Use File → Load Example for sample meshes");
+            ui.label("Quick Start:");
+            ui.label("Use File > Load Example for sample meshes");
             ui.label("• Click New Primitive for simple shapes");
             ui.label("• Use Gmsh to create complex meshes");
         });
@@ -54,7 +54,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut FeaApp) {
             let selected = app.state.current_mesh_idx == Some(idx);
             
             ui.horizontal(|ui| {
-                let label = ui.selectable_label(selected, format!("📐 {}", mesh.name));
+                let label = ui.selectable_label(selected, format!("● {}", mesh.name));
                 if label.clicked() {
                     new_selection = Some(idx);
                     selected_changed = true;
@@ -73,7 +73,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut FeaApp) {
                 if selected {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         // Delete button
-                        if ui.small_button("🗑").on_hover_text("Remove mesh").clicked() {
+                        if ui.small_button("x").on_hover_text("Remove mesh").clicked() {
                             remove_idx = Some(idx);
                         }
                         // Rename button  
@@ -255,7 +255,7 @@ fn show_transform_controls(ui: &mut egui::Ui, app: &mut FeaApp) {
     let mut should_apply = false;
     let mut should_reset = false;
     
-    ui.collapsing("🔧 Transform", |ui| {
+    ui.collapsing("Transform", |ui| {
         let transform = &mut app.state.ui_state.mesh_edit.transform;
         
         // Mode selection
@@ -320,7 +320,7 @@ fn show_transform_controls(ui: &mut egui::Ui, app: &mut FeaApp) {
         if transform.mode != TransformMode::None {
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                if ui.button("✓ Apply Transform").clicked() {
+                if ui.button("Apply Transform").clicked() {
                     should_apply = true;
                 }
                 if ui.button("↺ Reset").clicked() {
@@ -468,15 +468,15 @@ fn show_face_selection_controls(ui: &mut egui::Ui, app: &mut FeaApp) {
                             }
                         }
                         SelectionPurpose::ApplyBC => {
-                            if ui.button("📌 Apply Fixed BC").clicked() {
+                            if ui.button("Apply Fixed BC").clicked() {
                                 pending_action = Some("apply_fixed");
                             }
-                            if ui.button("⬇ Apply Load").clicked() {
+                            if ui.button("Apply Load").clicked() {
                                 pending_action = Some("apply_load");
                             }
                         }
                         SelectionPurpose::CreateSurface => {
-                            if ui.button("🔲 Create Surface").clicked() {
+                            if ui.button("Create Surface").clicked() {
                                 pending_action = Some("create_surface");
                             }
                         }
@@ -493,7 +493,7 @@ fn show_face_selection_controls(ui: &mut egui::Ui, app: &mut FeaApp) {
             
             // Help text
             ui.add_space(4.0);
-            ui.colored_label(egui::Color32::GRAY, "💡 Shift+click to add, Ctrl+click to remove");
+            ui.colored_label(egui::Color32::GRAY, "Shift+click to add, Ctrl+click to remove");
         }
     });
     
@@ -640,16 +640,16 @@ fn show_node_groups_section(ui: &mut egui::Ui, app: &mut FeaApp) {
                         action = Some((name.clone(), "highlight"));
                         ui.close_menu();
                     }
-                    if ui.button("📌 Apply Fixed BC").clicked() {
+                    if ui.button("Apply Fixed BC").clicked() {
                         action = Some((name.clone(), "fixed"));
                         ui.close_menu();
                     }
-                    if ui.button("⬇ Apply Load").clicked() {
+                    if ui.button("Apply Load").clicked() {
                         action = Some((name.clone(), "load"));
                         ui.close_menu();
                     }
                     ui.separator();
-                    if ui.button("🗑 Delete").clicked() {
+                    if ui.button("Delete").clicked() {
                         delete_group = Some(name.clone());
                         ui.close_menu();
                     }
@@ -704,7 +704,7 @@ fn show_node_groups_section(ui: &mut egui::Ui, app: &mut FeaApp) {
         ui.add_space(8.0);
         
         // Create new group button
-        if ui.button("➕ Create Node Group").clicked() {
+        if ui.button("+ Create Node Group").clicked() {
             app.state.ui_state.node_group_creator.active = true;
             app.state.ui_state.node_group_creator.name = format!("Group_{}", 
                 app.state.current_mesh().map(|m| m.mesh.node_groups.len()).unwrap_or(0) + 1);
@@ -767,7 +767,7 @@ fn show_node_groups_section(ui: &mut egui::Ui, app: &mut FeaApp) {
                 ui.label(format!("Selected: {} nodes", count));
                 
                 ui.horizontal(|ui| {
-                    if ui.button("✓ Create").clicked() && count > 0 {
+                    if ui.button("Create").clicked() && count > 0 {
                         create_node_group(app);
                     }
                     if ui.button("✗ Cancel").clicked() {
@@ -838,7 +838,7 @@ fn show_box_selection_ui(ui: &mut egui::Ui, app: &mut FeaApp) {
     // Drop mutable borrow before calling update function
     drop(creator);
     
-    if ui.button("🔄 Update Selection").clicked() {
+    if ui.button("Update Selection").clicked() {
         update_box_selection(app);
     }
 }
@@ -905,7 +905,7 @@ fn show_plane_selection_ui(ui: &mut egui::Ui, app: &mut FeaApp) {
     // Drop mutable borrow before calling update function
     drop(creator);
     
-    if ui.button("🔄 Update Selection").clicked() {
+    if ui.button("Update Selection").clicked() {
         update_plane_selection(app);
     }
 }
@@ -1002,7 +1002,7 @@ fn show_rename_dialog(ctx: &egui::Context, app: &mut FeaApp) {
             ui.add_space(8.0);
             
             ui.horizontal(|ui| {
-                if ui.button("✓ Rename").clicked() {
+                if ui.button("Rename").clicked() {
                     apply_rename = true;
                     close_dialog = true;
                 }
@@ -1033,7 +1033,7 @@ fn show_primitive_dialog(ctx: &egui::Context, app: &mut FeaApp) {
         return;
     }
     
-    egui::Window::new("➕ Create Primitive Mesh")
+    egui::Window::new("Create Primitive Mesh")
         .collapsible(false)
         .resizable(true)
         .default_width(400.0)
@@ -1076,11 +1076,11 @@ fn show_primitive_dialog(ctx: &egui::Context, app: &mut FeaApp) {
             ui.add_space(16.0);
             
             ui.horizontal(|ui| {
-                if ui.button("✓ Create").clicked() {
+                if ui.button("Create").clicked() {
                     create_primitive_mesh(app);
                     app.state.ui_state.primitive_dialog_open = false;
                 }
-                if ui.button("🔄 Create & Edit").on_hover_text("Create and keep dialog open for adjustments").clicked() {
+                if ui.button("Create & Edit").on_hover_text("Create and keep dialog open for adjustments").clicked() {
                     create_primitive_mesh(app);
                     app.state.ui_state.mesh_edit.editing_primitive = true;
                 }
@@ -1213,7 +1213,7 @@ fn show_block_config_enhanced(ui: &mut egui::Ui, config: &mut crate::state::Prim
     let num_nodes = (config.block_divisions[0] + 1) * (config.block_divisions[1] + 1) * (config.block_divisions[2] + 1);
     ui.separator();
     ui.colored_label(egui::Color32::LIGHT_GREEN, 
-        format!("📊 {} elements, {} nodes", num_elements, num_nodes));
+        format!("{} elements, {} nodes", num_elements, num_nodes));
 }
 
 fn show_cylinder_config_enhanced(ui: &mut egui::Ui, config: &mut crate::state::PrimitiveConfig) {
@@ -1322,7 +1322,7 @@ fn show_cylinder_config_enhanced(ui: &mut egui::Ui, config: &mut crate::state::P
     let num_nodes = config.cyl_radial_divisions * (config.cyl_height_divisions + 1) + 2; // +2 for center nodes
     ui.separator();
     ui.colored_label(egui::Color32::LIGHT_GREEN, 
-        format!("📊 ~{} elements, ~{} nodes", num_elements, num_nodes));
+        format!("~{} elements, ~{} nodes", num_elements, num_nodes));
 }
 
 // Keep original functions for compatibility

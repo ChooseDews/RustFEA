@@ -19,28 +19,28 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
             ui.label("View:");
             
             // View toggles with keyboard shortcut hints
-            if ui.selectable_label(app.state.ui_state.show_faces, "🔲 Faces")
+            if ui.selectable_label(app.state.ui_state.show_faces, "Faces")
                 .on_hover_text("Toggle face rendering (F)")
                 .clicked() 
             {
                 app.state.ui_state.show_faces = !app.state.ui_state.show_faces;
                 app.renderer = None;
             }
-            if ui.selectable_label(app.state.ui_state.show_wireframe, "📐 Wire")
+            if ui.selectable_label(app.state.ui_state.show_wireframe, "Wire")
                 .on_hover_text("Toggle wireframe (W)")
                 .clicked() 
             {
                 app.state.ui_state.show_wireframe = !app.state.ui_state.show_wireframe;
                 app.renderer = None;
             }
-            if ui.selectable_label(app.state.ui_state.show_nodes, "⚫ Nodes")
+            if ui.selectable_label(app.state.ui_state.show_nodes, "Nodes")
                 .on_hover_text("Toggle node display (N)")
                 .clicked() 
             {
                 app.state.ui_state.show_nodes = !app.state.ui_state.show_nodes;
                 app.renderer = None;
             }
-            if ui.selectable_label(app.state.ui_state.show_boundary_conditions, "📌 BCs")
+            if ui.selectable_label(app.state.ui_state.show_boundary_conditions, "BCs")
                 .on_hover_text("Toggle boundary conditions (B)")
                 .clicked() 
             {
@@ -48,7 +48,7 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
             }
             
             // Clipping plane toggle
-            if ui.selectable_label(app.state.ui_state.clipping_plane.enabled, "✂ Clip")
+            if ui.selectable_label(app.state.ui_state.clipping_plane.enabled, "Clip")
                 .on_hover_text("Toggle section view / clipping plane (C)")
                 .clicked()
             {
@@ -74,6 +74,19 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
             if ui.button("Iso").on_hover_text("Isometric view (0)").clicked() {
                 app.state.ui_state.camera.yaw = 0.785; // 45°
                 app.state.ui_state.camera.pitch = 0.524; // 30°
+            }
+            
+            ui.separator();
+            
+            // Projection mode toggle
+            let proj_label = if app.state.ui_state.camera.orthographic { "Ortho" } else { "Persp" };
+            let proj_hover = if app.state.ui_state.camera.orthographic { 
+                "Switch to perspective projection (P)" 
+            } else { 
+                "Switch to orthographic projection (P)" 
+            };
+            if ui.button(proj_label).on_hover_text(proj_hover).clicked() {
+                app.state.ui_state.camera.orthographic = !app.state.ui_state.camera.orthographic;
             }
             
             ui.separator();
@@ -429,7 +442,7 @@ fn show_viewport_context_menu(response: &egui::Response, app: &mut FeaApp) {
                     app.state.ui_state.mesh_edit.face_selection.purpose = crate::state::SelectionPurpose::CreateNodeGroup;
                     ui.close_menu();
                 }
-                if ui.button("📌 Apply Fixed BC").clicked() {
+                if ui.button("Apply Fixed BC").clicked() {
                     app.state.ui_state.mesh_edit.face_selection.purpose = crate::state::SelectionPurpose::ApplyBC;
                     ui.close_menu();
                 }
@@ -438,25 +451,25 @@ fn show_viewport_context_menu(response: &egui::Response, app: &mut FeaApp) {
             ui.separator();
             
             // Mesh operations
-            ui.menu_button("🔧 Mesh", |ui| {
-                if ui.button("🔄 Transform...").clicked() {
+            ui.menu_button("Mesh", |ui| {
+                if ui.button("Transform...").clicked() {
                     app.state.ui_state.mesh_edit.transform.mode = crate::state::TransformMode::Translate;
                     ui.close_menu();
                 }
-                if ui.button("➕ Create Primitive...").clicked() {
+                if ui.button("+ Create Primitive...").clicked() {
                     app.state.ui_state.primitive_dialog_open = true;
                     ui.close_menu();
                 }
             });
         } else {
             // No mesh loaded
-            if ui.button("➕ Create Primitive Mesh").clicked() {
+            if ui.button("+ Create Primitive Mesh").clicked() {
                 app.state.ui_state.primitive_dialog_open = true;
                 ui.close_menu();
             }
-            if ui.button("📥 Import Mesh").clicked() {
+            if ui.button("Import Mesh").clicked() {
                 // Would need to trigger file dialog
-                app.state.status_message = "Use File → Import Mesh".to_string();
+                app.state.status_message = "Use File > Import Mesh".to_string();
                 ui.close_menu();
             }
         }
@@ -494,8 +507,126 @@ fn handle_camera_input(response: &egui::Response, app: &mut FeaApp) {
     let scroll = response.ctx.input(|i| i.raw_scroll_delta.y);
     if scroll != 0.0 {
         let zoom_factor = 1.0 - scroll * 0.001;
-        camera.distance = (camera.distance * zoom_factor).clamp(0.1, 1000.0);
+        camera.distance = (camera.distance * zoom_factor).clamp(0.01, 1000.0);
     }
+}
+
+/// Clip a 3D line segment to the camera's near plane and project both endpoints.
+/// Returns None if the entire segment is behind the camera.
+fn clip_and_project_line(
+    p1_3d: [f32; 3],
+    p2_3d: [f32; 3],
+    rect: egui::Rect,
+    camera: &crate::state::CameraState,
+) -> Option<(egui::Pos2, egui::Pos2)> {
+    // For orthographic projection, no near-plane clipping needed
+    if camera.orthographic {
+        let proj1 = project_point(p1_3d, rect, camera)?;
+        let proj2 = project_point(p2_3d, rect, camera)?;
+        return Some((proj1, proj2));
+    }
+    
+    let eye = camera.eye_position();
+    
+    // View direction (normalized)
+    let view_x = camera.target[0] - eye[0];
+    let view_y = camera.target[1] - eye[1];
+    let view_z = camera.target[2] - eye[2];
+    let view_len = (view_x * view_x + view_y * view_y + view_z * view_z).sqrt();
+    if view_len < 1e-6 {
+        return None;
+    }
+    let forward = [view_x / view_len, view_y / view_len, view_z / view_len];
+    
+    // Use a very small near plane for grid lines - they don't have depth-sorting issues
+    // This allows the grid to remain visible even when zoomed in close
+    let near_plane = 0.001;
+    
+    // Compute distance along view direction for each point
+    let rel1 = [p1_3d[0] - eye[0], p1_3d[1] - eye[1], p1_3d[2] - eye[2]];
+    let rel2 = [p2_3d[0] - eye[0], p2_3d[1] - eye[1], p2_3d[2] - eye[2]];
+    
+    let d1 = rel1[0] * forward[0] + rel1[1] * forward[1] + rel1[2] * forward[2];
+    let d2 = rel2[0] * forward[0] + rel2[1] * forward[1] + rel2[2] * forward[2];
+    
+    // Both behind near plane - reject
+    if d1 < near_plane && d2 < near_plane {
+        return None;
+    }
+    
+    // Clip the segment to the near plane if one point is behind
+    let (clipped_p1, clipped_p2) = if d1 < near_plane {
+        // p1 is behind, clip it
+        let t = (near_plane - d1) / (d2 - d1);
+        let new_p1 = [
+            p1_3d[0] + t * (p2_3d[0] - p1_3d[0]),
+            p1_3d[1] + t * (p2_3d[1] - p1_3d[1]),
+            p1_3d[2] + t * (p2_3d[2] - p1_3d[2]),
+        ];
+        (new_p1, p2_3d)
+    } else if d2 < near_plane {
+        // p2 is behind, clip it
+        let t = (near_plane - d2) / (d1 - d2);
+        let new_p2 = [
+            p2_3d[0] + t * (p1_3d[0] - p2_3d[0]),
+            p2_3d[1] + t * (p1_3d[1] - p2_3d[1]),
+            p2_3d[2] + t * (p1_3d[2] - p2_3d[2]),
+        ];
+        (p1_3d, new_p2)
+    } else {
+        (p1_3d, p2_3d)
+    };
+    
+    // Project both points with a tiny near plane for grid rendering
+    // We need a custom projection here that doesn't use project_point's larger near plane
+    let fov_factor = (camera.fov / 2.0).tan();
+    let aspect = rect.width() / rect.height();
+    
+    let project_grid_point = |point: [f32; 3]| -> Option<egui::Pos2> {
+        let rel = [point[0] - eye[0], point[1] - eye[1], point[2] - eye[2]];
+        
+        // Calculate camera basis vectors (same as forward calculation above)
+        let world_up = if forward[1].abs() > 0.99 { [0.0, 0.0, 1.0] } else { [0.0, 1.0, 0.0] };
+        let right = [
+            forward[1] * world_up[2] - forward[2] * world_up[1],
+            forward[2] * world_up[0] - forward[0] * world_up[2],
+            forward[0] * world_up[1] - forward[1] * world_up[0],
+        ];
+        let right_len = (right[0] * right[0] + right[1] * right[1] + right[2] * right[2]).sqrt();
+        if right_len < 1e-6 { return None; }
+        let right = [right[0] / right_len, right[1] / right_len, right[2] / right_len];
+        let up = [
+            right[1] * forward[2] - right[2] * forward[1],
+            right[2] * forward[0] - right[0] * forward[2],
+            right[0] * forward[1] - right[1] * forward[0],
+        ];
+        
+        let cam_x = rel[0] * right[0] + rel[1] * right[1] + rel[2] * right[2];
+        let cam_y = rel[0] * up[0] + rel[1] * up[1] + rel[2] * up[2];
+        let cam_z = rel[0] * forward[0] + rel[1] * forward[1] + rel[2] * forward[2];
+        
+        // Use the tiny near plane we defined above
+        if cam_z < near_plane {
+            return None;
+        }
+        
+        let ndc_x = cam_x / (cam_z * fov_factor * aspect);
+        let ndc_y = cam_y / (cam_z * fov_factor);
+        
+        let screen_x = rect.center().x + ndc_x * rect.width() / 2.0;
+        let screen_y = rect.center().y - ndc_y * rect.height() / 2.0;
+        
+        if !screen_x.is_finite() || !screen_y.is_finite() {
+            return None;
+        }
+        
+        Some(egui::pos2(screen_x, screen_y))
+    };
+    
+    let proj1 = project_grid_point(clipped_p1)?;
+    let proj2 = project_grid_point(clipped_p2)?;
+    
+    Some((proj1, proj2))
 }
 
 fn draw_grid(painter: &egui::Painter, rect: egui::Rect, app: &FeaApp) {
@@ -505,6 +636,12 @@ fn draw_grid(painter: &egui::Painter, rect: egui::Rect, app: &FeaApp) {
     }
     
     let camera = &app.state.ui_state.camera;
+    
+    // Disable grid when zoomed in too close (avoids rendering artifacts)
+    if camera.distance < 0.5 {
+        return;
+    }
+    
     let settings = &app.state.ui_state.display_settings;
     
     // Use display settings for grid
@@ -512,39 +649,142 @@ fn draw_grid(painter: &egui::Painter, rect: egui::Rect, app: &FeaApp) {
     let grid_spacing = settings.grid_spacing;
     let grid_color = egui::Color32::from_gray(50);
     
-    // Maximum line length to prevent spike artifacts from edge-on lines
-    let max_line_len = rect.width().min(rect.height()) * 0.8;
-    let margin = 100.0;
-    let expanded_rect = rect.expand(margin);
+    // Expand rect for clipping
+    let clip_rect = rect.expand(2.0);
+    
+    // Simple 2D line clipping (Cohen-Sutherland)
+    let clip_line = |mut p1: egui::Pos2, mut p2: egui::Pos2| -> Option<(egui::Pos2, egui::Pos2)> {
+        const INSIDE: u8 = 0;
+        const LEFT: u8 = 1;
+        const RIGHT: u8 = 2;
+        const BOTTOM: u8 = 4;
+        const TOP: u8 = 8;
+        
+        let outcode = |p: egui::Pos2| -> u8 {
+            let mut code = INSIDE;
+            if p.x < clip_rect.left() { code |= LEFT; }
+            else if p.x > clip_rect.right() { code |= RIGHT; }
+            if p.y < clip_rect.top() { code |= TOP; }
+            else if p.y > clip_rect.bottom() { code |= BOTTOM; }
+            code
+        };
+        
+        let mut code1 = outcode(p1);
+        let mut code2 = outcode(p2);
+        
+        for _ in 0..10 { // Max iterations to prevent infinite loop
+            if (code1 | code2) == 0 {
+                return Some((p1, p2));
+            } else if (code1 & code2) != 0 {
+                return None;
+            } else {
+                let code_out = if code1 != 0 { code1 } else { code2 };
+                let dx = p2.x - p1.x;
+                let dy = p2.y - p1.y;
+                
+                let (x, y) = if (code_out & TOP) != 0 {
+                    (p1.x + dx * (clip_rect.top() - p1.y) / dy, clip_rect.top())
+                } else if (code_out & BOTTOM) != 0 {
+                    (p1.x + dx * (clip_rect.bottom() - p1.y) / dy, clip_rect.bottom())
+                } else if (code_out & RIGHT) != 0 {
+                    (clip_rect.right(), p1.y + dy * (clip_rect.right() - p1.x) / dx)
+                } else {
+                    (clip_rect.left(), p1.y + dy * (clip_rect.left() - p1.x) / dx)
+                };
+                
+                if !x.is_finite() || !y.is_finite() {
+                    return None;
+                }
+                
+                if code_out == code1 {
+                    p1 = egui::pos2(x, y);
+                    code1 = outcode(p1);
+                } else {
+                    p2 = egui::pos2(x, y);
+                    code2 = outcode(p2);
+                }
+            }
+        }
+        None
+    };
+    
+    // Direct projection for grid - no near plane culling at all
+    let project_grid = |point: [f32; 3]| -> Option<egui::Pos2> {
+        let eye = camera.eye_position();
+        
+        let view_x = camera.target[0] - eye[0];
+        let view_y = camera.target[1] - eye[1];
+        let view_z = camera.target[2] - eye[2];
+        let view_len = (view_x * view_x + view_y * view_y + view_z * view_z).sqrt();
+        if view_len < 1e-6 { return None; }
+        
+        let forward = [view_x / view_len, view_y / view_len, view_z / view_len];
+        
+        let world_up = if forward[1].abs() > 0.99 { [0.0, 0.0, 1.0] } else { [0.0, 1.0, 0.0] };
+        let right = [
+            forward[1] * world_up[2] - forward[2] * world_up[1],
+            forward[2] * world_up[0] - forward[0] * world_up[2],
+            forward[0] * world_up[1] - forward[1] * world_up[0],
+        ];
+        let right_len = (right[0] * right[0] + right[1] * right[1] + right[2] * right[2]).sqrt();
+        if right_len < 1e-6 { return None; }
+        let right = [right[0] / right_len, right[1] / right_len, right[2] / right_len];
+        let up = [
+            right[1] * forward[2] - right[2] * forward[1],
+            right[2] * forward[0] - right[0] * forward[2],
+            right[0] * forward[1] - right[1] * forward[0],
+        ];
+        
+        let rel = [point[0] - eye[0], point[1] - eye[1], point[2] - eye[2]];
+        let cam_x = rel[0] * right[0] + rel[1] * right[1] + rel[2] * right[2];
+        let cam_y = rel[0] * up[0] + rel[1] * up[1] + rel[2] * up[2];
+        let cam_z = rel[0] * forward[0] + rel[1] * forward[1] + rel[2] * forward[2];
+        
+        // Only reject if actually behind camera (z <= 0), no near plane
+        if cam_z <= 0.0 {
+            return None;
+        }
+        
+        let fov_factor = (camera.fov / 2.0).tan();
+        let aspect = rect.width() / rect.height();
+        
+        let (ndc_x, ndc_y) = if camera.orthographic {
+            let ortho_scale = 1.0 / (camera.distance * fov_factor);
+            (cam_x * ortho_scale / aspect, cam_y * ortho_scale)
+        } else {
+            (cam_x / (cam_z * fov_factor * aspect), cam_y / (cam_z * fov_factor))
+        };
+        
+        let screen_x = rect.center().x + ndc_x * rect.width() / 2.0;
+        let screen_y = rect.center().y - ndc_y * rect.height() / 2.0;
+        
+        if !screen_x.is_finite() || !screen_y.is_finite() {
+            return None;
+        }
+        
+        Some(egui::pos2(screen_x, screen_y))
+    };
     
     for i in -grid_size..=grid_size {
         let x = i as f32 * grid_spacing;
         
-        // Line along X axis
-        let p1 = project_point([x, 0.0, -grid_size as f32 * grid_spacing], rect, camera);
-        let p2 = project_point([x, 0.0, grid_size as f32 * grid_spacing], rect, camera);
+        // Line along X axis (constant X, varies in Z)
+        let p1_3d = [x, 0.0, -grid_size as f32 * grid_spacing];
+        let p2_3d = [x, 0.0, grid_size as f32 * grid_spacing];
         
-        if let (Some(p1), Some(p2)) = (p1, p2) {
-            let dx = p2.x - p1.x;
-            let dy = p2.y - p1.y;
-            let len = (dx * dx + dy * dy).sqrt();
-            if len < max_line_len && len.is_finite() 
-               && expanded_rect.contains(p1) && expanded_rect.contains(p2) {
-                painter.line_segment([p1, p2], egui::Stroke::new(1.0, grid_color));
+        if let (Some(p1), Some(p2)) = (project_grid(p1_3d), project_grid(p2_3d)) {
+            if let Some((cp1, cp2)) = clip_line(p1, p2) {
+                painter.line_segment([cp1, cp2], egui::Stroke::new(1.0, grid_color));
             }
         }
         
-        // Line along Z axis
-        let p1 = project_point([-grid_size as f32 * grid_spacing, 0.0, x], rect, camera);
-        let p2 = project_point([grid_size as f32 * grid_spacing, 0.0, x], rect, camera);
+        // Line along Z axis (constant Z, varies in X)
+        let p1_3d = [-grid_size as f32 * grid_spacing, 0.0, x];
+        let p2_3d = [grid_size as f32 * grid_spacing, 0.0, x];
         
-        if let (Some(p1), Some(p2)) = (p1, p2) {
-            let dx = p2.x - p1.x;
-            let dy = p2.y - p1.y;
-            let len = (dx * dx + dy * dy).sqrt();
-            if len < max_line_len && len.is_finite()
-               && expanded_rect.contains(p1) && expanded_rect.contains(p2) {
-                painter.line_segment([p1, p2], egui::Stroke::new(1.0, grid_color));
+        if let (Some(p1), Some(p2)) = (project_grid(p1_3d), project_grid(p2_3d)) {
+            if let Some((cp1, cp2)) = clip_line(p1, p2) {
+                painter.line_segment([cp1, cp2], egui::Stroke::new(1.0, grid_color));
             }
         }
     }
@@ -977,6 +1217,11 @@ fn draw_mesh_cached(
     
     // Section cuts are now integrated into the main depth-sorted pipeline above
     
+    // Draw clipping plane outline if enabled
+    if clip_enabled && ui_state.clipping_plane.show_plane {
+        draw_clip_plane_outline(&painter, rect, &view_transform, mesh_state, ui_state);
+    }
+    
     // Draw nodes (with LOD - skip some for very large meshes)
     if show_nodes {
         let mesh = &app.state.meshes[mesh_idx].mesh;
@@ -1012,6 +1257,175 @@ fn draw_mesh_cached(
         }
         
         painter.extend(node_shapes);
+    }
+}
+
+/// Draw the clipping plane outline as a translucent rectangle with dashed edges
+fn draw_clip_plane_outline(
+    painter: &egui::Painter,
+    rect: egui::Rect,
+    view_transform: &crate::render_cache::ViewTransform,
+    mesh_state: &crate::state::MeshState,
+    ui_state: &crate::state::UiState,
+) {
+    let bounds = &mesh_state.bounds;
+    let center = bounds.center();
+    let half_diag = bounds.diagonal() * 0.5;
+    
+    // Calculate clip plane position
+    let clip_normal = if ui_state.clipping_plane.flip {
+        [-ui_state.clipping_plane.normal[0], 
+         -ui_state.clipping_plane.normal[1], 
+         -ui_state.clipping_plane.normal[2]]
+    } else {
+        ui_state.clipping_plane.normal
+    };
+    
+    let offset = ui_state.clipping_plane.position * half_diag;
+    
+    // Compute plane center point
+    let plane_center = [
+        center[0] + clip_normal[0] * offset,
+        center[1] + clip_normal[1] * offset,
+        center[2] + clip_normal[2] * offset,
+    ];
+    
+    // Create orthogonal vectors on the plane (u and v perpendicular to normal)
+    let up = if clip_normal[1].abs() < 0.9 {
+        [0.0, 1.0, 0.0]
+    } else {
+        [1.0, 0.0, 0.0]
+    };
+    
+    // u = normal x up
+    let mut u = [
+        clip_normal[1] * up[2] - clip_normal[2] * up[1],
+        clip_normal[2] * up[0] - clip_normal[0] * up[2],
+        clip_normal[0] * up[1] - clip_normal[1] * up[0],
+    ];
+    let u_len = (u[0] * u[0] + u[1] * u[1] + u[2] * u[2]).sqrt();
+    if u_len < 1e-6 {
+        return;
+    }
+    u[0] /= u_len;
+    u[1] /= u_len;
+    u[2] /= u_len;
+    
+    // v = normal x u
+    let v = [
+        clip_normal[1] * u[2] - clip_normal[2] * u[1],
+        clip_normal[2] * u[0] - clip_normal[0] * u[2],
+        clip_normal[0] * u[1] - clip_normal[1] * u[0],
+    ];
+    
+    // Compute plane size to cover the mesh bounds (use largest extent)
+    let plane_size = half_diag * 1.2;
+    
+    // Compute the four corners of the plane rectangle
+    let corners: [[f32; 3]; 4] = [
+        [
+            plane_center[0] - u[0] * plane_size - v[0] * plane_size,
+            plane_center[1] - u[1] * plane_size - v[1] * plane_size,
+            plane_center[2] - u[2] * plane_size - v[2] * plane_size,
+        ],
+        [
+            plane_center[0] + u[0] * plane_size - v[0] * plane_size,
+            plane_center[1] + u[1] * plane_size - v[1] * plane_size,
+            plane_center[2] + u[2] * plane_size - v[2] * plane_size,
+        ],
+        [
+            plane_center[0] + u[0] * plane_size + v[0] * plane_size,
+            plane_center[1] + u[1] * plane_size + v[1] * plane_size,
+            plane_center[2] + u[2] * plane_size + v[2] * plane_size,
+        ],
+        [
+            plane_center[0] - u[0] * plane_size + v[0] * plane_size,
+            plane_center[1] - u[1] * plane_size + v[1] * plane_size,
+            plane_center[2] - u[2] * plane_size + v[2] * plane_size,
+        ],
+    ];
+    
+    // Project corners using project_close for better near-plane handling
+    let rect_center = rect.center();
+    let half_width = rect.width() * 0.5;
+    let half_height = rect.height() * 0.5;
+    let aspect = rect.width() / rect.height();
+    
+    let projected: Vec<_> = corners
+        .iter()
+        .filter_map(|&c| view_transform.project_close(c, rect_center, half_width, half_height, aspect))
+        .collect();
+    
+    if projected.len() != 4 {
+        return; // Some corners behind camera
+    }
+    
+    // Check all corners are within reasonable bounds
+    let expanded_rect = rect.expand(500.0);
+    if !projected.iter().all(|p| expanded_rect.contains(*p)) {
+        return;
+    }
+    
+    // Draw semi-transparent fill
+    let fill_color = egui::Color32::from_rgba_unmultiplied(100, 150, 255, 30);
+    painter.add(egui::Shape::convex_polygon(
+        projected.clone(),
+        fill_color,
+        egui::Stroke::NONE,
+    ));
+    
+    // Draw dashed outline
+    let outline_color = egui::Color32::from_rgba_unmultiplied(100, 150, 255, 180);
+    let dash_length = 8.0;
+    let gap_length = 4.0;
+    
+    for i in 0..4 {
+        let p0 = projected[i];
+        let p1 = projected[(i + 1) % 4];
+        draw_dashed_line(painter, p0, p1, outline_color, 1.5, dash_length, gap_length);
+    }
+}
+
+/// Draw a dashed line between two points
+fn draw_dashed_line(
+    painter: &egui::Painter,
+    start: egui::Pos2,
+    end: egui::Pos2,
+    color: egui::Color32,
+    width: f32,
+    dash_length: f32,
+    gap_length: f32,
+) {
+    let dx = end.x - start.x;
+    let dy = end.y - start.y;
+    let length = (dx * dx + dy * dy).sqrt();
+    
+    if length < 1.0 {
+        return;
+    }
+    
+    let dir_x = dx / length;
+    let dir_y = dy / length;
+    
+    let mut dist = 0.0;
+    let cycle_length = dash_length + gap_length;
+    
+    while dist < length {
+        let dash_start = dist;
+        let dash_end = (dist + dash_length).min(length);
+        
+        let p0 = egui::pos2(
+            start.x + dir_x * dash_start,
+            start.y + dir_y * dash_start,
+        );
+        let p1 = egui::pos2(
+            start.x + dir_x * dash_end,
+            start.y + dir_y * dash_end,
+        );
+        
+        painter.line_segment([p0, p1], egui::Stroke::new(width, color));
+        
+        dist += cycle_length;
     }
 }
 
@@ -1346,7 +1760,8 @@ fn draw_boundary_conditions(
                                 painter.rect_stroke(
                                     egui::Rect::from_center_size(proj, egui::vec2(size, size)),
                                     2.0,
-                                    egui::Stroke::new(2.0, color)
+                                    egui::Stroke::new(2.0, color),
+                                    egui::StrokeKind::Outside
                                 );
                             }
                         }
@@ -1681,7 +2096,8 @@ fn draw_color_legend(painter: &egui::Painter, rect: egui::Rect, app: &FeaApp) {
             egui::vec2(legend_width, legend_height)
         ),
         0.0,
-        egui::Stroke::new(1.0, egui::Color32::WHITE)
+        egui::Stroke::new(1.0, egui::Color32::WHITE),
+        egui::StrokeKind::Outside
     );
     
     // Draw tick marks and labels
@@ -1787,19 +2203,25 @@ fn project_point(
     let cam_y = rel[0] * up[0] + rel[1] * up[1] + rel[2] * up[2];
     let cam_z = rel[0] * forward[0] + rel[1] * forward[1] + rel[2] * forward[2];
     
-    // Don't render points behind camera or too close to near plane
+    // Don't render points behind camera or too close to near plane (perspective only)
     // Points very close to the camera cause extreme projection artifacts
-    let near_plane = camera.distance * 0.05; // Near plane at 5% of camera distance
-    if cam_z < near_plane.max(0.2) {
+    // Use a proportional near plane that scales with camera distance for close-up viewing
+    let near_plane = (camera.distance * 0.01).max(0.001);
+    if !camera.orthographic && cam_z < near_plane {
         return None;
     }
     
-    // Perspective projection
     let fov_factor = (camera.fov / 2.0).tan();
     let aspect = rect.width() / rect.height();
     
-    let ndc_x = cam_x / (cam_z * fov_factor * aspect);
-    let ndc_y = cam_y / (cam_z * fov_factor);
+    let (ndc_x, ndc_y) = if camera.orthographic {
+        // Orthographic projection: scale by camera distance to maintain size
+        let ortho_scale = 1.0 / (camera.distance * fov_factor);
+        (cam_x * ortho_scale / aspect, cam_y * ortho_scale)
+    } else {
+        // Perspective projection
+        (cam_x / (cam_z * fov_factor * aspect), cam_y / (cam_z * fov_factor))
+    };
     
     // Convert to screen coordinates
     let screen_x = rect.center().x + ndc_x * rect.width() / 2.0;
@@ -1982,6 +2404,11 @@ fn handle_keyboard_shortcuts(ctx: &egui::Context, app: &mut FeaApp) {
         }
         if i.key_pressed(egui::Key::Num0) {
             app.state.ui_state.camera.set_iso_view();
+        }
+        
+        // Projection mode toggle
+        if i.key_pressed(egui::Key::P) && !i.modifiers.ctrl && !i.modifiers.command {
+            app.state.ui_state.camera.orthographic = !app.state.ui_state.camera.orthographic;
         }
         
         // Fit to view (Home key)
@@ -2184,7 +2611,7 @@ fn show_shortcuts_window(ctx: &egui::Context, app: &mut FeaApp) {
                 .spacing([20.0, 4.0])
                 .show(ui, |ui| {
                     ui.strong("Space"); ui.label("Play/pause animation"); ui.end_row();
-                    ui.strong("←/→"); ui.label("Previous/next frame"); ui.end_row();
+                    ui.strong("</>"); ui.label("Previous/next frame"); ui.end_row();
                 });
             
             ui.add_space(8.0);

@@ -9,7 +9,7 @@ use std::thread;
 use crate::render_cache::RenderCache;
 use crate::renderer::MeshRenderer;
 use crate::section_cut::SectionCutCache;
-use crate::state::{AppState, ActivePanel, SimulationResults, SolvePhaseEntry, SolvePhaseCategory, SolveProgress};
+use crate::state::{AppState, ActivePanel, ColorMode, SimulationResults, SolvePhaseEntry, SolvePhaseCategory, SolveProgress};
 use crate::ui;
 
 /// Messages from simulation thread to UI (native only)
@@ -425,6 +425,10 @@ impl FeaApp {
                     self.state.results = Some(results);
                     self.state.status_message = "Simulation completed!".to_string();
                     self.state.ui_state.active_panel = ActivePanel::Results;
+                    // Auto-switch to displacement coloring if currently solid
+                    if self.state.ui_state.color_mode == ColorMode::Solid {
+                        self.state.ui_state.color_mode = ColorMode::Displacement;
+                    }
                     self.renderer = None;
                 }
                 Err(e) => {
@@ -473,6 +477,10 @@ impl FeaApp {
                         self.state.results = Some(*results);
                         self.state.status_message = "Simulation completed!".to_string();
                         self.state.ui_state.active_panel = ActivePanel::Results;
+                        // Auto-switch to displacement coloring if currently solid
+                        if self.state.ui_state.color_mode == ColorMode::Solid {
+                            self.state.ui_state.color_mode = ColorMode::Displacement;
+                        }
                         self.renderer = None;
                     }
                     SimMessage::Error(error) => {
@@ -549,7 +557,7 @@ impl eframe::App for FeaApp {
                 if let Some(ref screenshot_path) = self.test_mode.screenshot_path {
                     println!("[Test] Taking screenshot to: {}", screenshot_path);
                     // Request the screenshot - egui will handle it
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot);
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
                 }
             }
             
@@ -698,12 +706,50 @@ fn show_about_dialog(ctx: &egui::Context, app: &mut FeaApp) {
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
         .show(ctx, |ui| {
             ui.vertical_centered(|ui| {
-                ui.heading("🔧 RustFEA");
+                ui.heading("RustFEA");
                 ui.label("Finite Element Analysis in Rust");
                 ui.add_space(8.0);
                 
                 ui.label(format!("Version: {}", env!("CARGO_PKG_VERSION")));
                 ui.add_space(8.0);
+                
+                ui.horizontal(|ui| {
+                    ui.label("A project by");
+                    if ui.link("John Dews-Flick").clicked() {
+                        let url = "https://johndews.com";
+                        #[cfg(not(target_arch = "wasm32"))]
+                        {
+                            let _ = open::that(url);
+                        }
+                        #[cfg(target_arch = "wasm32")]
+                        {
+                            if let Some(window) = web_sys::window() {
+                                let _ = window.open_with_url_and_target(url, "_blank");
+                            }
+                        }
+                    }
+                });
+                
+                ui.add_space(4.0);
+                
+                ui.horizontal(|ui| {
+                    ui.label("Source code on");
+                    if ui.link("GitHub").clicked() {
+                        let url = "https://github.com/ChooseDews/RustFEA";
+                        #[cfg(not(target_arch = "wasm32"))]
+                        {
+                            let _ = open::that(url);
+                        }
+                        #[cfg(target_arch = "wasm32")]
+                        {
+                            if let Some(window) = web_sys::window() {
+                                let _ = window.open_with_url_and_target(url, "_blank");
+                            }
+                        }
+                    }
+                });
+                
+                ui.add_space(12.0);
                 
                 ui.label("A modular FEA library with support for:");
                 ui.label("• 3D solid mechanics");
@@ -790,7 +836,7 @@ fn show_screenshot_dialog(ctx: &egui::Context, app: &mut FeaApp) {
                         .save_file()
                     {
                         // Request screenshot
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot);
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
                         app.state.status_message = format!("Screenshot saved to: {}", path.display());
                         app.state.ui_state.screenshot_dialog_open = false;
                     }
@@ -805,7 +851,7 @@ fn show_screenshot_dialog(ctx: &egui::Context, app: &mut FeaApp) {
 
 /// Show the Preferences dialog
 fn show_preferences_dialog(ctx: &egui::Context, app: &mut FeaApp) {
-    egui::Window::new("⚙ Preferences")
+    egui::Window::new("Preferences")
         .collapsible(false)
         .resizable(true)
         .default_width(400.0)
@@ -883,17 +929,259 @@ fn show_preferences_dialog(ctx: &egui::Context, app: &mut FeaApp) {
 }
 
 fn setup_custom_style(ctx: &egui::Context) {
-    let mut style = (*ctx.style()).clone();
+    use egui::{Color32, FontId, FontFamily, CornerRadius, Stroke, Shadow, Vec2, Margin};
+    use egui::style::{Widgets, WidgetVisuals, Selection, HandleShape};
     
-    style.text_styles.insert(
-        egui::TextStyle::Heading,
-        egui::FontId::new(18.0, egui::FontFamily::Proportional),
+    // =========================================================================
+    // Custom Fonts - Inter (UI) + JetBrains Mono (code) + Noto Sans Symbols 2 (icons)
+    // =========================================================================
+    let mut fonts = egui::FontDefinitions::default();
+    
+    // Load Inter font family
+    fonts.font_data.insert(
+        "inter_regular".to_owned(),
+        egui::FontData::from_static(include_bytes!("../assets/Inter-Regular.ttf")).into(),
+    );
+    fonts.font_data.insert(
+        "inter_medium".to_owned(),
+        egui::FontData::from_static(include_bytes!("../assets/Inter-Medium.ttf")).into(),
+    );
+    fonts.font_data.insert(
+        "inter_bold".to_owned(),
+        egui::FontData::from_static(include_bytes!("../assets/Inter-Bold.ttf")).into(),
     );
     
+    // Load JetBrains Mono for monospace
+    fonts.font_data.insert(
+        "jetbrains_mono".to_owned(),
+        egui::FontData::from_static(include_bytes!("../assets/JetBrainsMono-Regular.ttf")).into(),
+    );
+    
+    // Load Noto Sans Symbols 2 for geometric shapes and symbols
+    fonts.font_data.insert(
+        "noto_symbols".to_owned(),
+        egui::FontData::from_static(include_bytes!("../assets/NotoSansSymbols2-Regular.ttf")).into(),
+    );
+    
+    // Set Inter as the primary proportional font with Noto Symbols as fallback
+    fonts.families.entry(FontFamily::Proportional).or_default()
+        .insert(0, "inter_regular".to_owned());
+    fonts.families.entry(FontFamily::Proportional).or_default()
+        .push("noto_symbols".to_owned());
+    
+    // Set JetBrains Mono as the primary monospace font with Noto Symbols fallback
+    fonts.families.entry(FontFamily::Monospace).or_default()
+        .insert(0, "jetbrains_mono".to_owned());
+    fonts.families.entry(FontFamily::Monospace).or_default()
+        .push("noto_symbols".to_owned());
+    
+    ctx.set_fonts(fonts);
+    
+    let mut style = (*ctx.style()).clone();
+    
+    // =========================================================================
+    // Typography - Clean, readable fonts
+    // =========================================================================
+    style.text_styles.insert(
+        egui::TextStyle::Heading,
+        FontId::new(20.0, FontFamily::Proportional),
+    );
+    style.text_styles.insert(
+        egui::TextStyle::Body,
+        FontId::new(14.0, FontFamily::Proportional),
+    );
+    style.text_styles.insert(
+        egui::TextStyle::Button,
+        FontId::new(14.0, FontFamily::Proportional),
+    );
+    style.text_styles.insert(
+        egui::TextStyle::Small,
+        FontId::new(12.0, FontFamily::Proportional),
+    );
+    style.text_styles.insert(
+        egui::TextStyle::Monospace,
+        FontId::new(13.0, FontFamily::Monospace),
+    );
+    
+    // =========================================================================
+    // Spacing - More breathing room for modern look
+    // =========================================================================
+    style.spacing.item_spacing = Vec2::new(8.0, 6.0);
+    style.spacing.window_margin = Margin::same(12);
+    style.spacing.button_padding = Vec2::new(10.0, 5.0);
+    style.spacing.menu_margin = Margin::same(8);
+    style.spacing.indent = 20.0;
+    style.spacing.interact_size = Vec2::new(44.0, 22.0);  // Slightly taller touch targets
+    style.spacing.slider_width = 140.0;
+    style.spacing.combo_width = 120.0;
+    style.spacing.text_edit_width = 200.0;
+    style.spacing.icon_width = 16.0;
+    style.spacing.icon_width_inner = 10.0;
+    style.spacing.icon_spacing = 6.0;
+    style.spacing.tooltip_width = 300.0;
+    style.spacing.combo_height = 240.0;
+    style.spacing.indent_ends_with_horizontal_line = false;
+    
+    // Scroll bar styling
+    style.spacing.scroll.bar_width = 10.0;
+    style.spacing.scroll.handle_min_length = 24.0;
+    style.spacing.scroll.bar_inner_margin = 3.0;
+    style.spacing.scroll.bar_outer_margin = 2.0;
+    
+    // =========================================================================
+    // Color Palette - Modern dark theme with blue accent
+    // =========================================================================
+    // Base colors
+    let bg_dark = Color32::from_rgb(24, 26, 32);           // Main background
+    let bg_medium = Color32::from_rgb(32, 35, 42);         // Panel background
+    let bg_light = Color32::from_rgb(42, 46, 56);          // Elevated surfaces
+    let bg_hover = Color32::from_rgb(52, 58, 70);          // Hover state
+    let bg_active = Color32::from_rgb(62, 68, 82);         // Active/pressed state
+    
+    // Text colors
+    let text_primary = Color32::from_rgb(230, 233, 240);   // Primary text
+    let text_secondary = Color32::from_rgb(160, 168, 180); // Secondary/muted text
+    
+    // Accent colors - Modern blue
+    let accent = Color32::from_rgb(66, 133, 244);          // Primary accent (Google blue-ish)
+    let accent_hover = Color32::from_rgb(90, 152, 255);    // Lighter on hover
+    let accent_muted = Color32::from_rgb(45, 95, 170);     // Subtle accent
+    
+    // Stroke colors
+    let stroke_subtle = Color32::from_rgb(55, 60, 72);     // Subtle borders
+    
+    // Status colors
+    let warn_color = Color32::from_rgb(255, 180, 70);      // Warning orange
+    let error_color = Color32::from_rgb(255, 100, 100);    // Error red
+    let hyperlink = Color32::from_rgb(100, 170, 255);      // Links
+    
+    // =========================================================================
+    // Visuals - Core visual settings
+    // =========================================================================
     let mut visuals = style.visuals.clone();
-    visuals.window_rounding = egui::Rounding::same(4.0);
-    visuals.widgets.noninteractive.rounding = egui::Rounding::same(2.0);
+    visuals.dark_mode = true;
+    
+    // Window styling
+    visuals.window_corner_radius = CornerRadius::same(8);
+    visuals.window_shadow = Shadow {
+        offset: [0, 4],
+        blur: 16,
+        spread: 0,
+        color: Color32::from_black_alpha(100),
+    };
+    visuals.window_fill = bg_medium;
+    visuals.window_stroke = Stroke::new(1.0, stroke_subtle);
+    visuals.window_highlight_topmost = true;
+    
+    // Panel and popup styling
+    visuals.panel_fill = bg_medium;
+    visuals.popup_shadow = Shadow {
+        offset: [0, 3],
+        blur: 12,
+        spread: 0,
+        color: Color32::from_black_alpha(80),
+    };
+    visuals.menu_corner_radius = CornerRadius::same(6);
+    
+    // Background colors
+    visuals.extreme_bg_color = bg_dark;
+    visuals.faint_bg_color = Color32::from_rgb(28, 30, 38);
+    visuals.code_bg_color = Color32::from_rgb(35, 38, 48);
+    
+    // Text colors
+    visuals.override_text_color = None;
+    visuals.warn_fg_color = warn_color;
+    visuals.error_fg_color = error_color;
+    visuals.hyperlink_color = hyperlink;
+    
+    // UI elements
+    visuals.resize_corner_size = 12.0;
+    visuals.clip_rect_margin = 3.0;
+    visuals.button_frame = true;
+    visuals.collapsing_header_frame = false;
+    visuals.indent_has_left_vline = true;
+    visuals.striped = true;
+    visuals.slider_trailing_fill = true;
+    visuals.handle_shape = HandleShape::Circle;
+    visuals.interact_cursor = Some(egui::CursorIcon::PointingHand);
+    visuals.image_loading_spinners = true;
+    
+    // Selection styling
+    visuals.selection = Selection {
+        bg_fill: accent_muted,
+        stroke: Stroke::new(1.0, accent),
+    };
+    
+    // =========================================================================
+    // Widget Visuals - State-specific styling
+    // =========================================================================
+    visuals.widgets = Widgets {
+        // Non-interactive widgets (labels, panel backgrounds)
+        noninteractive: WidgetVisuals {
+            bg_fill: bg_medium,
+            weak_bg_fill: bg_light,
+            bg_stroke: Stroke::new(1.0, stroke_subtle),
+            corner_radius: CornerRadius::same(4),
+            fg_stroke: Stroke::new(1.0, text_secondary),
+            expansion: 0.0,
+        },
+        // Interactive widgets at rest
+        inactive: WidgetVisuals {
+            bg_fill: bg_light,
+            weak_bg_fill: bg_light,
+            bg_stroke: Stroke::new(1.0, stroke_subtle),
+            corner_radius: CornerRadius::same(6),
+            fg_stroke: Stroke::new(1.0, text_primary),
+            expansion: 0.0,
+        },
+        // Hovered interactive widgets
+        hovered: WidgetVisuals {
+            bg_fill: bg_hover,
+            weak_bg_fill: bg_hover,
+            bg_stroke: Stroke::new(1.5, accent),
+            corner_radius: CornerRadius::same(6),
+            fg_stroke: Stroke::new(1.5, text_primary),
+            expansion: 1.0,
+        },
+        // Active (clicked/focused) widgets
+        active: WidgetVisuals {
+            bg_fill: bg_active,
+            weak_bg_fill: bg_active,
+            bg_stroke: Stroke::new(2.0, accent_hover),
+            corner_radius: CornerRadius::same(6),
+            fg_stroke: Stroke::new(2.0, text_primary),
+            expansion: 1.0,
+        },
+        // Open (e.g., combo box with menu open)
+        open: WidgetVisuals {
+            bg_fill: bg_hover,
+            weak_bg_fill: bg_hover,
+            bg_stroke: Stroke::new(1.5, accent),
+            corner_radius: CornerRadius::same(6),
+            fg_stroke: Stroke::new(1.5, text_primary),
+            expansion: 1.0,
+        },
+    };
+    
+    // Text cursor styling
+    visuals.text_cursor.stroke = Stroke::new(2.0, accent);
+    visuals.text_cursor.preview = false;
+    visuals.text_cursor.blink = true;
+    visuals.text_cursor.on_duration = 0.5;
+    visuals.text_cursor.off_duration = 0.5;
+    
     style.visuals = visuals;
+    
+    // =========================================================================
+    // Interaction - Responsive feel
+    // =========================================================================
+    style.interaction.tooltip_delay = 0.3;
+    style.interaction.show_tooltips_only_when_still = false;
+    style.interaction.selectable_labels = true;
+    style.interaction.multi_widget_text_select = true;
+    
+    // Animation settings
+    style.animation_time = 0.12;  // Snappy animations
     
     ctx.set_style(style);
 }

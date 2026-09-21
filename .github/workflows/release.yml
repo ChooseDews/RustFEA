@@ -1,0 +1,293 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v0.1.0)'
+        required: false
+        default: 'dev'
+
+env:
+  CARGO_TERM_COLOR: always
+  APP_NAME: rust_fea_gui
+
+jobs:
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build x86_64
+        run: |
+          cargo build --release --package rust_fea_gui --features native --target x86_64-apple-darwin
+
+      - name: Build aarch64
+        run: |
+          cargo build --release --package rust_fea_gui --features native --target aarch64-apple-darwin
+
+      - name: Create Universal Binary
+        run: |
+          mkdir -p dist
+          lipo -create \
+            target/x86_64-apple-darwin/release/rust_fea_gui \
+            target/aarch64-apple-darwin/release/rust_fea_gui \
+            -output dist/rust_fea_gui
+
+      - name: Create macOS App Bundle
+        run: |
+          APP_DIR="dist/RustFEA.app"
+          mkdir -p "$APP_DIR/Contents/MacOS"
+          mkdir -p "$APP_DIR/Contents/Resources"
+          
+          # Copy binary
+          cp dist/rust_fea_gui "$APP_DIR/Contents/MacOS/RustFEA"
+          chmod +x "$APP_DIR/Contents/MacOS/RustFEA"
+          
+          # Create Info.plist
+          cat > "$APP_DIR/Contents/Info.plist" << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleName</key>
+              <string>RustFEA</string>
+              <key>CFBundleDisplayName</key>
+              <string>RustFEA</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.rustfea.gui</string>
+              <key>CFBundleVersion</key>
+              <string>0.1.0</string>
+              <key>CFBundleShortVersionString</key>
+              <string>0.1.0</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleExecutable</key>
+              <string>RustFEA</string>
+              <key>LSMinimumSystemVersion</key>
+              <string>10.15</string>
+              <key>NSHighResolutionCapable</key>
+              <true/>
+              <key>CFBundleDocumentTypes</key>
+              <array>
+                  <dict>
+                      <key>CFBundleTypeName</key>
+                      <string>INP Mesh File</string>
+                      <key>CFBundleTypeExtensions</key>
+                      <array>
+                          <string>inp</string>
+                      </array>
+                      <key>CFBundleTypeRole</key>
+                      <string>Editor</string>
+                  </dict>
+                  <dict>
+                      <key>CFBundleTypeName</key>
+                      <string>RustFEA Project</string>
+                      <key>CFBundleTypeExtensions</key>
+                      <array>
+                          <string>rfea</string>
+                          <string>toml</string>
+                      </array>
+                      <key>CFBundleTypeRole</key>
+                      <string>Editor</string>
+                  </dict>
+              </array>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Create DMG
+        run: |
+          hdiutil create -volname "RustFEA" -srcfolder dist/RustFEA.app -ov -format UDZO dist/RustFEA-macos-universal.dmg
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-build
+          path: |
+            dist/RustFEA-macos-universal.dmg
+            dist/RustFEA.app
+
+  build-linux:
+    name: Build Linux AppImage
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxcb-render0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libxkbcommon-dev \
+            libssl-dev \
+            libgtk-3-dev \
+            libglib2.0-dev \
+            libatk1.0-dev \
+            libcairo2-dev \
+            libpango1.0-dev \
+            libgdk-pixbuf2.0-dev \
+            fuse \
+            libfuse2
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build
+        run: |
+          cargo build --release --package rust_fea_gui --features native
+
+      - name: Download linuxdeploy
+        run: |
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage
+
+      - name: Create AppDir structure
+        run: |
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          
+          # Copy binary
+          cp target/release/rust_fea_gui AppDir/usr/bin/rustfea
+          chmod +x AppDir/usr/bin/rustfea
+          
+          # Create desktop file
+          cat > AppDir/usr/share/applications/rustfea.desktop << 'EOF'
+          [Desktop Entry]
+          Name=RustFEA
+          Comment=Finite Element Analysis Application
+          Exec=rustfea
+          Icon=rustfea
+          Type=Application
+          Categories=Science;Engineering;
+          Terminal=false
+          MimeType=application/x-inp;
+          EOF
+          
+          # Create a simple icon (placeholder - replace with actual icon)
+          cat > AppDir/usr/share/icons/hicolor/256x256/apps/rustfea.svg << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+            <rect width="256" height="256" rx="32" fill="#2d5aa0"/>
+            <text x="128" y="160" font-family="Arial, sans-serif" font-size="100" font-weight="bold" fill="white" text-anchor="middle">FEA</text>
+          </svg>
+          EOF
+          
+          # Create symlinks
+          ln -sf usr/share/applications/rustfea.desktop AppDir/rustfea.desktop
+          ln -sf usr/share/icons/hicolor/256x256/apps/rustfea.svg AppDir/rustfea.svg
+
+      - name: Build AppImage
+        run: |
+          ./linuxdeploy-x86_64.AppImage --appdir AppDir --output appimage
+          mv RustFEA*.AppImage RustFEA-linux-x86_64.AppImage || mv *.AppImage RustFEA-linux-x86_64.AppImage
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build
+          path: RustFEA-linux-x86_64.AppImage
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build
+        run: |
+          cargo build --release --package rust_fea_gui --features native
+
+      - name: Create distribution folder
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist
+          Copy-Item target/release/rust_fea_gui.exe dist/RustFEA.exe
+
+      - name: Create ZIP archive
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist/RustFEA.exe -DestinationPath RustFEA-windows-x86_64.zip
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: |
+            RustFEA-windows-x86_64.zip
+            dist/RustFEA.exe
+
+  create-release:
+    name: Create Release
+    needs: [build-macos, build-linux, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display structure
+        run: ls -R artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/macos-build/RustFEA-macos-universal.dmg
+            artifacts/linux-build/RustFEA-linux-x86_64.AppImage
+            artifacts/windows-build/RustFEA-windows-x86_64.zip
+          draft: false
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+          generate_release_notes: true

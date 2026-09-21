@@ -10,11 +10,11 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
             ui.horizontal(|ui| {
                 // Status indicator icon
                 let status_icon = if app.state.is_running {
-                    "🔄"
+                    "◐"
                 } else if app.state.results.is_some() {
-                    "✅"
-                } else {
                     "●"
+                } else {
+                    "○"
                 };
                 ui.label(status_icon);
                 
@@ -59,14 +59,14 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                     // Show clipping plane status
                     if app.state.ui_state.clipping_plane.enabled {
                         ui.separator();
-                        ui.colored_label(egui::Color32::LIGHT_BLUE, "✂ Clipped");
+                        ui.colored_label(egui::Color32::LIGHT_BLUE, "Clipped");
                     }
                 }
                 
                 // Animation status
                 if app.state.ui_state.playback_active {
                     ui.separator();
-                    ui.colored_label(egui::Color32::LIGHT_GREEN, "▶ Playing");
+                        ui.colored_label(egui::Color32::LIGHT_GREEN, "Playing");
                 }
                 
                 // Progress bar if running
@@ -113,7 +113,7 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                             ui.label(format!("Triangles drawn: {}", cache.last_rendered_triangles));
                             ui.label(format!("Culling efficiency: {}%", 100 - efficiency));
                             if cache.octree.is_some() {
-                                ui.label("✓ Octree enabled");
+                                ui.label("Octree enabled");
                             }
                         });
                     }
