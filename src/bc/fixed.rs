@@ -1,12 +1,11 @@
-use crate::simulation::Simulation;
 use crate::bc::BoundaryCondition;
-use nalgebra as na;
-use na::{DMatrix, DVector, Vector3};
-use nalgebra_sparse::ops::Op;
-use serde::{Serialize, Deserialize};
-use std::fmt;
 use crate::bc::BoundaryConditionType;
-
+use crate::simulation::Simulation;
+use na::{DMatrix, DVector, Vector3};
+use nalgebra as na;
+use nalgebra_sparse::ops::Op;
+use serde::{Deserialize, Serialize};
+use std::fmt;
 
 /// Represents a fixed boundary condition
 /// # Mathematical Formulation
@@ -18,12 +17,15 @@ use crate::bc::BoundaryConditionType;
 #[derive(Serialize, Deserialize, Debug)]
 pub struct FixedCondition {
     nodes: Vec<usize>,
-    fixed_values: Vec<Option<f64>>
+    fixed_values: Vec<Option<f64>>,
 }
 
 impl FixedCondition {
     pub fn new(nodes: Vec<usize>, fixed_values: Vec<Option<f64>>) -> Self {
-        FixedCondition { nodes, fixed_values }
+        FixedCondition {
+            nodes,
+            fixed_values,
+        }
     }
     pub fn all_3d(nodes: Vec<usize>, fixed_value: f64) -> Self {
         let fixed_values = vec![Some(fixed_value); 3];
@@ -39,11 +41,17 @@ impl BoundaryCondition for FixedCondition {
     fn apply(&mut self, simulation: &mut Simulation) {
         for &node_id in &self.nodes {
             for (i, value) in self.fixed_values.iter().enumerate() {
-                if value.is_none() { continue };
-                let global_index: usize = simulation.get_global_index(node_id, i );
+                if value.is_none() {
+                    continue;
+                };
+                let global_index: usize = simulation.get_global_index(node_id, i);
                 let value = Option::from(value.unwrap() as f64);
-                if value.is_none() { continue };
-                simulation.fixed_global_nodal_values.insert(global_index, value.unwrap());
+                if value.is_none() {
+                    continue;
+                };
+                simulation
+                    .fixed_global_nodal_values
+                    .insert(global_index, value.unwrap());
             }
         }
     }
@@ -59,6 +67,11 @@ impl BoundaryCondition for FixedCondition {
 
 impl fmt::Display for FixedCondition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "FixedCondition: {} nodes, {} fixed values", self.nodes.len(), self.fixed_values.len())
+        write!(
+            f,
+            "FixedCondition: {} nodes, {} fixed values",
+            self.nodes.len(),
+            self.fixed_values.len()
+        )
     }
 }

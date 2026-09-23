@@ -1,13 +1,16 @@
+use log::{debug, info, warn};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::prelude::*;
-use std::collections::HashMap;
 use std::io::{BufWriter, Write};
-use log::{info, debug, warn};
 
-pub fn write_hashmap_sparse_matrix(filename: &str, sparse_matrix: &HashMap<(usize, usize), f64>) -> std::io::Result<()> {
+pub fn write_hashmap_sparse_matrix(
+    filename: &str,
+    sparse_matrix: &HashMap<(usize, usize), f64>,
+) -> std::io::Result<()> {
     let nzn = sparse_matrix.len();
     info!("Writing Matrix Out - Number of Non Zero Values: {}", nzn);
-    
+
     // Check size of matrix and reject if too large
     // This code is commented out, but you can bring it back if you need to.
     // if nzn > 100_000_000 {
@@ -21,7 +24,10 @@ pub fn write_hashmap_sparse_matrix(filename: &str, sparse_matrix: &HashMap<(usiz
     let mut writer = BufWriter::new(file);
 
     // Collect the filtered pairs into a Vec and sort
-    let mut entries: Vec<_> = sparse_matrix.iter().filter(|&(&(row, col), _)| row <= col).collect();
+    let mut entries: Vec<_> = sparse_matrix
+        .iter()
+        .filter(|&(&(row, col), _)| row <= col)
+        .collect();
     entries.sort_by_key(|&((row, col), _)| (row, col));
 
     for &((row, col), &value) in &entries {

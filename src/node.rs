@@ -1,5 +1,5 @@
 // src/node.rs
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 extern crate nalgebra as na;
 
 use na::Vector3;
@@ -19,9 +19,9 @@ pub struct Node {
 /// Implementation of the `Node` struct.
 impl Node {
     /// Constructor for creating a new node.
-    /// 
+    ///
     /// This function initializes a new `Node` object with the specified ID and coordinates.
-    /// 
+    ///
     /// # Arguments
     /// * `id`: The unique identifier for the node.
     /// * `x`: The x-coordinate of the node.
@@ -39,9 +39,9 @@ impl Node {
     }
 
     /// Sets the displacement for the node
-    /// 
+    ///
     /// This function updates the displacement of the node with the provided values.
-    /// 
+    ///
     /// # Arguments
     /// * `ux`: The displacement in the x-direction.
     /// * `uy`: The displacement in the y-direction.
@@ -55,7 +55,7 @@ impl Node {
     }
 
     /// This function calculates the norm of the displacement vector to get the total displacement.
-    /// 
+    ///
     /// # Returns
     /// The total displacement as a scalar value.
     pub fn total_displacement(&self) -> f64 {

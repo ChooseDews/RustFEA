@@ -6,10 +6,10 @@ use std::collections::HashMap;
 /// A data point with mesh refinement level and error
 #[derive(Debug, Clone)]
 pub struct ConvergencePoint {
-    pub mesh_size: f64,      // Characteristic element size (m)
-    pub dof_count: usize,    // Total degrees of freedom
-    pub error: f64,          // Relative error
-    pub label: String,       // e.g., "coarse", "medium", "fine"
+    pub mesh_size: f64,   // Characteristic element size (m)
+    pub dof_count: usize, // Total degrees of freedom
+    pub error: f64,       // Relative error
+    pub label: String,    // e.g., "coarse", "medium", "fine"
 }
 
 /// Convergence study results for a metric
@@ -17,7 +17,7 @@ pub struct ConvergencePoint {
 pub struct ConvergenceStudy {
     pub metric_name: String,
     pub points: Vec<ConvergencePoint>,
-    pub convergence_rate: Option<f64>,  // Estimated order of convergence
+    pub convergence_rate: Option<f64>, // Estimated order of convergence
     pub unit: String,
 }
 
@@ -49,7 +49,9 @@ impl ConvergenceStudy {
         }
 
         // Filter out zero or negative errors
-        let valid_points: Vec<_> = self.points.iter()
+        let valid_points: Vec<_> = self
+            .points
+            .iter()
             .filter(|p| p.error > 1e-15 && p.mesh_size > 1e-15)
             .collect();
 
@@ -62,7 +64,8 @@ impl ConvergenceStudy {
         let sum_log_h: f64 = valid_points.iter().map(|p| p.mesh_size.ln()).sum();
         let sum_log_e: f64 = valid_points.iter().map(|p| p.error.ln()).sum();
         let sum_log_h_sq: f64 = valid_points.iter().map(|p| p.mesh_size.ln().powi(2)).sum();
-        let sum_log_h_log_e: f64 = valid_points.iter()
+        let sum_log_h_log_e: f64 = valid_points
+            .iter()
             .map(|p| p.mesh_size.ln() * p.error.ln())
             .sum();
 
@@ -119,12 +122,16 @@ fn si_prefix(value: f64) -> (f64, &'static str) {
             return (value / threshold, prefix);
         }
     }
-    
+
     (value, "")
 }
 
 /// Generate an ASCII convergence plot
-pub fn generate_ascii_convergence_plot(study: &ConvergenceStudy, width: usize, height: usize) -> String {
+pub fn generate_ascii_convergence_plot(
+    study: &ConvergenceStudy,
+    width: usize,
+    height: usize,
+) -> String {
     if study.points.is_empty() {
         return "No data points for plot".to_string();
     }
@@ -132,11 +139,15 @@ pub fn generate_ascii_convergence_plot(study: &ConvergenceStudy, width: usize, h
     let mut output = String::new();
 
     // Get data range (use log scale for both axes)
-    let log_h: Vec<f64> = study.points.iter()
+    let log_h: Vec<f64> = study
+        .points
+        .iter()
         .filter(|p| p.mesh_size > 0.0)
         .map(|p| p.mesh_size.log10())
         .collect();
-    let log_e: Vec<f64> = study.points.iter()
+    let log_e: Vec<f64> = study
+        .points
+        .iter()
         .filter(|p| p.error > 0.0)
         .map(|p| p.error.log10())
         .collect();
@@ -195,7 +206,7 @@ pub fn generate_ascii_convergence_plot(study: &ConvergenceStudy, width: usize, h
             let first_le = log_e.first().unwrap_or(&0.0);
             let intercept = first_le - rate * first_lh;
             let le = rate * lh + intercept;
-            
+
             let y = ((e_max - le) / (e_max - e_min) * (height - 2) as f64) as usize;
             if y < height - 1 && grid[y][x] == ' ' {
                 grid[y][x] = '·';
@@ -204,21 +215,36 @@ pub fn generate_ascii_convergence_plot(study: &ConvergenceStudy, width: usize, h
     }
 
     // Build output
-    output.push_str(&format!("```\n{}: Convergence Plot (log-log)\n", study.metric_name));
+    output.push_str(&format!(
+        "```\n{}: Convergence Plot (log-log)\n",
+        study.metric_name
+    ));
     if let Some(rate) = study.convergence_rate {
         output.push_str(&format!("Convergence rate: p = {:.2}\n", rate));
     }
     output.push_str(&format!("log₁₀(error)\n"));
-    
+
     for row in &grid {
-        output.push_str(&format!("{:.2e} ", 10_f64.powf(e_max - (grid.iter().position(|r| std::ptr::eq(r, row)).unwrap_or(0) as f64 / height as f64) * (e_max - e_min))));
+        output.push_str(&format!(
+            "{:.2e} ",
+            10_f64.powf(
+                e_max
+                    - (grid.iter().position(|r| std::ptr::eq(r, row)).unwrap_or(0) as f64
+                        / height as f64)
+                        * (e_max - e_min)
+            )
+        ));
         for &c in row {
             output.push(c);
         }
         output.push('\n');
     }
-    
-    output.push_str(&format!("          {:>width$}\n", "log₁₀(h)", width = width - 10));
+
+    output.push_str(&format!(
+        "          {:>width$}\n",
+        "log₁₀(h)",
+        width = width - 10
+    ));
     output.push_str("```\n");
 
     output
@@ -245,8 +271,14 @@ pub fn generate_bar_chart(data: &[(String, f64)], label: &str, max_width: usize)
         let bar_len = (value.abs() / max_val * max_width as f64) as usize;
         let bar: String = "█".repeat(bar_len);
         let sign = if *value < 0.0 { "-" } else { " " };
-        output.push_str(&format!("{:>width$} │{}{} {:.2e}\n", 
-            name, sign, bar, value.abs(), width = label_width));
+        output.push_str(&format!(
+            "{:>width$} │{}{} {:.2e}\n",
+            name,
+            sign,
+            bar,
+            value.abs(),
+            width = label_width
+        ));
     }
     output.push_str("```\n");
 
@@ -288,7 +320,10 @@ pub fn generate_convergence_table(study: &ConvergenceStudy) -> String {
 /// Generate a summary of units for a benchmark
 pub fn format_material_properties(e: f64, nu: f64) -> String {
     let e_str = format_with_units(e, "Pa");
-    format!("E = {} (Young's modulus), ν = {:.2} (Poisson's ratio)", e_str, nu)
+    format!(
+        "E = {} (Young's modulus), ν = {:.2} (Poisson's ratio)",
+        e_str, nu
+    )
 }
 
 pub fn format_geometry_block(l_x: f64, l_y: f64, l_z: f64) -> String {
@@ -339,7 +374,7 @@ mod tests {
         study.add_point(0.1, 100, 0.01, "coarse");
         study.add_point(0.05, 400, 0.0025, "medium");
         study.add_point(0.025, 1600, 0.000625, "fine");
-        
+
         let rate = study.calculate_convergence_rate();
         assert!(rate.is_some());
         assert!((rate.unwrap() - 2.0).abs() < 0.1);

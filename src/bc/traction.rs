@@ -1,26 +1,26 @@
-use crate::simulation::Simulation;
 use crate::bc::BoundaryCondition;
-use nalgebra as na;
-use na::Vector3;
-use serde::{Serialize, Deserialize};
-use std::fmt;
 use crate::bc::BoundaryConditionType;
+use crate::simulation::Simulation;
 use log::debug;
+use na::Vector3;
+use nalgebra as na;
+use serde::{Deserialize, Serialize};
+use std::fmt;
 
 /// Represents a traction (surface force per unit area) boundary condition
-/// 
+///
 /// # Mathematical Formulation
 /// Traction is a force per unit area applied to a surface. Unlike pressure,
 /// traction can have arbitrary direction (not just normal to surface).
-/// 
+///
 /// The equivalent nodal forces are computed by integrating:
 /// F = ∫∫ t * N dA
-/// 
+///
 /// where:
 /// - t is the traction vector (force per unit area)
 /// - N are the shape functions
 /// - dA is the differential area element
-/// 
+///
 /// # Traction Types
 /// - `Uniform`: Same traction vector everywhere on surface
 /// - `Normal`: Traction in surface normal direction (like pressure but can vary)
@@ -54,8 +54,8 @@ pub struct Traction {
 impl Traction {
     /// Create a uniform traction BC with a given force per unit area vector
     pub fn new(elements: Vec<usize>, traction: Vector3<f64>) -> Self {
-        Traction { 
-            elements, 
+        Traction {
+            elements,
             traction_type: TractionType::Uniform(traction),
             nodes: Vec::new(),
             nodal_forces: Vec::new(),
@@ -95,12 +95,7 @@ impl Traction {
     /// Get 2x2 Gauss points for surface integration
     fn get_surface_gauss_points() -> [(f64, f64, f64); 4] {
         let a = 1.0 / 3.0_f64.sqrt();
-        [
-            (-a, -a, 1.0),
-            ( a, -a, 1.0),
-            ( a,  a, 1.0),
-            (-a,  a, 1.0),
-        ]
+        [(-a, -a, 1.0), (a, -a, 1.0), (a, a, 1.0), (-a, a, 1.0)]
     }
 
     /// Shape functions for 4-node quad element
@@ -117,15 +112,15 @@ impl Traction {
     fn shape_derivatives(xi: f64, eta: f64) -> ([f64; 4], [f64; 4]) {
         let dn_dxi = [
             -0.25 * (1.0 - eta),
-             0.25 * (1.0 - eta),
-             0.25 * (1.0 + eta),
+            0.25 * (1.0 - eta),
+            0.25 * (1.0 + eta),
             -0.25 * (1.0 + eta),
         ];
         let dn_deta = [
             -0.25 * (1.0 - xi),
             -0.25 * (1.0 + xi),
-             0.25 * (1.0 + xi),
-             0.25 * (1.0 - xi),
+            0.25 * (1.0 + xi),
+            0.25 * (1.0 - xi),
         ];
         (dn_dxi, dn_deta)
     }
@@ -138,18 +133,18 @@ impl Traction {
         eta: f64,
     ) -> (Vector3<f64>, Vector3<f64>, Vector3<f64>, f64) {
         let (dn_dxi, dn_deta) = Self::shape_derivatives(xi, eta);
-        
+
         let mut dx_dxi = Vector3::zeros();
         let mut dx_deta = Vector3::zeros();
-        
+
         for i in 0..4 {
             dx_dxi += dn_dxi[i] * node_positions[i];
             dx_deta += dn_deta[i] * node_positions[i];
         }
-        
+
         let normal_unnormalized = dx_dxi.cross(&dx_deta);
         let jacobian = normal_unnormalized.norm();
-        
+
         let (normal, tangent_xi, tangent_eta) = if jacobian > 1e-12 {
             let n = normal_unnormalized / jacobian;
             let t_xi = dx_dxi.normalize();
@@ -158,7 +153,7 @@ impl Traction {
         } else {
             (Vector3::zeros(), Vector3::zeros(), Vector3::zeros())
         };
-        
+
         (normal, tangent_xi, tangent_eta, jacobian)
     }
 
@@ -181,12 +176,15 @@ impl Traction {
 #[typetag::serde]
 impl BoundaryCondition for Traction {
     fn initalize(&mut self, simulation: &Simulation) {
-        debug!("Initializing traction condition with {} elements", self.elements.len());
-        
+        debug!(
+            "Initializing traction condition with {} elements",
+            self.elements.len()
+        );
+
         use std::collections::{HashMap, HashSet};
         let mut node_set = HashSet::new();
         let mut nodal_forces_map: HashMap<usize, Vector3<f64>> = HashMap::new();
-        
+
         for &elem_id in &self.elements {
             let element = match simulation.get_element(elem_id) {
                 Some(e) => e,
@@ -195,14 +193,16 @@ impl BoundaryCondition for Traction {
                     continue;
                 }
             };
-            
+
             let connectivity = element.get_connectivity();
             if connectivity.len() != 4 {
-                debug!("Warning: Traction BC requires 4-node surface elements, got {} nodes", 
-                       connectivity.len());
+                debug!(
+                    "Warning: Traction BC requires 4-node surface elements, got {} nodes",
+                    connectivity.len()
+                );
                 continue;
             }
-            
+
             // Get node positions
             let mut node_positions = [Vector3::zeros(); 4];
             for (i, &node_id) in connectivity.iter().enumerate() {
@@ -211,28 +211,29 @@ impl BoundaryCondition for Traction {
                     node_set.insert(node_id);
                 }
             }
-            
+
             // Integrate traction over surface
             let gauss_points = Self::get_surface_gauss_points();
-            
+
             for (xi, eta, weight) in gauss_points {
                 let n = Self::shape_functions(xi, eta);
-                let (normal, tangent_xi, tangent_eta, jacobian) = 
+                let (normal, tangent_xi, tangent_eta, jacobian) =
                     Self::compute_surface_basis(&node_positions, xi, eta);
-                
+
                 let traction = self.compute_traction_at_point(&normal, &tangent_xi, &tangent_eta);
-                
+
                 // Distribute to nodes: F_i = ∫ N_i * t * |J| dξdη
                 for (i, &node_id) in connectivity.iter().enumerate() {
                     let force_contribution = n[i] * traction * jacobian * weight;
-                    *nodal_forces_map.entry(node_id).or_insert(Vector3::zeros()) += force_contribution;
+                    *nodal_forces_map.entry(node_id).or_insert(Vector3::zeros()) +=
+                        force_contribution;
                 }
             }
         }
-        
+
         self.nodes = node_set.into_iter().collect();
         self.nodal_forces = nodal_forces_map.into_iter().collect();
-        
+
         debug!("Traction BC initialized: {} nodes", self.nodes.len());
     }
 
@@ -262,7 +263,12 @@ impl fmt::Display for Traction {
             TractionType::TangentialXi(m) => format!("TangentialXi({:.3e})", m),
             TractionType::TangentialEta(m) => format!("TangentialEta({:.3e})", m),
         };
-        write!(f, "Traction: {} elements, {} nodes, type={}", 
-               self.elements.len(), self.nodes.len(), type_str)
+        write!(
+            f,
+            "Traction: {} elements, {} nodes, type={}",
+            self.elements.len(),
+            self.nodes.len(),
+            type_str
+        )
     }
 }

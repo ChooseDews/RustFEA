@@ -1,26 +1,26 @@
 extern crate nalgebra as na;
-mod node;
-mod elements;
-mod mesh_generation;
-mod io;
-mod simulation;
-mod utilities;
-mod mesh;
-mod solver;
 mod bc;
+mod elements;
+mod io;
+mod mesh;
+mod mesh_generation;
+mod node;
+mod simulation;
+mod solver;
+mod utilities;
 
-use std::time::{SystemTime, UNIX_EPOCH};
-use io::file::seralized_write;
 use env_logger::Env;
-use log::{info, debug, error};
+use io::file::seralized_write;
+use log::{debug, error, info};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 fn main() {
     env_logger::init_from_env(Env::default().default_filter_or("info"));
-    println!("Hello, world!");  
+    println!("Hello, world!");
     // Example usage
     // let mut node_instance = node::Node::new(1, 0.0, 0.0, 0.0);
     // println!("Node before displacement: {:?}", node_instance);
-    
+
     // node_instance.set_displacement(0.1, 0.2, 0.3);
     // println!("Node after displacement: {:?}", node_instance);
 
@@ -34,13 +34,20 @@ fn main() {
     let height = 2.0;
     let length = 15.0;
 
-    let (nodes, elements) = mesh_generation::generate_mesh(b, 2*b, 10*b, height,  base, length);
-    let mut simulation = simulation::Simulation::from_arrays(nodes, elements.into_iter().map(|e| Box::new(e) as Box<dyn elements::base_element::BaseElement>).collect(), 3);
+    let (nodes, elements) = mesh_generation::generate_mesh(b, 2 * b, 10 * b, height, base, length);
+    let mut simulation = simulation::Simulation::from_arrays(
+        nodes,
+        elements
+            .into_iter()
+            .map(|e| Box::new(e) as Box<dyn elements::base_element::BaseElement>)
+            .collect(),
+        3,
+    );
     simulation.solve();
 
     let load = 1e7;
     let modulus = material.youngs_modulus;
-    let i = (1.0/12.0) * base * height.powi(3);
+    let i = (1.0 / 12.0) * base * height.powi(3);
     let disp_max = length.powi(3) * load / (3.0 * modulus * i);
     info!("Analytical displacement: {}", disp_max);
 
@@ -73,7 +80,7 @@ fn main() {
     match io::vtk_writer::write_vtk(filename.as_str(), &simulation) {
         Ok(()) => info!("VTK file written successfully!"),
         Err(e) => error!("Error writing VTK file: {}", e),
-    }    
+    }
 
     //save project
     debug!("Saving simulation data");
@@ -83,5 +90,3 @@ fn main() {
     seralized_write("temp/simulation_run.bin.xz", &simulation);
     info!("Simulation data saved successfully");
 }
-
-

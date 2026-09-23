@@ -1,11 +1,11 @@
 use crate::elements::base_element::{BaseElement, ElementFields};
+use crate::mesh::MeshAssembly;
+use crate::node::Node;
+use crate::utilities::Keywords;
 use log::{debug, info, warn};
 use std::collections::HashMap;
 use std::fmt;
 use std::path::Path;
-use crate::mesh::MeshAssembly;
-use crate::node::Node;
-use crate::utilities::Keywords;
 
 use super::Simulation;
 use crate::simulation::base::SimulationStep;
@@ -98,15 +98,21 @@ impl Simulation {
     }
 
     /// Get element fields for a specific time
-    pub fn get_step_at_time(&self, time: f64, tolerance: f64) -> Option<&HashMap<usize, ElementFields>> {
-        self.steps.iter()
+    pub fn get_step_at_time(
+        &self,
+        time: f64,
+        tolerance: f64,
+    ) -> Option<&HashMap<usize, ElementFields>> {
+        self.steps
+            .iter()
             .find(|step| (step.time - time).abs() < tolerance)
             .map(|step| &step.element_fields)
     }
 
     /// Get element fields for a specific iteration
     pub fn get_step_at_iteration(&self, iteration: u64) -> Option<&HashMap<usize, ElementFields>> {
-        self.steps.iter()
+        self.steps
+            .iter()
             .find(|step| step.iteration == iteration)
             .map(|step| &step.element_fields)
     }

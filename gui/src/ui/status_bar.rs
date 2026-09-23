@@ -1,7 +1,7 @@
 //! Bottom status bar
 
-use eframe::egui;
 use crate::app::FeaApp;
+use eframe::egui;
 
 pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
     egui::TopBottomPanel::bottom("status_bar")
@@ -17,12 +17,12 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                     "○"
                 };
                 ui.label(status_icon);
-                
+
                 // Status message
                 ui.label(&app.state.status_message);
-                
+
                 ui.separator();
-                
+
                 // Mesh info with tooltip
                 if let Some(mesh) = app.state.current_mesh() {
                     let mesh_info = format!(
@@ -55,30 +55,30 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                                 ui.end_row();
                             });
                     });
-                    
+
                     // Show clipping plane status
                     if app.state.ui_state.clipping_plane.enabled {
                         ui.separator();
                         ui.colored_label(egui::Color32::LIGHT_BLUE, "Clipped");
                     }
                 }
-                
+
                 // Animation status
                 if app.state.ui_state.playback_active {
                     ui.separator();
-                        ui.colored_label(egui::Color32::LIGHT_GREEN, "Playing");
+                    ui.colored_label(egui::Color32::LIGHT_GREEN, "Playing");
                 }
-                
+
                 // Progress bar if running
                 if app.state.is_running {
                     ui.separator();
                     ui.add(
                         egui::ProgressBar::new(app.state.progress)
                             .show_percentage()
-                            .animate(true)
+                            .animate(true),
                     );
                 }
-                
+
                 // Right-aligned items
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     // Camera info with tooltip
@@ -88,14 +88,18 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                         cam.yaw.to_degrees(),
                         cam.pitch.to_degrees(),
                         cam.distance
-                    )).on_hover_text("Camera: (yaw, pitch) distance\nLMB: Rotate | RMB: Pan | Scroll: Zoom");
-                    
+                    ))
+                    .on_hover_text(
+                        "Camera: (yaw, pitch) distance\nLMB: Rotate | RMB: Pan | Scroll: Zoom",
+                    );
+
                     // Render stats (only show if mesh loaded)
                     if app.state.current_mesh().is_some() {
                         ui.separator();
                         let cache = &app.render_cache;
                         let efficiency = if cache.faces.len() > 0 {
-                            (cache.last_rendered_faces as f32 / cache.faces.len() as f32 * 100.0) as u32
+                            (cache.last_rendered_faces as f32 / cache.faces.len() as f32 * 100.0)
+                                as u32
                         } else {
                             0
                         };
@@ -105,12 +109,16 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                             cache.faces.len(),
                             efficiency,
                             cache.last_rendered_triangles
-                        )).on_hover_ui(|ui| {
+                        ))
+                        .on_hover_ui(|ui| {
                             ui.label("Render Statistics");
                             ui.separator();
                             ui.label(format!("Visible faces: {}", cache.last_rendered_faces));
                             ui.label(format!("Total faces: {}", cache.faces.len()));
-                            ui.label(format!("Triangles drawn: {}", cache.last_rendered_triangles));
+                            ui.label(format!(
+                                "Triangles drawn: {}",
+                                cache.last_rendered_triangles
+                            ));
                             ui.label(format!("Culling efficiency: {}%", 100 - efficiency));
                             if cache.octree.is_some() {
                                 ui.label("Octree enabled");

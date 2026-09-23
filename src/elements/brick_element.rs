@@ -1,13 +1,12 @@
-use crate::{simulation::Simulation, utilities::check_for_nans};
-use super::base_element::{BaseElement, Material, ElementFields, ElementType};
-use nalgebra as na;
-use na::{DMatrix, DVector, SMatrix, SVector, Matrix3};
+use super::base_element::{BaseElement, ElementFields, ElementType, Material};
 use crate::utilities::compute_von_mises;
-use serde::{Serialize, Deserialize};
+use crate::{simulation::Simulation, utilities::check_for_nans};
 use log::{debug, trace};
+use na::{DMatrix, DVector, Matrix3, SMatrix, SVector};
+use nalgebra as na;
+use serde::{Deserialize, Serialize};
 
-
-#[derive(Serialize, Deserialize, Debug)] 
+#[derive(Serialize, Deserialize, Debug)]
 pub struct BrickElement {
     id: usize,
     connectivity: Vec<usize>,
@@ -72,7 +71,9 @@ impl BrickElement {
     }
 
     fn get_x_local(&self, simulation: &Simulation) -> &SMatrix<f64, 8, 3> {
-        self.nodal_positions.as_ref().expect("Nodal positions not initialized")
+        self.nodal_positions
+            .as_ref()
+            .expect("Nodal positions not initialized")
     }
 
     fn compute_x_local(&mut self, simulation: &Simulation) -> SMatrix<f64, 8, 3> {
@@ -85,7 +86,6 @@ impl BrickElement {
         }
         x
     }
-
 
     fn get_gauss_points() -> &'static [(f64, f64, f64, f64)] {
         static A: f64 = 0.5773502691896257;
@@ -137,22 +137,23 @@ impl BrickElement {
         u
     }
 
-    fn compute_b(&self, x: &SMatrix<f64, 8, 3>, j: &Matrix3<f64>, d_n: &SMatrix<f64, 8, 3>) -> SMatrix<f64, 6, 24> {
+    fn compute_b(
+        &self,
+        x: &SMatrix<f64, 8, 3>,
+        j: &Matrix3<f64>,
+        d_n: &SMatrix<f64, 8, 3>,
+    ) -> SMatrix<f64, 6, 24> {
         let mut b = SMatrix::<f64, 6, 24>::zeros();
         let j_inv = j.try_inverse().unwrap();
         let mut n_i = [0.0; 3];
         for i in 0..8 {
             for m in 0..3 {
-                 n_i[m] =  j_inv.row(m).dot(&d_n.row(i));
+                n_i[m] = j_inv.row(m).dot(&d_n.row(i));
             }
             // B_i: Strain = [ε_xx, ε_yy, ε_zz, γ_xy, γ_yz, γ_xz]
             let b_i = SMatrix::<f64, 6, 3>::new(
-                n_i[0], 0.0, 0.0,
-                0.0, n_i[1], 0.0,
-                0.0, 0.0, n_i[2],
-                n_i[1], n_i[0], 0.0,
-                0.0, n_i[2], n_i[1],
-                n_i[2], 0.0, n_i[0]
+                n_i[0], 0.0, 0.0, 0.0, n_i[1], 0.0, 0.0, 0.0, n_i[2], n_i[1], n_i[0], 0.0, 0.0,
+                n_i[2], n_i[1], n_i[2], 0.0, n_i[0],
             );
 
             for j in 0..6 {
@@ -165,11 +166,16 @@ impl BrickElement {
     }
 
     /// B matrix for normal strains only [rows 0,1,2]
-    fn compute_b_volumetric(&self, x: &SMatrix<f64, 8, 3>, j: &Matrix3<f64>, d_n: &SMatrix<f64, 8, 3>) -> SMatrix<f64, 3, 24> {
+    fn compute_b_volumetric(
+        &self,
+        x: &SMatrix<f64, 8, 3>,
+        j: &Matrix3<f64>,
+        d_n: &SMatrix<f64, 8, 3>,
+    ) -> SMatrix<f64, 3, 24> {
         let mut b = SMatrix::<f64, 3, 24>::zeros();
         let j_inv = j.try_inverse().unwrap();
         let mut n_i = [0.0; 3];
-        
+
         for i in 0..8 {
             for m in 0..3 {
                 n_i[m] = j_inv.row(m).dot(&d_n.row(i));
@@ -182,11 +188,16 @@ impl BrickElement {
     }
 
     /// B matrix for shear strains only [rows 3,4,5]
-    fn compute_b_deviatoric(&self, x: &SMatrix<f64, 8, 3>, j: &Matrix3<f64>, d_n: &SMatrix<f64, 8, 3>) -> SMatrix<f64, 3, 24> {
+    fn compute_b_deviatoric(
+        &self,
+        x: &SMatrix<f64, 8, 3>,
+        j: &Matrix3<f64>,
+        d_n: &SMatrix<f64, 8, 3>,
+    ) -> SMatrix<f64, 3, 24> {
         let mut b = SMatrix::<f64, 3, 24>::zeros();
         let j_inv = j.try_inverse().unwrap();
         let mut n_i = [0.0; 3];
-        
+
         for i in 0..8 {
             for m in 0..3 {
                 n_i[m] = j_inv.row(m).dot(&d_n.row(i));
@@ -205,12 +216,13 @@ impl BrickElement {
         (0.0, 0.0, 0.0, 8.0)
     }
 
-
-    fn compute_jacobian_matrix(&self, x: &SMatrix<f64, 8, 3>, d_n: &SMatrix<f64, 8, 3>) -> Matrix3<f64>  {
+    fn compute_jacobian_matrix(
+        &self,
+        x: &SMatrix<f64, 8, 3>,
+        d_n: &SMatrix<f64, 8, 3>,
+    ) -> Matrix3<f64> {
         d_n.transpose() * x
     }
-
-
 
     fn get_shape_derivatives_local(&self, xi: f64, eta: f64, zeta: f64) -> SMatrix<f64, 8, 3> {
         let xi_m = xi - 1.0;
@@ -221,26 +233,51 @@ impl BrickElement {
         let zeta_p = zeta + 1.0;
 
         SMatrix::from_row_slice(&[
-            -0.125 * eta_m * zeta_m, -0.125 * xi_m * zeta_m, -0.125 * eta_m * xi_m,
-            0.125 * eta_m * zeta_m, 0.125 * xi_p * zeta_m, 0.125 * eta_m * xi_p,
-            -0.125 * eta_p * zeta_m, -0.125 * xi_p * zeta_m, -0.125 * eta_p * xi_p,
-            0.125 * eta_p * zeta_m, 0.125 * xi_m * zeta_m, 0.125 * eta_p * xi_m,
-            0.125 * eta_m * zeta_p, 0.125 * xi_m * zeta_p, 0.125 * eta_m * xi_m,
-            -0.125 * eta_m * zeta_p, -0.125 * xi_p * zeta_p, -0.125 * eta_m * xi_p,
-            0.125 * eta_p * zeta_p, 0.125 * xi_p * zeta_p, 0.125 * eta_p * xi_p,
-            -0.125 * eta_p * zeta_p, -0.125 * xi_m * zeta_p, -0.125 * eta_p * xi_m
+            -0.125 * eta_m * zeta_m,
+            -0.125 * xi_m * zeta_m,
+            -0.125 * eta_m * xi_m,
+            0.125 * eta_m * zeta_m,
+            0.125 * xi_p * zeta_m,
+            0.125 * eta_m * xi_p,
+            -0.125 * eta_p * zeta_m,
+            -0.125 * xi_p * zeta_m,
+            -0.125 * eta_p * xi_p,
+            0.125 * eta_p * zeta_m,
+            0.125 * xi_m * zeta_m,
+            0.125 * eta_p * xi_m,
+            0.125 * eta_m * zeta_p,
+            0.125 * xi_m * zeta_p,
+            0.125 * eta_m * xi_m,
+            -0.125 * eta_m * zeta_p,
+            -0.125 * xi_p * zeta_p,
+            -0.125 * eta_m * xi_p,
+            0.125 * eta_p * zeta_p,
+            0.125 * xi_p * zeta_p,
+            0.125 * eta_p * xi_p,
+            -0.125 * eta_p * zeta_p,
+            -0.125 * xi_m * zeta_p,
+            -0.125 * eta_p * xi_m,
         ])
-    }   
+    }
 
-
-    fn compute_stress(&self, x: &SMatrix<f64, 8, 3>, u: &SVector<f64, 24>, d_n: &SMatrix<f64, 8, 3>) -> SVector<f64, 6> {
+    fn compute_stress(
+        &self,
+        x: &SMatrix<f64, 8, 3>,
+        u: &SVector<f64, 24>,
+        d_n: &SMatrix<f64, 8, 3>,
+    ) -> SVector<f64, 6> {
         let j = self.compute_jacobian_matrix(x, d_n);
         let b = self.compute_b(x, &j, d_n);
         let c = self.material.get_3d_matrix();
         c * b * u
     }
 
-    fn compute_strain(&self, x: &SMatrix<f64, 8, 3>, u: &SVector<f64, 24>, d_n: &SMatrix<f64, 8, 3>) -> SVector<f64, 6> {
+    fn compute_strain(
+        &self,
+        x: &SMatrix<f64, 8, 3>,
+        u: &SVector<f64, 24>,
+        d_n: &SMatrix<f64, 8, 3>,
+    ) -> SVector<f64, 6> {
         let j = self.compute_jacobian_matrix(x, d_n);
         self.compute_b(x, &j, d_n) * u
     }
@@ -261,12 +298,9 @@ impl BrickElement {
             0.125 * xi_m * eta_m * zeta_p,
             0.125 * xi_p * eta_m * zeta_p,
             0.125 * xi_p * eta_p * zeta_p,
-            0.125 * xi_m * eta_p * zeta_p
+            0.125 * xi_m * eta_p * zeta_p,
         ])
     }
-
-
-
 }
 
 #[typetag::serde]
@@ -275,11 +309,9 @@ impl BaseElement for BrickElement {
         self.id
     }
 
-
     fn initialize(&mut self, simulation: &Simulation) {
         self.nodal_positions = Some(self.compute_x_local(simulation));
     }
-
 
     fn get_connectivity(&self) -> &Vec<usize> {
         &self.connectivity
@@ -293,11 +325,7 @@ impl BaseElement for BrickElement {
         &self.deformation_gradient
     }
 
-    fn get_global_position(
-        &self,
-        n: &DVector<f64>,
-        simulation: &Simulation,
-    ) -> na::Vector3<f64> {
+    fn get_global_position(&self, n: &DVector<f64>, simulation: &Simulation) -> na::Vector3<f64> {
         //compute global position of the element given shape functions N
         //return as a na::Vector3<f64>
         let mut global_position = na::Vector3::<f64>::zeros();
@@ -354,26 +382,43 @@ impl BaseElement for BrickElement {
         let xi_p_eta_p = xi_p * eta_p;
 
         // Create the matrix directly with computed values
-        DMatrix::from_row_slice(8, 3, &[
-            -0.125 * eta_m_zeta_m, -0.125 * xi_m_zeta_m, -0.125 * xi_m_eta_m,
-             0.125 * eta_m_zeta_m,  0.125 * xi_p_zeta_m,  0.125 * xi_p_eta_m,
-            -0.125 * eta_p_zeta_m, -0.125 * xi_p_zeta_m, -0.125 * xi_p_eta_p,
-             0.125 * eta_p_zeta_m,  0.125 * xi_m_zeta_m,  0.125 * xi_m_eta_p,
-             0.125 * eta_m_zeta_p,  0.125 * xi_m_zeta_p,  0.125 * xi_m_eta_m,
-            -0.125 * eta_m_zeta_p, -0.125 * xi_p_zeta_p, -0.125 * xi_p_eta_m,
-             0.125 * eta_p_zeta_p,  0.125 * xi_p_zeta_p,  0.125 * xi_p_eta_p,
-            -0.125 * eta_p_zeta_p, -0.125 * xi_m_zeta_p, -0.125 * xi_m_eta_p,
-        ])
+        DMatrix::from_row_slice(
+            8,
+            3,
+            &[
+                -0.125 * eta_m_zeta_m,
+                -0.125 * xi_m_zeta_m,
+                -0.125 * xi_m_eta_m,
+                0.125 * eta_m_zeta_m,
+                0.125 * xi_p_zeta_m,
+                0.125 * xi_p_eta_m,
+                -0.125 * eta_p_zeta_m,
+                -0.125 * xi_p_zeta_m,
+                -0.125 * xi_p_eta_p,
+                0.125 * eta_p_zeta_m,
+                0.125 * xi_m_zeta_m,
+                0.125 * xi_m_eta_p,
+                0.125 * eta_m_zeta_p,
+                0.125 * xi_m_zeta_p,
+                0.125 * xi_m_eta_m,
+                -0.125 * eta_m_zeta_p,
+                -0.125 * xi_p_zeta_p,
+                -0.125 * xi_p_eta_m,
+                0.125 * eta_p_zeta_p,
+                0.125 * xi_p_zeta_p,
+                0.125 * xi_p_eta_p,
+                -0.125 * eta_p_zeta_p,
+                -0.125 * xi_m_zeta_p,
+                -0.125 * xi_m_eta_p,
+            ],
+        )
     }
-
-
 
     fn get_b(&self, xi: f64, eta: f64, zeta: f64, simulation: &Simulation) -> DMatrix<f64> {
         unimplemented!()
     }
 
-    
-    fn compute_stiffness(&mut self, simulation: &Simulation){
+    fn compute_stiffness(&mut self, simulation: &Simulation) {
         trace!("Computing stiffness matrix for brick element");
         let mut k = empty_element_matrix();
         let gauss_points = BrickElement::get_gauss_points();
@@ -390,11 +435,9 @@ impl BaseElement for BrickElement {
         self.stiffness_dmatrix = DMatrix::from_fn(24, 24, |i, j| self.stiffness[(i, j)]);
     }
 
-
     fn get_stiffness(&self) -> &DMatrix<f64> {
         &self.stiffness_dmatrix
     }
-
 
     fn compute_mass(&self, simulation: &Simulation) -> DMatrix<f64> {
         let mut M = DMatrix::<f64>::zeros(8, 8);
@@ -426,7 +469,7 @@ impl BaseElement for BrickElement {
     }
 
     fn get_mass(&self) -> &DMatrix<f64> {
-        &self.mass  
+        &self.mass
     }
 
     fn set_mass(&mut self, mass: DMatrix<f64>) {
@@ -440,7 +483,6 @@ impl BaseElement for BrickElement {
     fn set_active(&mut self, active: bool) {
         self.active = active;
     }
-
 
     fn compute_force(&self, displacement: &DVector<f64>) -> DVector<f64> {
         let f_e = self.stiffness * self.get_u_local_from_displacement(displacement);

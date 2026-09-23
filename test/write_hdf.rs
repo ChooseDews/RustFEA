@@ -1,10 +1,10 @@
 use rust_fea::bc::{FixedCondition, LoadCondition};
 use rust_fea::elements::BrickElement;
+use rust_fea::elements::Material;
 use rust_fea::io::mesh_reader;
 use rust_fea::io::vtk_writer;
-use rust_fea::simulation::Simulation;
 use rust_fea::node::Node;
-use rust_fea::elements::Material;
+use rust_fea::simulation::Simulation;
 use std::time::Instant;
 
 const TEST_OUTPUT_DIR: &str = "examples/output";
@@ -153,8 +153,10 @@ fn run_simulation_and_write_output() {
         loaded_nodes.len()
     );
 
-    let boxed_elements: Vec<Box<dyn rust_fea::elements::BaseElement>> =
-        elements.into_iter().map(|e| Box::new(e) as Box<dyn rust_fea::elements::BaseElement>).collect();
+    let boxed_elements: Vec<Box<dyn rust_fea::elements::BaseElement>> = elements
+        .into_iter()
+        .map(|e| Box::new(e) as Box<dyn rust_fea::elements::BaseElement>)
+        .collect();
     let mut sim = Simulation::from_arrays(nodes, boxed_elements, 3);
 
     let fixed_bc = FixedCondition::static_3d(fixed_nodes);

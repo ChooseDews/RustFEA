@@ -41,7 +41,7 @@ impl Simulation {
                 let element = &elements[&id];
                 let connectivity = element.get_connectivity();
                 let f = element.compute_force(displacement);
-                
+
                 // Create a sparse contribution for this element
                 let mut local_force = DVector::zeros(n_dofs);
                 for (i, &node_id) in connectivity.iter().enumerate() {

@@ -24,15 +24,15 @@ pub use state::AppState;
 #[wasm_bindgen::prelude::wasm_bindgen(start)]
 pub fn wasm_main() {
     use wasm_bindgen::JsCast;
-    
+
     // Redirect panics to console.error
     console_error_panic_hook::set_once();
-    
+
     // Initialize logging
     console_log::init_with_level(log::Level::Debug).expect("Failed to initialize logger");
-    
+
     let web_options = eframe::WebOptions::default();
-    
+
     wasm_bindgen_futures::spawn_local(async {
         // Get the canvas element from the DOM
         let document = web_sys::window()
@@ -44,7 +44,7 @@ pub fn wasm_main() {
             .expect("Failed to find canvas element")
             .dyn_into::<web_sys::HtmlCanvasElement>()
             .expect("Element is not a canvas");
-        
+
         eframe::WebRunner::new()
             .start(
                 canvas,

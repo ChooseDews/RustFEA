@@ -1,14 +1,14 @@
-use std::collections::HashMap;
-use crate::node::Node;
-use crate::elements::{ BaseElement, BrickElement, Brick20Element, TetElement, Material, FourNodeElement};
-use serde::{Serialize, Deserialize};
+use crate::elements::{
+    BaseElement, Brick20Element, BrickElement, FourNodeElement, Material, TetElement,
+};
 use crate::io::file::{seralized_read, seralized_write};
-use std::fmt;
+use crate::node::Node;
 use log::{debug, info, trace};
-use std::ops::AddAssign;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::collections::HashSet;
-
-
+use std::fmt;
+use std::ops::AddAssign;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 
@@ -20,10 +20,15 @@ pub struct MeshNode {
 impl MeshNode {
     pub fn to_node(&self, id: isize) -> Node {
         let mut n_id = self.id;
-        if id > -1{
+        if id > -1 {
             n_id = id as usize;
         }
-        Node::new(n_id, self.coordinates[0], self.coordinates[1], self.coordinates[2])
+        Node::new(
+            n_id,
+            self.coordinates[0],
+            self.coordinates[1],
+            self.coordinates[2],
+        )
     }
     pub fn distance(&self, other: &MeshNode) -> f64 {
         let dx = self.coordinates[0] - other.coordinates[0];
@@ -35,7 +40,7 @@ impl MeshNode {
     pub fn offset(&self, offset: &HashMap<usize, usize>) -> MeshNode {
         MeshNode {
             coordinates: self.coordinates.clone(),
-            id: *offset.get(&self.id).unwrap()
+            id: *offset.get(&self.id).unwrap(),
         }
     }
 }
@@ -45,9 +50,8 @@ pub struct MeshElement {
     pub connectivity: Vec<usize>,
     pub name: String,
     pub el_type: String,
-    pub id: usize
+    pub id: usize,
 }
-
 
 impl MeshElement {
     pub fn to_element(&self) -> Box<dyn BaseElement> {
@@ -58,7 +62,11 @@ impl MeshElement {
                     connectivity.push(*node_id);
                 }
                 let mut el_id = self.id;
-                Box::new(BrickElement::new(el_id, self.connectivity.clone(), Material::aluminum()))
+                Box::new(BrickElement::new(
+                    el_id,
+                    self.connectivity.clone(),
+                    Material::aluminum(),
+                ))
             }
             "C3D20" => {
                 let mut connectivity = Vec::new();
@@ -66,7 +74,11 @@ impl MeshElement {
                     connectivity.push(*node_id);
                 }
                 let mut el_id = self.id;
-                Box::new(Brick20Element::new(el_id, self.connectivity.clone(), Material::aluminum()))
+                Box::new(Brick20Element::new(
+                    el_id,
+                    self.connectivity.clone(),
+                    Material::aluminum(),
+                ))
             }
             "C3D4" => {
                 let mut connectivity = Vec::new();
@@ -74,7 +86,11 @@ impl MeshElement {
                     connectivity.push(*node_id);
                 }
                 let mut el_id = self.id;
-                Box::new(TetElement::new(el_id, self.connectivity.clone(), Material::aluminum()))
+                Box::new(TetElement::new(
+                    el_id,
+                    self.connectivity.clone(),
+                    Material::aluminum(),
+                ))
             }
             "CPS4" => {
                 let mut connectivity = Vec::new();
@@ -82,7 +98,11 @@ impl MeshElement {
                     connectivity.push(*node_id);
                 }
                 let mut el_id = self.id;
-                Box::new(FourNodeElement::new(el_id, self.connectivity.clone(), Material::empty()))
+                Box::new(FourNodeElement::new(
+                    el_id,
+                    self.connectivity.clone(),
+                    Material::empty(),
+                ))
             }
             _ => {
                 panic!("Element type not supported: {}", self.el_type);
@@ -90,7 +110,11 @@ impl MeshElement {
         }
     }
 
-    pub fn offset(&self, el_offset: &HashMap<usize, usize>, node_offset: &HashMap<usize, usize>) -> MeshElement {
+    pub fn offset(
+        &self,
+        el_offset: &HashMap<usize, usize>,
+        node_offset: &HashMap<usize, usize>,
+    ) -> MeshElement {
         let mut connectivity = Vec::new();
         for node_id in &self.connectivity {
             connectivity.push(*node_offset.get(node_id).unwrap());
@@ -104,9 +128,6 @@ impl MeshElement {
     }
 }
 
-
-
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ElementGroup {
     pub elements: Vec<usize>, //indices of elements in the mesh
@@ -117,7 +138,11 @@ pub struct ElementGroup {
 impl ElementGroup {
     pub fn offset(&self, el_offset: &HashMap<usize, usize>) -> ElementGroup {
         ElementGroup {
-            elements: self.elements.iter().map(|e| *el_offset.get(e).unwrap()).collect(),
+            elements: self
+                .elements
+                .iter()
+                .map(|e| *el_offset.get(e).unwrap())
+                .collect(),
             name: self.name.clone(),
             el_type: self.el_type.clone(),
         }
@@ -132,7 +157,11 @@ pub struct NodeGroup {
 impl NodeGroup {
     pub fn offset(&self, node_offset: &HashMap<usize, usize>) -> NodeGroup {
         NodeGroup {
-            nodes: self.nodes.iter().map(|n| *node_offset.get(n).unwrap()).collect(),
+            nodes: self
+                .nodes
+                .iter()
+                .map(|n| *node_offset.get(n).unwrap())
+                .collect(),
             name: self.name.clone(),
         }
     }
@@ -142,14 +171,26 @@ impl NodeGroup {
 pub struct Body {
     pub elements: Vec<usize>,
     pub nodes: Vec<usize>,
-    pub name: String
+    pub name: String,
 }
 
 impl Body {
-    pub fn offset(&self, el_offset: &HashMap<usize, usize>, node_offset: &HashMap<usize, usize> ) -> Body {
+    pub fn offset(
+        &self,
+        el_offset: &HashMap<usize, usize>,
+        node_offset: &HashMap<usize, usize>,
+    ) -> Body {
         Body {
-            elements: self.elements.iter().map(|e| *el_offset.get(e).unwrap()).collect(),
-            nodes: self.nodes.iter().map(|n| *node_offset.get(n).unwrap()).collect(),
+            elements: self
+                .elements
+                .iter()
+                .map(|e| *el_offset.get(e).unwrap())
+                .collect(),
+            nodes: self
+                .nodes
+                .iter()
+                .map(|n| *node_offset.get(n).unwrap())
+                .collect(),
             name: self.name.clone(),
         }
     }
@@ -165,7 +206,6 @@ pub struct MeshAssembly {
     pub name: String,
 }
 
-
 impl MeshAssembly {
     pub fn empty() -> Self {
         MeshAssembly {
@@ -179,12 +219,12 @@ impl MeshAssembly {
     }
 
     /// Loads a mesh from a file.
-    /// 
+    ///
     /// This function reads a serialized mesh from the specified file and returns a new `Mesh` instance.
-    /// 
+    ///
     /// # Arguments
     /// * `filename`: The path to the file containing the serialized mesh.
-    /// 
+    ///
     /// # Returns
     /// A new `Mesh` instance.
     pub fn load(filename: &str) -> Self {
@@ -205,8 +245,14 @@ impl MeshAssembly {
 
     pub fn multiple_bodies(&mut self, bodies: Vec<String>) {
         for body_name in bodies {
-            let el_group = self.element_groups.get(&body_name).unwrap_or_else(|| panic!("Element group: {} not found in mesh", body_name));
-            let node_group = self.node_groups.get(&body_name).unwrap_or_else(|| panic!("Node group: {} not found in mesh", body_name));
+            let el_group = self
+                .element_groups
+                .get(&body_name)
+                .unwrap_or_else(|| panic!("Element group: {} not found in mesh", body_name));
+            let node_group = self
+                .node_groups
+                .get(&body_name)
+                .unwrap_or_else(|| panic!("Node group: {} not found in mesh", body_name));
             let body = Body {
                 elements: el_group.elements.clone(),
                 nodes: node_group.nodes.clone(),
@@ -225,12 +271,18 @@ impl MeshAssembly {
     }
 
     pub fn get_nodes_in_group(&self, group_name: &str) -> Vec<usize> {
-        let group = self.node_groups.get(group_name).unwrap_or_else(|| panic!("Node group: {} not found in mesh", group_name));
+        let group = self
+            .node_groups
+            .get(group_name)
+            .unwrap_or_else(|| panic!("Node group: {} not found in mesh", group_name));
         group.nodes.clone()
     }
 
     pub fn get_elements_in_group(&self, group_name: &str) -> Vec<usize> {
-        let group = self.element_groups.get(group_name).unwrap_or_else(|| panic!("Element group: {} not found in mesh", group_name));
+        let group = self
+            .element_groups
+            .get(group_name)
+            .unwrap_or_else(|| panic!("Element group: {} not found in mesh", group_name));
         group.elements.clone()
     }
 
@@ -257,7 +309,12 @@ impl MeshAssembly {
         debug!("{}", self);
         debug!("Element groups: ");
         for (name, group) in &self.element_groups {
-            debug!("  -> {} - {} - {} elements", name, group.el_type, group.elements.len());
+            debug!(
+                "  -> {} - {} - {} elements",
+                name,
+                group.el_type,
+                group.elements.len()
+            );
         }
         debug!("Node groups: ");
         for (name, group) in &self.node_groups {
@@ -265,7 +322,12 @@ impl MeshAssembly {
         }
         debug!("Bodies: ");
         for body in &self.bodies {
-            debug!("  -> {} - {} elements, {} nodes", body.name, body.elements.len(), body.nodes.len());
+            debug!(
+                "  -> {} - {} elements, {} nodes",
+                body.name,
+                body.elements.len(),
+                body.nodes.len()
+            );
         }
     }
 
@@ -276,7 +338,8 @@ impl MeshAssembly {
         let mut closest_nodes = (0, 0, 0.0);
         let nodes: Vec<(&usize, &MeshNode)> = self.nodes.iter().collect();
         for (i, (&id1, node1)) in nodes.iter().enumerate() {
-            for (&id2, node2) in nodes[i+1..].iter() { //avoid duplicate pairs
+            for (&id2, node2) in nodes[i + 1..].iter() {
+                //avoid duplicate pairs
                 let dist = node1.distance(node2);
                 if dist < min_dist && dist > overlap_tol {
                     min_dist = dist;
@@ -291,33 +354,35 @@ impl MeshAssembly {
     pub fn compute_dt(&self, wave_speed: f64) -> f64 {
         let (node1, node2, dist) = self.get_closest_nodes();
         let dt = dist / wave_speed;
-        debug!("Closest nodes: {} and {} with distance {} and dt: {}", node1, node2, dist, dt);
+        debug!(
+            "Closest nodes: {} and {} with distance {} and dt: {}",
+            node1, node2, dist, dt
+        );
         dt
     }
 
-
     /// Converts the mesh nodes to a vector of nodes.
-    /// 
+    ///
     /// This function iterates through the nodes in the mesh, converts each mesh node to a `Node` object,
     /// and adds them to the `nodes` vector.
-    /// 
+    ///
     /// # Returns
     /// A vector of `Node` objects.
     pub fn convert_to_nodes(&self) -> Vec<Node> {
         let mut nodes = Vec::new();
         let n = self.nodes.len();
         for node_id in 0..n {
-            let node_id = node_id ;
+            let node_id = node_id;
             let mesh_node: &MeshNode = self.nodes.get(&node_id).unwrap();
             nodes.push(mesh_node.to_node(node_id as isize));
         }
         nodes
     }
     /// Converts the mesh elements to a vector of elements.
-    /// 
+    ///
     /// This function iterates through the elements in the mesh, converts each mesh element to a `BaseElement` object,
     /// and adds them to the `elements` vector.
-    /// 
+    ///
     /// # Returns
     /// A vector of `BaseElement` objects.
     pub fn convert_to_brick_elements(&self) -> Vec<Box<dyn BaseElement>> {
@@ -325,8 +390,12 @@ impl MeshAssembly {
         let mut element_index = 0;
 
         // Collect all volume element groups (C3D8, C3D20, and C3D4)
-        let volume_groups: Vec<&ElementGroup> = self.element_groups.values()
-            .filter(|group| group.el_type == "C3D8" || group.el_type == "C3D20" || group.el_type == "C3D4")
+        let volume_groups: Vec<&ElementGroup> = self
+            .element_groups
+            .values()
+            .filter(|group| {
+                group.el_type == "C3D8" || group.el_type == "C3D20" || group.el_type == "C3D4"
+            })
             .collect();
 
         if volume_groups.is_empty() {
@@ -345,17 +414,21 @@ impl MeshAssembly {
             }
         }
 
-        debug!("Converted {} volume elements (C3D8/C3D20/C3D4)", elements.len());
+        debug!(
+            "Converted {} volume elements (C3D8/C3D20/C3D4)",
+            elements.len()
+        );
         elements
     }
-
 
     pub fn convert_to_four_node_elements(&self) -> Vec<Box<dyn BaseElement>> {
         let mut elements = Vec::new();
         let mut element_index = 0;
 
         // Collect all CPS4 element groups
-        let volume_groups: Vec<&ElementGroup> = self.element_groups.values()
+        let volume_groups: Vec<&ElementGroup> = self
+            .element_groups
+            .values()
             .filter(|group| group.el_type == "CPS4")
             .collect();
 
@@ -377,7 +450,6 @@ impl MeshAssembly {
         elements
     }
 
-
     pub fn convert_to_elements(&self) -> Vec<Box<dyn BaseElement>> {
         let mut elements = Vec::new();
         elements.extend(self.convert_to_brick_elements());
@@ -385,8 +457,6 @@ impl MeshAssembly {
         elements
     }
 
-
-    
     //handle a RHS add of another mesh. Other mesh assumed to start from 0 node id and 0 element id
     pub fn add_mesh(&mut self, other: &MeshAssembly) {
         let min_node_id = other.nodes.keys().min().unwrap();
@@ -410,7 +480,7 @@ impl MeshAssembly {
         for (i, node) in other.nodes.iter() {
             node_id_map.insert(node.id, node_offset + i);
         }
-        
+
         for node in other.nodes.values() {
             let new_node: MeshNode = node.offset(&node_id_map);
             self.nodes.insert(new_node.id, new_node);
@@ -421,7 +491,8 @@ impl MeshAssembly {
             self.elements.insert(new_element.id, new_element);
         }
 
-        let mut existing_group_names: HashSet<String> = self.element_groups.keys().cloned().collect();
+        let mut existing_group_names: HashSet<String> =
+            self.element_groups.keys().cloned().collect();
         existing_group_names.extend(self.node_groups.keys().cloned());
 
         for group in other.element_groups.values() {
@@ -458,10 +529,7 @@ impl MeshAssembly {
             counter += 1;
         }
     }
-
-
 }
-
 
 impl AddAssign for MeshAssembly {
     fn add_assign(&mut self, other: Self) {
@@ -469,11 +537,16 @@ impl AddAssign for MeshAssembly {
     }
 }
 
-
 impl fmt::Display for MeshAssembly {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Mesh: {} [Nodes: {}, Elements: {}, Element Groups: {}, Node Groups: {}]", 
-               self.name, self.nodes.len(), self.elements.len(), 
-               self.element_groups.len(), self.node_groups.len())
+        write!(
+            f,
+            "Mesh: {} [Nodes: {}, Elements: {}, Element Groups: {}, Node Groups: {}]",
+            self.name,
+            self.nodes.len(),
+            self.elements.len(),
+            self.element_groups.len(),
+            self.node_groups.len()
+        )
     }
 }

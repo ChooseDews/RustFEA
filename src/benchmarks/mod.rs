@@ -1,27 +1,27 @@
 // Benchmarks module for FEA accuracy validation
 // Contains analytical benchmarks comparing FEA results to exact solutions
 
-pub mod uniaxial_tension;
-pub mod pure_shear;
-pub mod hydrostatic_compression;
-pub mod torsion_shaft;
-pub mod torsion_explicit;
-pub mod hollow_sphere;
-pub mod cantilever_beam;
-pub mod spherical_cavity;
 pub mod boussinesq;
+pub mod c3d20_cantilever_beam;
+pub mod c3d20_uniaxial_tension;
+pub mod c3d4_uniaxial_tension;
+pub mod cantilever_beam;
+pub mod contact_explicit;
+pub mod element_comparison;
+pub mod gravity;
 pub mod hertz_sphere_flat;
 pub mod hertz_sphere_sphere;
-pub mod contact_explicit;
-pub mod gravity;
-pub mod c3d20_uniaxial_tension;
-pub mod c3d20_cantilever_beam;
-pub mod c3d4_uniaxial_tension;
-pub mod element_comparison;
-#[cfg(feature = "native")]
-pub mod solver_comparison;
+pub mod hollow_sphere;
+pub mod hydrostatic_compression;
 pub mod mesh_utils;
 pub mod plotting;
+pub mod pure_shear;
+#[cfg(feature = "native")]
+pub mod solver_comparison;
+pub mod spherical_cavity;
+pub mod torsion_explicit;
+pub mod torsion_shaft;
+pub mod uniaxial_tension;
 
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
@@ -43,7 +43,7 @@ impl MetricComparison {
         } else {
             computed - analytical
         };
-        
+
         MetricComparison {
             name: name.to_string(),
             analytical,
@@ -52,7 +52,7 @@ impl MetricComparison {
             tolerance,
         }
     }
-    
+
     pub fn passed(&self) -> bool {
         self.relative_error.abs() <= self.tolerance
     }
@@ -80,18 +80,18 @@ impl BenchmarkResult {
             notes: None,
         }
     }
-    
+
     pub fn add_metric(&mut self, metric: MetricComparison) {
         if !metric.passed() {
             self.passed = false;
         }
         self.metrics.push(metric);
     }
-    
+
     pub fn set_notes(&mut self, notes: &str) {
         self.notes = Some(notes.to_string());
     }
-    
+
     pub fn set_elapsed(&mut self, elapsed_ms: f64) {
         self.elapsed_ms = elapsed_ms;
     }
@@ -108,30 +108,30 @@ impl BenchmarkSuite {
             benchmarks: Vec::new(),
         }
     }
-    
+
     pub fn add_benchmark(&mut self, name: &str, run_fn: fn() -> BenchmarkResult) {
         self.benchmarks.push((name.to_string(), run_fn));
     }
-    
+
     pub fn benchmark_count(&self) -> usize {
         self.benchmarks.len()
     }
-    
+
     pub fn run_all(&self) -> Vec<BenchmarkResult> {
         let mut results = Vec::new();
-        
+
         for (name, run_fn) in &self.benchmarks {
             println!("Running benchmark: {}...", name);
             let start = Instant::now();
             let mut result = run_fn();
             result.set_elapsed(start.elapsed().as_secs_f64() * 1000.0);
-            
+
             let status = if result.passed { "PASS" } else { "FAIL" };
             println!("  {} ({}ms)", status, result.elapsed_ms as u64);
-            
+
             results.push(result);
         }
-        
+
         results
     }
 }

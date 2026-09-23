@@ -1,14 +1,13 @@
+use bincode;
+use log::{debug, error};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 /// This module provides functions to read and write serialized data to and from files.
 /// It supports JSON, Bincode, and optionally compressed files using the XZ format.
-
 use serde_json::Value;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::Path;
-use serde::{Serialize, Deserialize};
-use bincode;
-use serde::de::DeserializeOwned;
-use log::{debug, error};
 use web_time::Instant;
 
 /// Returns a writer for the specified file.
@@ -22,7 +21,11 @@ use web_time::Instant;
 ///
 /// Panics if the file extension is unsupported or if the file cannot be created.
 fn get_writer(filename: &str) -> Box<dyn Write> {
-    let file_extension = Path::new(filename).extension().expect("Issue parsing file extension").to_str().unwrap();
+    let file_extension = Path::new(filename)
+        .extension()
+        .expect("Issue parsing file extension")
+        .to_str()
+        .unwrap();
     let file = File::create(filename).unwrap();
     match file_extension {
         "json" | "bin" => Box::new(BufWriter::new(file)),
@@ -31,18 +34,18 @@ fn get_writer(filename: &str) -> Box<dyn Write> {
             // Use level 1 for much faster compression (vs level 6)
             // Level 1: ~10x faster than level 6, still good compression
             Box::new(xz2::write::XzEncoder::new(file, 1))
-        },
+        }
         #[cfg(feature = "native")]
         "zst" => {
             // Zstandard compression - often faster than xz
             // Level 1: Very fast compression with good ratio
             // auto_finish() ensures internal buffer (~128kb) is flushed on drop
             Box::new(zstd::Encoder::new(file, 1).unwrap().auto_finish())
-        },
+        }
         #[cfg(not(feature = "native"))]
         "xz" | "zst" => {
             panic!("Compressed file formats (xz, zst) are not supported in WASM builds. Use .json or .bin instead.");
-        },
+        }
         _ => panic!("Unsupported file extension: {}", file_extension),
     }
 }
@@ -58,7 +61,11 @@ fn get_writer(filename: &str) -> Box<dyn Write> {
 ///
 /// Panics if the file extension is unsupported or if the file cannot be opened.
 fn get_reader(filename: &str) -> Box<dyn Read> {
-    let file_extension = Path::new(filename).extension().expect("Issue parsing file extension").to_str().unwrap();
+    let file_extension = Path::new(filename)
+        .extension()
+        .expect("Issue parsing file extension")
+        .to_str()
+        .unwrap();
     let file = File::open(filename).unwrap();
     match file_extension {
         "json" | "bin" => Box::new(BufReader::new(file)),
@@ -69,7 +76,7 @@ fn get_reader(filename: &str) -> Box<dyn Read> {
         #[cfg(not(feature = "native"))]
         "xz" | "zst" => {
             panic!("Compressed file formats (xz, zst) are not supported in WASM builds. Use .json or .bin instead.");
-        },
+        }
         _ => panic!("Unsupported file extension: {}", file_extension),
     }
 }
@@ -116,9 +123,11 @@ pub fn seralized_write<T: Serialize>(filename: &str, data: &T) {
     debug!("Writing serialized data to file: {}", filename);
     let start_time = Instant::now();
     if filename.contains(".json") {
-        serde_json::to_writer(&mut get_writer(filename), &data).expect("Failed to serialize data to JSON")
+        serde_json::to_writer(&mut get_writer(filename), &data)
+            .expect("Failed to serialize data to JSON")
     } else if filename.contains(".bin") {
-        bincode::serialize_into(&mut get_writer(filename), &data).expect("Failed to serialize data to Bincode")
+        bincode::serialize_into(&mut get_writer(filename), &data)
+            .expect("Failed to serialize data to Bincode")
     } else {
         error!("Unsupported file extension for: {}", filename);
         panic!("Unsupported file extension for: {}", filename)

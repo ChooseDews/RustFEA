@@ -1,32 +1,39 @@
 // written with gmsh with an export to .inp in mind
-use std::fs::{read_to_string, canonicalize};
-use std::collections::HashMap;
 use crate::mesh::{ElementGroup, MeshAssembly, MeshElement, MeshNode, NodeGroup};
-use log::{info, debug, trace, error};
-use std::io::{BufReader, Read, BufRead};
-use std::path::Path;
+use log::{debug, error, info, trace};
+use std::collections::HashMap;
 use std::fs::File;
+use std::fs::{canonicalize, read_to_string};
+use std::io::{BufRead, BufReader, Read};
+use std::path::Path;
 
 #[cfg(feature = "native")]
 use xz2::read::XzDecoder;
 
-fn get_reader(filename: &str) -> BufReader<Box<dyn Read>>{
-    let file_extension = Path::new(filename).extension().expect("Issue parsing file extension").to_str().unwrap();
+fn get_reader(filename: &str) -> BufReader<Box<dyn Read>> {
+    let file_extension = Path::new(filename)
+        .extension()
+        .expect("Issue parsing file extension")
+        .to_str()
+        .unwrap();
     let file = File::open(filename).unwrap();
-    
+
     #[cfg(feature = "native")]
     let reader: Box<dyn Read> = match file_extension {
         "inp" => Box::new(file),
         "xz" => Box::new(XzDecoder::new(file)),
         _ => panic!("Unsupported file extension: {}", file_extension),
     };
-    
+
     #[cfg(not(feature = "native"))]
     let reader: Box<dyn Read> = match file_extension {
         "inp" => Box::new(file),
-        _ => panic!("Unsupported file extension for WASM: {}. Only .inp files are supported.", file_extension),
+        _ => panic!(
+            "Unsupported file extension for WASM: {}. Only .inp files are supported.",
+            file_extension
+        ),
     };
-    
+
     BufReader::new(reader)
 }
 
@@ -43,26 +50,25 @@ fn read_lines(filename: &str) -> Vec<String> {
 }
 
 /// Reads a mesh from a file.
-/// 
+///
 /// This function reads a mesh from a file and returns a new `Mesh` instance.
 /// It supports reading from both serialized mesh files (with .mesh extension) and INP files.
-/// 
+///
 /// # Arguments
 /// * `filename`: The path to the file containing the mesh data. .mesh or .inp
-/// 
+///
 /// # Returns
 /// A new `Mesh` instance.
 pub fn read_file(filename: &str) -> MeshAssembly {
-
     if filename.contains(".mesh") {
         info!("Reading mesh from serialized file: {}", filename);
         return MeshAssembly::load(filename);
     }
 
     //panic of .inp or empty
-    if filename.is_empty() { 
+    if filename.is_empty() {
         error!("No mesh file specified");
-        panic!("No mesh file specified"); 
+        panic!("No mesh file specified");
     }
 
     info!("Reading mesh from file: {}", filename);
@@ -83,19 +89,23 @@ pub fn read_file(filename: &str) -> MeshAssembly {
                     params = HashMap::new();
                     let line_parts = line.split(',').map(|s| s.trim()).collect::<Vec<&str>>();
                     for part in line_parts {
-                        if part.contains('*') { continue }
+                        if part.contains('*') {
+                            continue;
+                        }
                         let param_parts = part.split('=').map(|s| s.trim()).collect::<Vec<&str>>();
-                        if param_parts.len() != 2 { continue }
+                        if param_parts.len() != 2 {
+                            continue;
+                        }
                         params.insert(param_parts[0].to_string(), param_parts[1].to_string());
                     }
                     break;
-                }else{
+                } else {
                     current_block = -1;
                 }
             }
             continue;
         }
-        
+
         match current_block {
             0 => {
                 let line_parts = line.split(',').map(|s| s.trim()).collect::<Vec<&str>>();
@@ -109,7 +119,7 @@ pub fn read_file(filename: &str) -> MeshAssembly {
                 let z = line_parts[3].parse::<f64>().unwrap();
                 let node = MeshNode {
                     coordinates: vec![x, y, z],
-                    id
+                    id,
                 };
                 mesh.nodes.insert(id, node);
             }
@@ -132,7 +142,7 @@ pub fn read_file(filename: &str) -> MeshAssembly {
                     connectivity,
                     name: el_set.to_string(),
                     el_type: el_type.to_string(),
-                    id
+                    id,
                 };
                 mesh.elements.insert(id, element);
                 //add element to element group
@@ -143,7 +153,7 @@ pub fn read_file(filename: &str) -> MeshAssembly {
                     let group = ElementGroup {
                         elements: vec![id],
                         name: el_set.to_string(),
-                        el_type: el_type.to_string()
+                        el_type: el_type.to_string(),
                     };
                     mesh.element_groups.insert(el_set.to_string(), group);
                 }
@@ -152,7 +162,10 @@ pub fn read_file(filename: &str) -> MeshAssembly {
                 //handle *ELSET block
                 let el_set = params.get("ELSET").unwrap();
                 let el_nums_parts = line.split(',').map(|s| s.trim());
-                let el_nums = el_nums_parts.filter(|s| !s.is_empty()).map(|s| s.parse::<usize>().unwrap()).collect::<Vec<usize>>();
+                let el_nums = el_nums_parts
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.parse::<usize>().unwrap())
+                    .collect::<Vec<usize>>();
                 //index from zero
                 let el_nums = el_nums.iter().map(|n| n - 1).collect::<Vec<usize>>();
                 if mesh.element_groups.contains_key(el_set) {
@@ -162,7 +175,7 @@ pub fn read_file(filename: &str) -> MeshAssembly {
                     let group = ElementGroup {
                         elements: el_nums,
                         name: el_set.to_string(),
-                        el_type: String::new()
+                        el_type: String::new(),
                     };
                     mesh.element_groups.insert(el_set.to_string(), group);
                 }
@@ -171,7 +184,10 @@ pub fn read_file(filename: &str) -> MeshAssembly {
                 //handle *NSET block
                 let n_set = params.get("NSET").unwrap();
                 let node_nums_parts = line.split(',').map(|s| s.trim());
-                let node_nums = node_nums_parts.filter(|s| !s.is_empty()).map(|s| s.parse::<usize>().unwrap()).collect::<Vec<usize>>();
+                let node_nums = node_nums_parts
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.parse::<usize>().unwrap())
+                    .collect::<Vec<usize>>();
                 //index from zero
                 let node_nums = node_nums.iter().map(|n| n - 1).collect::<Vec<usize>>();
                 if mesh.node_groups.contains_key(n_set) {
@@ -192,7 +208,6 @@ pub fn read_file(filename: &str) -> MeshAssembly {
     mesh
 }
 
-
 pub fn read_file_single_body(filename: &str) -> MeshAssembly {
     let mut mesh = read_file(filename);
     mesh.single_body();
@@ -204,4 +219,3 @@ pub fn read_file_multiple_bodies(filename: &str, bodies: Vec<String>) -> MeshAss
     mesh.multiple_bodies(bodies);
     mesh
 }
-

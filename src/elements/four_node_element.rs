@@ -1,13 +1,13 @@
+use super::base_element::{BaseElement, ElementFields, ElementType, Material};
 use crate::simulation::Simulation;
-use super::base_element::{BaseElement, Material, ElementFields, ElementType};
-use nalgebra as na;
-use na::{DMatrix, DVector};
-use serde::{Serialize, Deserialize};
 use log::{debug, trace};
+use na::{DMatrix, DVector};
+use nalgebra as na;
+use serde::{Deserialize, Serialize};
 
 const TOLERANCE: f64 = 1e-10;
 
-#[derive(Serialize, Deserialize, Debug)] 
+#[derive(Serialize, Deserialize, Debug)]
 pub struct FourNodeElement {
     id: usize,
     connectivity: Vec<usize>,
@@ -30,7 +30,6 @@ fn default_deformation_gradient() -> DMatrix<f64> {
 fn default_zero_matrix() -> DMatrix<f64> {
     DMatrix::zeros(8, 8) // 4 nodes * 2 DOF per node
 }
-
 
 fn get_area_of_triangle(a: &na::Vector3<f64>, b: &na::Vector3<f64>, c: &na::Vector3<f64>) -> f64 {
     let ab = b - a;
@@ -59,8 +58,8 @@ impl FourNodeElement {
 
     fn center(&self, simulation: &Simulation) -> na::Vector3<f64> {
         let x_pos = self.get_x_vector(simulation);
-        
-        (x_pos[0] + x_pos[1] + x_pos[2] + x_pos[3]) / 4.0  
+
+        (x_pos[0] + x_pos[1] + x_pos[2] + x_pos[3]) / 4.0
     }
 
     fn get_gauss_points() -> Vec<(f64, f64, f64)> {
@@ -80,19 +79,17 @@ impl FourNodeElement {
         let node3 = simulation.get_node(self.connectivity[2]).unwrap();
         let vector1 = node2.position - node1.position;
         let vector2 = node3.position - node1.position;
-        
+
         vector1.cross(&vector2)
     }
 
-
-
     fn is_point_inside(&self, point: na::Vector3<f64>, simulation: &Simulation) -> bool {
         let nodes = self.get_x_vector(simulation);
-        
+
         // Split the quadrilateral into two triangles
         let triangle1 = [nodes[0], nodes[1], nodes[2]];
         let triangle2 = [nodes[0], nodes[2], nodes[3]];
-        
+
         // Check if the point is inside either triangle
         self.point_in_triangle(&point, &triangle1) || self.point_in_triangle(&point, &triangle2)
     }
@@ -117,8 +114,9 @@ impl FourNodeElement {
 
     fn get_area(&self, simulation: &Simulation) -> f64 {
         let x_pos = self.get_x_vector(simulation);
-        
-        get_area_of_triangle(&x_pos[0], &x_pos[1], &x_pos[2]) + get_area_of_triangle(&x_pos[0], &x_pos[2], &x_pos[3])
+
+        get_area_of_triangle(&x_pos[0], &x_pos[1], &x_pos[2])
+            + get_area_of_triangle(&x_pos[0], &x_pos[2], &x_pos[3])
     }
 
     fn get_x_vector(&self, simulation: &Simulation) -> Vec<na::Vector3<f64>> {
@@ -127,10 +125,14 @@ impl FourNodeElement {
         let n2 = x.column(1);
         let n3 = x.column(2);
         let n4 = x.column(3);
-        vec![na::Vector3::new(n1[0], n1[1], n1[2]), na::Vector3::new(n2[0], n2[1], n2[2]), na::Vector3::new(n3[0], n3[1], n3[2]), na::Vector3::new(n4[0], n4[1], n4[2])]    
+        vec![
+            na::Vector3::new(n1[0], n1[1], n1[2]),
+            na::Vector3::new(n2[0], n2[1], n2[2]),
+            na::Vector3::new(n3[0], n3[1], n3[2]),
+            na::Vector3::new(n4[0], n4[1], n4[2]),
+        ]
     }
 
-    
     fn get_shape_functions(&self, xi: f64, eta: f64, _zeta: f64) -> DVector<f64> {
         let mut shape_functions: DVector<f64> = DVector::<f64>::zeros(4);
         shape_functions[0] = 0.25 * (1.0 - xi) * (1.0 - eta);
@@ -139,23 +141,29 @@ impl FourNodeElement {
         shape_functions[3] = 0.25 * (1.0 - xi) * (1.0 + eta);
         shape_functions
     }
-
-
 }
 
 #[typetag::serde]
 impl BaseElement for FourNodeElement {
-
-    fn get_signed_distance_vector(&self, point: &na::Vector3<f64>, simulation: &Simulation) -> Option<na::Vector3<f64>> {
+    fn get_signed_distance_vector(
+        &self,
+        point: &na::Vector3<f64>,
+        simulation: &Simulation,
+    ) -> Option<na::Vector3<f64>> {
         // Get the plane normal
         let normal = self.get_plane_normal(simulation).normalize();
-        let center: nalgebra::Matrix<f64, nalgebra::Const<3>, nalgebra::Const<1>, nalgebra::ArrayStorage<f64, 3, 1>> = self.center(simulation);
+        let center: nalgebra::Matrix<
+            f64,
+            nalgebra::Const<3>,
+            nalgebra::Const<1>,
+            nalgebra::ArrayStorage<f64, 3, 1>,
+        > = self.center(simulation);
         let signed_distance = -normal.dot(&(center - point));
         if signed_distance > 0.0 {
             return None;
         }
         let projected_point = point - normal * signed_distance;
-        
+
         // Check if the projected point is within the element
         if self.is_point_inside(projected_point, simulation) {
             Some(-signed_distance * normal)
@@ -163,7 +171,6 @@ impl BaseElement for FourNodeElement {
             None
         }
     }
-
 
     fn get_id(&self) -> usize {
         self.id
@@ -204,10 +211,12 @@ impl BaseElement for FourNodeElement {
     }
 
     fn get_shape_derivatives(&self, xi: f64, eta: f64, _zeta: f64) -> DMatrix<f64> {
-        let matrix_data = [[-0.25 * (1.0 - eta), -0.25 * (1.0 - xi)],
+        let matrix_data = [
+            [-0.25 * (1.0 - eta), -0.25 * (1.0 - xi)],
             [0.25 * (1.0 - eta), -0.25 * (1.0 + xi)],
             [0.25 * (1.0 + eta), 0.25 * (1.0 + xi)],
-            [-0.25 * (1.0 + eta), 0.25 * (1.0 - xi)]];
+            [-0.25 * (1.0 + eta), 0.25 * (1.0 - xi)],
+        ];
         DMatrix::from_row_slice(4, 2, &matrix_data.concat())
     }
 
@@ -219,14 +228,13 @@ impl BaseElement for FourNodeElement {
     }
     fn compute_mass(&self, simulation: &Simulation) -> DMatrix<f64> {
         unimplemented!()
-    }   
+    }
     fn get_mass(&self) -> &DMatrix<f64> {
         &self.mass
     }
     fn set_lumped_mass(&mut self, lumped_mass: &DMatrix<f64>) -> f64 {
         unimplemented!()
-    }   
-
+    }
 
     fn get_lumped_mass(&self) -> &Vec<f64> {
         &self.lumped_mass
@@ -234,5 +242,5 @@ impl BaseElement for FourNodeElement {
 
     fn type_name(&self) -> ElementType {
         ElementType::Quad
-    }           
+    }
 }

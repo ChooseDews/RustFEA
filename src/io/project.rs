@@ -1,16 +1,15 @@
-//Main representation of a project which holds all relevant data including potentially multiple simulations and meshes. 
+//Main representation of a project which holds all relevant data including potentially multiple simulations and meshes.
+use super::vtk_writer::write_vtk;
+use crate::io::file::{seralized_read, seralized_write};
+use crate::io::input_reader::read_simulation_file;
+use crate::mesh::MeshAssembly;
+use crate::simulation::Simulation;
+use crate::utilities::Keywords;
+use log::{debug, info, warn};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs::File;
 use std::io::BufReader;
-use crate::mesh::MeshAssembly;
-use crate::simulation::Simulation; 
-use serde::{Serialize, Deserialize};
-use crate::io::input_reader::read_simulation_file;
-use crate::io::file::{seralized_write, seralized_read};
-use crate::utilities::Keywords;
-use super::vtk_writer::write_vtk;
-use log::{debug, info, warn};
-
 
 #[derive(Serialize, Deserialize)]
 pub struct Project {
@@ -25,7 +24,10 @@ impl Project {
     }
 
     pub fn new(simulations: Vec<Simulation>, keywords: Keywords) -> Self {
-        Project { keywords, simulations }
+        Project {
+            keywords,
+            simulations,
+        }
     }
     /// Saves the project to a file via serialization.
     pub fn save(&self) -> Option<String> {
@@ -33,7 +35,7 @@ impl Project {
             Some(output) => {
                 self.save_to_file(output.as_str());
                 Some(output)
-            },
+            }
             None => {
                 warn!("🗄️ No output file specified. Skipping project save.");
                 None
@@ -70,7 +72,10 @@ impl Project {
         for (index, simulation) in self.simulations.iter().enumerate() {
             let output_vtk = simulation.keywords.get_string("OUTPUT_VTK");
             if output_vtk.is_none() {
-                warn!("No output vtk specified for simulation {}. Skipping export!", index);
+                warn!(
+                    "No output vtk specified for simulation {}. Skipping export!",
+                    index
+                );
                 continue;
             }
             let output_vtk = output_vtk.unwrap();
@@ -84,7 +89,4 @@ impl Project {
             simulation.solve();
         }
     }
-
 }
-
-

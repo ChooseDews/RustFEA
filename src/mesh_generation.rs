@@ -1,10 +1,17 @@
 // src/mesh_generation.rs
 extern crate nalgebra as na;
-use crate::elements::brick_element::BrickElement;
 use crate::elements::base_element::Material;
+use crate::elements::brick_element::BrickElement;
 use crate::node::Node;
 
-pub fn generate_mesh(n_x: usize, n_y: usize, n_z: usize, s_x: f64, s_y: f64, s_z: f64) -> (Vec<Node>, Vec<BrickElement>) {
+pub fn generate_mesh(
+    n_x: usize,
+    n_y: usize,
+    n_z: usize,
+    s_x: f64,
+    s_y: f64,
+    s_z: f64,
+) -> (Vec<Node>, Vec<BrickElement>) {
     let mut nodes = Vec::new();
     let mut elements = Vec::new();
     let dx = s_x / n_x as f64;
@@ -39,16 +46,16 @@ pub fn generate_mesh(n_x: usize, n_y: usize, n_z: usize, s_x: f64, s_y: f64, s_z
                 elements.push(BrickElement::new(
                     elem_id,
                     vec![
-                        bottom_front_left-1,
-                        bottom_front_right-1,
-                        bottom_back_right-1,
-                        bottom_back_left-1,
-                        top_front_left-1,
-                        top_front_right-1,
-                        top_back_right-1,
-                        top_back_left-1,
+                        bottom_front_left - 1,
+                        bottom_front_right - 1,
+                        bottom_back_right - 1,
+                        bottom_back_left - 1,
+                        top_front_left - 1,
+                        top_front_right - 1,
+                        top_back_right - 1,
+                        top_back_left - 1,
                     ],
-                    Material::aluminum()
+                    Material::aluminum(),
                 ));
                 elem_id += 1;
             }
@@ -57,4 +64,3 @@ pub fn generate_mesh(n_x: usize, n_y: usize, n_z: usize, s_x: f64, s_y: f64, s_z
 
     (nodes, elements)
 }
-

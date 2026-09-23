@@ -1,39 +1,39 @@
 //! Run panel for executing simulations with detailed progress tracking
 
-use eframe::egui;
 use crate::app::FeaApp;
-use crate::state::{SolverType, SolvePhaseCategory};
+use crate::state::{SolvePhaseCategory, SolverType};
+use eframe::egui;
 
 pub fn show(ui: &mut egui::Ui, app: &mut FeaApp) {
     ui.heading("Run Simulation");
     ui.add_space(8.0);
-    
+
     // Pre-run checks
     let has_mesh = app.state.current_mesh().is_some();
     let has_bc = !app.state.simulation_config.boundary_conditions.is_empty();
     let is_running = app.state.is_running;
-    
+
     // Status checks
     ui.label(egui::RichText::new("Pre-flight Check").strong());
     ui.add_space(4.0);
-    
+
     show_check(ui, "Mesh loaded", has_mesh);
     show_check(ui, "Boundary conditions defined", has_bc);
-    
+
     if !has_mesh {
         ui.label("Import a mesh in the Mesh tab");
     }
     if !has_bc {
         ui.label("Add boundary conditions in the Setup tab");
     }
-    
+
     ui.add_space(16.0);
-    
+
     // Simulation summary
     if let Some(mesh) = app.state.current_mesh() {
         ui.label(egui::RichText::new("Simulation Summary").strong());
         ui.add_space(4.0);
-        
+
         egui::Grid::new("sim_summary")
             .num_columns(2)
             .spacing([20.0, 4.0])
@@ -41,63 +41,66 @@ pub fn show(ui: &mut egui::Ui, app: &mut FeaApp) {
                 ui.label("Mesh:");
                 ui.label(&mesh.name);
                 ui.end_row();
-                
+
                 ui.label("Nodes:");
                 ui.label(format!("{}", mesh.mesh.nodes.len()));
                 ui.end_row();
-                
+
                 ui.label("Elements:");
                 ui.label(format!("{}", mesh.mesh.elements.len()));
                 ui.end_row();
-                
+
                 ui.label("DOFs:");
                 let dofs = app.state.simulation_config.dofs;
                 let total_dofs = mesh.mesh.nodes.len() * dofs;
                 ui.label(format!("{} per node ({} total)", dofs, total_dofs));
                 ui.end_row();
-                
+
                 ui.label("Solver:");
                 ui.label(match app.state.simulation_config.solver {
                     SolverType::Direct => "Direct (Linear)",
                     SolverType::Explicit => "Explicit (Time-stepping)",
                 });
                 ui.end_row();
-                
+
                 ui.label("BCs:");
-                ui.label(format!("{}", app.state.simulation_config.boundary_conditions.len()));
+                ui.label(format!(
+                    "{}",
+                    app.state.simulation_config.boundary_conditions.len()
+                ));
                 ui.end_row();
             });
     }
-    
+
     ui.add_space(16.0);
-    
+
     // Run controls
     ui.add_space(8.0);
     ui.label(egui::RichText::new("Controls").strong());
     ui.add_space(8.0);
-    
+
     ui.horizontal(|ui| {
         let can_run = has_mesh && has_bc && !is_running;
-        
+
         ui.add_enabled_ui(can_run, |ui| {
             if ui.button("▶ Run Simulation").clicked() {
                 app.start_simulation();
             }
         });
-        
+
         ui.add_enabled_ui(is_running, |ui| {
             if ui.button("■ Stop").clicked() {
                 app.stop_simulation();
             }
         });
     });
-    
+
     // Show detailed progress when running
     if is_running {
         ui.add_space(8.0);
         show_solve_progress(ui, app);
     }
-    
+
     // Explicit solver options
     if app.state.simulation_config.solver == SolverType::Explicit {
         ui.add_space(16.0);
@@ -105,49 +108,65 @@ pub fn show(ui: &mut egui::Ui, app: &mut FeaApp) {
         ui.add_space(8.0);
         ui.label(egui::RichText::new("Explicit Solver Options").strong());
         ui.add_space(4.0);
-        
+
         // Copy values to avoid borrow issues
         let mut time_steps = app.state.simulation_config.explicit_settings.time_steps as i32;
         let mut vtk_interval = app.state.simulation_config.explicit_settings.vtk_save_steps as i32;
-        let mut state_interval = app.state.simulation_config.explicit_settings.state_save_steps as i32;
-        
+        let mut state_interval = app
+            .state
+            .simulation_config
+            .explicit_settings
+            .state_save_steps as i32;
+
         let mut changed = false;
-        
+
         egui::Grid::new("explicit_opts")
             .num_columns(2)
             .spacing([20.0, 4.0])
             .show(ui, |ui| {
                 ui.label("Time Steps:");
-                if ui.add(egui::DragValue::new(&mut time_steps).range(1..=10000000)).changed() {
+                if ui
+                    .add(egui::DragValue::new(&mut time_steps).range(1..=10000000))
+                    .changed()
+                {
                     changed = true;
                 }
                 ui.end_row();
-                
+
                 ui.label("VTK Save Interval:");
-                if ui.add(egui::DragValue::new(&mut vtk_interval).range(1..=100000)).changed() {
+                if ui
+                    .add(egui::DragValue::new(&mut vtk_interval).range(1..=100000))
+                    .changed()
+                {
                     changed = true;
                 }
                 ui.end_row();
-                
+
                 ui.label("State Save Interval:");
-                if ui.add(egui::DragValue::new(&mut state_interval).range(1..=100000)).changed() {
+                if ui
+                    .add(egui::DragValue::new(&mut state_interval).range(1..=100000))
+                    .changed()
+                {
                     changed = true;
                 }
                 ui.end_row();
             });
-        
+
         if changed {
             app.state.simulation_config.explicit_settings.time_steps = time_steps as usize;
             app.state.simulation_config.explicit_settings.vtk_save_steps = vtk_interval as usize;
-            app.state.simulation_config.explicit_settings.state_save_steps = state_interval as usize;
+            app.state
+                .simulation_config
+                .explicit_settings
+                .state_save_steps = state_interval as usize;
         }
-        
+
         // Estimate
         ui.add_space(8.0);
         let estimated_outputs = time_steps / vtk_interval;
         ui.label(format!("Estimated VTK outputs: {}", estimated_outputs));
     }
-    
+
     // Previous results info with phase timing
     if let Some(results) = &app.state.results {
         ui.add_space(16.0);
@@ -155,7 +174,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut FeaApp) {
         ui.add_space(8.0);
         ui.label(egui::RichText::new("Last Results").strong());
         ui.add_space(4.0);
-        
+
         egui::Grid::new("last_results")
             .num_columns(2)
             .spacing([20.0, 4.0])
@@ -163,12 +182,12 @@ pub fn show(ui: &mut egui::Ui, app: &mut FeaApp) {
                 ui.label("Max Displacement:");
                 ui.label(format!("{:.6e}", results.stats.max_displacement));
                 ui.end_row();
-                
+
                 ui.label("Total Solve Time:");
                 ui.label(format_duration(results.stats.solver_time_ms));
                 ui.end_row();
             });
-        
+
         // Show phase timing breakdown if available
         if let Some(ref timing) = results.stats.phase_timing {
             ui.add_space(8.0);
@@ -176,7 +195,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut FeaApp) {
                 show_phase_timing_breakdown(ui, timing);
             });
         }
-        
+
         ui.add_space(8.0);
         if ui.button("View Results →").clicked() {
             app.state.ui_state.active_panel = crate::state::ActivePanel::Results;
@@ -187,19 +206,19 @@ pub fn show(ui: &mut egui::Ui, app: &mut FeaApp) {
 /// Show detailed solve progress during simulation
 fn show_solve_progress(ui: &mut egui::Ui, app: &FeaApp) {
     let progress = &app.state.solve_progress;
-    
+
     // Overall progress bar
     ui.add(
         egui::ProgressBar::new(app.state.progress)
             .show_percentage()
-            .animate(true)
+            .animate(true),
     );
-    
+
     // Elapsed time
     ui.horizontal(|ui| {
         ui.label("Elapsed:");
         ui.label(format_duration(progress.elapsed_ms));
-        
+
         // Estimated remaining (if available)
         if let Some(remaining) = progress.estimated_remaining_ms {
             ui.separator();
@@ -207,7 +226,7 @@ fn show_solve_progress(ui: &mut egui::Ui, app: &FeaApp) {
             ui.label(format_duration(remaining));
         }
     });
-    
+
     // Current phase with icon
     if let Some(ref phase) = progress.current_phase {
         ui.horizontal(|ui| {
@@ -221,17 +240,14 @@ fn show_solve_progress(ui: &mut egui::Ui, app: &FeaApp) {
             }
         });
     }
-    
+
     // Step progress for explicit solver
     if let Some((current, total)) = progress.step_progress {
         ui.add_space(4.0);
         let step_progress = current as f32 / total as f32;
-        ui.add(
-            egui::ProgressBar::new(step_progress)
-                .text(format!("Step {}/{}", current, total))
-        );
+        ui.add(egui::ProgressBar::new(step_progress).text(format!("Step {}/{}", current, total)));
     }
-    
+
     // Phase timeline (completed phases)
     if !progress.completed_phases.is_empty() {
         ui.add_space(8.0);
@@ -270,25 +286,28 @@ fn show_phase_timing_breakdown(ui: &mut egui::Ui, timing: &crate::state::SolvePh
     let total_ms = timing.total_ms.max(1) as f32;
     // Fixed width that fits comfortably in sidebar (240px max)
     let bar_width = 240.0_f32.min(ui.available_width() - 20.0);
-    
+
     // Group by category for summary
-    let mut category_totals: std::collections::HashMap<SolvePhaseCategory, u64> = std::collections::HashMap::new();
+    let mut category_totals: std::collections::HashMap<SolvePhaseCategory, u64> =
+        std::collections::HashMap::new();
     for phase in &timing.phases {
         *category_totals.entry(phase.category).or_insert(0) += phase.duration_ms;
     }
-    
+
     // Category summary bar
     ui.label("Time by Category:");
-    let (rect, _response) = ui.allocate_exact_size(
-        egui::vec2(bar_width, 20.0),
-        egui::Sense::hover()
-    );
-    
+    let (rect, _response) =
+        ui.allocate_exact_size(egui::vec2(bar_width, 20.0), egui::Sense::hover());
+
     let painter = ui.painter();
     let mut x_offset = rect.left();
-    
-    for cat in &[SolvePhaseCategory::Init, SolvePhaseCategory::Assembly, 
-                 SolvePhaseCategory::Solve, SolvePhaseCategory::PostProcess] {
+
+    for cat in &[
+        SolvePhaseCategory::Init,
+        SolvePhaseCategory::Assembly,
+        SolvePhaseCategory::Solve,
+        SolvePhaseCategory::PostProcess,
+    ] {
         if let Some(&cat_ms) = category_totals.get(cat) {
             let width = (cat_ms as f32 / total_ms) * bar_width;
             if width > 1.0 {
@@ -296,36 +315,46 @@ fn show_phase_timing_breakdown(ui: &mut egui::Ui, timing: &crate::state::SolvePh
                 painter.rect_filled(
                     egui::Rect::from_min_size(
                         egui::pos2(x_offset, rect.top()),
-                        egui::vec2(width, rect.height())
+                        egui::vec2(width, rect.height()),
                     ),
                     2.0,
-                    color
+                    color,
                 );
                 x_offset += width;
             }
         }
     }
-    
+
     ui.add_space(4.0);
-    
+
     // Legend - each category on its own line with time and percentage
-    for cat in &[SolvePhaseCategory::Init, SolvePhaseCategory::Assembly, 
-                 SolvePhaseCategory::Solve, SolvePhaseCategory::PostProcess] {
+    for cat in &[
+        SolvePhaseCategory::Init,
+        SolvePhaseCategory::Assembly,
+        SolvePhaseCategory::Solve,
+        SolvePhaseCategory::PostProcess,
+    ] {
         if let Some(&cat_ms) = category_totals.get(cat) {
             let pct = (cat_ms as f32 / total_ms) * 100.0;
             let color = category_color(*cat);
             ui.horizontal(|ui| {
                 // Color swatch
-                let (swatch_rect, _) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
+                let (swatch_rect, _) =
+                    ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
                 ui.painter().rect_filled(swatch_rect, 2.0, color);
                 // Category name, time, and percentage
-                ui.label(format!("{}: {} ({:.1}%)", cat.name(), format_duration(cat_ms), pct));
+                ui.label(format!(
+                    "{}: {} ({:.1}%)",
+                    cat.name(),
+                    format_duration(cat_ms),
+                    pct
+                ));
             });
         }
     }
-    
+
     ui.add_space(8.0);
-    
+
     // Detailed phase list
     ui.label("Phase Details:");
     egui::ScrollArea::vertical()
@@ -341,28 +370,30 @@ fn show_phase_timing_breakdown(ui: &mut egui::Ui, timing: &crate::state::SolvePh
                     ui.label(egui::RichText::new("Duration").strong());
                     ui.label(egui::RichText::new("% of Total").strong());
                     ui.end_row();
-                    
+
                     for phase in &timing.phases {
                         // Phase name with category icon
                         ui.horizontal(|ui| {
                             let color = category_color(phase.category);
-                            ui.label(egui::RichText::new(category_icon(phase.category)).color(color));
+                            ui.label(
+                                egui::RichText::new(category_icon(phase.category)).color(color),
+                            );
                             ui.label(&phase.name);
                         });
-                        
+
                         // Duration
                         ui.label(format_duration(phase.duration_ms));
-                        
+
                         // Percentage
                         let pct = (phase.duration_ms as f32 / total_ms) * 100.0;
                         ui.label(format!("{:.1}%", pct));
                         ui.end_row();
-                        
+
                         // Details (if any) on next row
                         if let Some(ref details) = phase.details {
                             ui.label("");
                             ui.add(egui::Label::new(
-                                egui::RichText::new(details).small().weak()
+                                egui::RichText::new(details).small().weak(),
                             ));
                             ui.label("");
                             ui.end_row();

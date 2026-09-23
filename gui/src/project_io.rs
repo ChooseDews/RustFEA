@@ -1,29 +1,28 @@
 //! Project file serialization/deserialization
-//! 
+//!
 //! Handles saving and loading simulation configurations in a human-readable TOML format.
 
-use serde::{Serialize, Deserialize};
-use std::path::Path;
 use crate::state::{
-    SimulationConfig, SolverType, MaterialConfig, 
-    BoundaryConditionConfig, FixedBcConfig, LoadBcConfig, TorqueBcConfig,
-    ContactBcConfig, PressureBcConfig, TractionBcConfig, TractionTypeConfig,
-    BodyForceBcConfig, BodyForceTypeConfig, ExplicitSettings,
+    BodyForceBcConfig, BodyForceTypeConfig, BoundaryConditionConfig, ContactBcConfig,
+    ExplicitSettings, FixedBcConfig, LoadBcConfig, MaterialConfig, PressureBcConfig,
+    SimulationConfig, SolverType, TorqueBcConfig, TractionBcConfig, TractionTypeConfig,
 };
+use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 /// Serializable project file format
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ProjectFile {
     /// Project name
     pub name: String,
-    
+
     /// Project description
     #[serde(default)]
     pub description: String,
-    
+
     /// Mesh file path (relative to project file)
     pub mesh: Option<String>,
-    
+
     /// Simulation configuration
     pub simulation: SimulationConfigSer,
 }
@@ -33,25 +32,27 @@ pub struct ProjectFile {
 pub struct SimulationConfigSer {
     /// Solver type: "direct" or "explicit"
     pub solver: String,
-    
+
     /// DOFs per node
     #[serde(default = "default_dofs")]
     pub dofs: usize,
-    
+
     /// Materials
     #[serde(default)]
     pub materials: Vec<MaterialConfigSer>,
-    
+
     /// Boundary conditions
     #[serde(default)]
     pub boundary_conditions: Vec<BoundaryConditionSer>,
-    
+
     /// Explicit solver settings (if applicable)
     #[serde(default)]
     pub explicit: Option<ExplicitSettingsSer>,
 }
 
-fn default_dofs() -> usize { 3 }
+fn default_dofs() -> usize {
+    3
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MaterialConfigSer {
@@ -73,7 +74,9 @@ pub struct ExplicitSettingsSer {
     pub state_save_steps: usize,
 }
 
-fn default_save_steps() -> usize { 100 }
+fn default_save_steps() -> usize {
+    100
+}
 
 impl Default for ExplicitSettingsSer {
     fn default() -> Self {
@@ -101,7 +104,7 @@ pub enum BoundaryConditionSer {
         #[serde(default)]
         z: Option<f64>,
     },
-    
+
     #[serde(rename = "load")]
     Load {
         name: String,
@@ -113,7 +116,7 @@ pub enum BoundaryConditionSer {
         #[serde(default)]
         force_z: f64,
     },
-    
+
     #[serde(rename = "torque")]
     Torque {
         name: String,
@@ -122,28 +125,28 @@ pub enum BoundaryConditionSer {
         axis_direction: [f64; 3],
         magnitude: f64,
     },
-    
+
     #[serde(rename = "contact")]
     Contact {
         name: String,
         primary_surface: String,
         secondary_surface: String,
     },
-    
+
     #[serde(rename = "pressure")]
     Pressure {
         name: String,
         element_group: String,
         pressure: f64,
     },
-    
+
     #[serde(rename = "traction")]
     Traction {
         name: String,
         element_group: String,
         traction_type: TractionTypeSer,
     },
-    
+
     #[serde(rename = "body_force")]
     BodyForce {
         name: String,
@@ -191,14 +194,22 @@ impl From<&SimulationConfig> for SimulationConfigSer {
                 SolverType::Explicit => "explicit".to_string(),
             },
             dofs: config.dofs,
-            materials: config.materials.iter().map(|m| MaterialConfigSer {
-                id: m.id,
-                name: m.name.clone(),
-                youngs_modulus: m.youngs_modulus,
-                poissons_ratio: m.poissons_ratio,
-                density: m.density,
-            }).collect(),
-            boundary_conditions: config.boundary_conditions.iter().map(|bc| bc.into()).collect(),
+            materials: config
+                .materials
+                .iter()
+                .map(|m| MaterialConfigSer {
+                    id: m.id,
+                    name: m.name.clone(),
+                    youngs_modulus: m.youngs_modulus,
+                    poissons_ratio: m.poissons_ratio,
+                    density: m.density,
+                })
+                .collect(),
+            boundary_conditions: config
+                .boundary_conditions
+                .iter()
+                .map(|bc| bc.into())
+                .collect(),
             explicit: if config.solver == SolverType::Explicit {
                 Some(ExplicitSettingsSer {
                     time_steps: config.explicit_settings.time_steps,
@@ -251,28 +262,42 @@ impl From<&BoundaryConditionConfig> for BoundaryConditionSer {
                 name: cfg.name.clone(),
                 element_group: cfg.element_group.clone(),
                 traction_type: match &cfg.traction_type {
-                    TractionTypeConfig::Uniform { fx, fy, fz } => 
-                        TractionTypeSer::Uniform { fx: *fx, fy: *fy, fz: *fz },
-                    TractionTypeConfig::Normal { magnitude } => 
-                        TractionTypeSer::Normal { magnitude: *magnitude },
-                    TractionTypeConfig::Shear { magnitude } => 
-                        TractionTypeSer::Shear { magnitude: *magnitude },
+                    TractionTypeConfig::Uniform { fx, fy, fz } => TractionTypeSer::Uniform {
+                        fx: *fx,
+                        fy: *fy,
+                        fz: *fz,
+                    },
+                    TractionTypeConfig::Normal { magnitude } => TractionTypeSer::Normal {
+                        magnitude: *magnitude,
+                    },
+                    TractionTypeConfig::Shear { magnitude } => TractionTypeSer::Shear {
+                        magnitude: *magnitude,
+                    },
                 },
             },
             BoundaryConditionConfig::BodyForce(cfg) => BoundaryConditionSer::BodyForce {
                 name: cfg.name.clone(),
                 element_group: cfg.element_group.clone(),
                 force_type: match &cfg.force_type {
-                    BodyForceTypeConfig::Gravity { gx, gy, gz } => 
-                        BodyForceTypeSer::Gravity { gx: *gx, gy: *gy, gz: *gz },
-                    BodyForceTypeConfig::Centrifugal { axis_point, axis_direction, angular_velocity } =>
-                        BodyForceTypeSer::Centrifugal {
-                            axis_point: *axis_point,
-                            axis_direction: *axis_direction,
-                            angular_velocity: *angular_velocity,
-                        },
-                    BodyForceTypeConfig::Uniform { fx, fy, fz } =>
-                        BodyForceTypeSer::Uniform { fx: *fx, fy: *fy, fz: *fz },
+                    BodyForceTypeConfig::Gravity { gx, gy, gz } => BodyForceTypeSer::Gravity {
+                        gx: *gx,
+                        gy: *gy,
+                        gz: *gz,
+                    },
+                    BodyForceTypeConfig::Centrifugal {
+                        axis_point,
+                        axis_direction,
+                        angular_velocity,
+                    } => BodyForceTypeSer::Centrifugal {
+                        axis_point: *axis_point,
+                        axis_direction: *axis_direction,
+                        angular_velocity: *angular_velocity,
+                    },
+                    BodyForceTypeConfig::Uniform { fx, fy, fz } => BodyForceTypeSer::Uniform {
+                        fx: *fx,
+                        fy: *fy,
+                        fz: *fz,
+                    },
                 },
             },
         }
@@ -287,21 +312,29 @@ impl From<&SimulationConfigSer> for SimulationConfig {
                 _ => SolverType::Direct,
             },
             dofs: ser.dofs,
-            materials: ser.materials.iter().map(|m| MaterialConfig {
-                id: m.id,
-                name: m.name.clone(),
-                youngs_modulus: m.youngs_modulus,
-                poissons_ratio: m.poissons_ratio,
-                density: m.density,
-            }).collect(),
+            materials: ser
+                .materials
+                .iter()
+                .map(|m| MaterialConfig {
+                    id: m.id,
+                    name: m.name.clone(),
+                    youngs_modulus: m.youngs_modulus,
+                    poissons_ratio: m.poissons_ratio,
+                    density: m.density,
+                })
+                .collect(),
             boundary_conditions: ser.boundary_conditions.iter().map(|bc| bc.into()).collect(),
             output: Default::default(),
-            explicit_settings: ser.explicit.as_ref().map(|e| ExplicitSettings {
-                time_steps: e.time_steps,
-                time_step_override: e.time_step_override,
-                vtk_save_steps: e.vtk_save_steps,
-                state_save_steps: e.state_save_steps,
-            }).unwrap_or_default(),
+            explicit_settings: ser
+                .explicit
+                .as_ref()
+                .map(|e| ExplicitSettings {
+                    time_steps: e.time_steps,
+                    time_step_override: e.time_step_override,
+                    vtk_save_steps: e.vtk_save_steps,
+                    state_save_steps: e.state_save_steps,
+                })
+                .unwrap_or_default(),
         }
     }
 }
@@ -309,79 +342,113 @@ impl From<&SimulationConfigSer> for SimulationConfig {
 impl From<&BoundaryConditionSer> for BoundaryConditionConfig {
     fn from(ser: &BoundaryConditionSer) -> Self {
         match ser {
-            BoundaryConditionSer::Fixed { name, node_group, x, y, z } => {
-                BoundaryConditionConfig::Fixed(FixedBcConfig {
-                    name: name.clone(),
-                    node_group: node_group.clone(),
-                    constrain_x: *x,
-                    constrain_y: *y,
-                    constrain_z: *z,
-                })
-            }
-            BoundaryConditionSer::Load { name, node_group, force_x, force_y, force_z } => {
-                BoundaryConditionConfig::Load(LoadBcConfig {
-                    name: name.clone(),
-                    node_group: node_group.clone(),
-                    force_x: *force_x,
-                    force_y: *force_y,
-                    force_z: *force_z,
-                })
-            }
-            BoundaryConditionSer::Torque { name, node_group, axis_point, axis_direction, magnitude } => {
-                BoundaryConditionConfig::Torque(TorqueBcConfig {
-                    name: name.clone(),
-                    node_group: node_group.clone(),
-                    axis_point: *axis_point,
-                    axis_direction: *axis_direction,
-                    magnitude: *magnitude,
-                })
-            }
-            BoundaryConditionSer::Contact { name, primary_surface, secondary_surface } => {
-                BoundaryConditionConfig::Contact(ContactBcConfig {
-                    name: name.clone(),
-                    primary_surface: primary_surface.clone(),
-                    secondary_surface: secondary_surface.clone(),
-                })
-            }
-            BoundaryConditionSer::Pressure { name, element_group, pressure } => {
-                BoundaryConditionConfig::Pressure(PressureBcConfig {
-                    name: name.clone(),
-                    element_group: element_group.clone(),
-                    pressure: *pressure,
-                })
-            }
-            BoundaryConditionSer::Traction { name, element_group, traction_type } => {
-                BoundaryConditionConfig::Traction(TractionBcConfig {
-                    name: name.clone(),
-                    element_group: element_group.clone(),
-                    traction_type: match traction_type {
-                        TractionTypeSer::Uniform { fx, fy, fz } =>
-                            TractionTypeConfig::Uniform { fx: *fx, fy: *fy, fz: *fz },
-                        TractionTypeSer::Normal { magnitude } =>
-                            TractionTypeConfig::Normal { magnitude: *magnitude },
-                        TractionTypeSer::Shear { magnitude } =>
-                            TractionTypeConfig::Shear { magnitude: *magnitude },
+            BoundaryConditionSer::Fixed {
+                name,
+                node_group,
+                x,
+                y,
+                z,
+            } => BoundaryConditionConfig::Fixed(FixedBcConfig {
+                name: name.clone(),
+                node_group: node_group.clone(),
+                constrain_x: *x,
+                constrain_y: *y,
+                constrain_z: *z,
+            }),
+            BoundaryConditionSer::Load {
+                name,
+                node_group,
+                force_x,
+                force_y,
+                force_z,
+            } => BoundaryConditionConfig::Load(LoadBcConfig {
+                name: name.clone(),
+                node_group: node_group.clone(),
+                force_x: *force_x,
+                force_y: *force_y,
+                force_z: *force_z,
+            }),
+            BoundaryConditionSer::Torque {
+                name,
+                node_group,
+                axis_point,
+                axis_direction,
+                magnitude,
+            } => BoundaryConditionConfig::Torque(TorqueBcConfig {
+                name: name.clone(),
+                node_group: node_group.clone(),
+                axis_point: *axis_point,
+                axis_direction: *axis_direction,
+                magnitude: *magnitude,
+            }),
+            BoundaryConditionSer::Contact {
+                name,
+                primary_surface,
+                secondary_surface,
+            } => BoundaryConditionConfig::Contact(ContactBcConfig {
+                name: name.clone(),
+                primary_surface: primary_surface.clone(),
+                secondary_surface: secondary_surface.clone(),
+            }),
+            BoundaryConditionSer::Pressure {
+                name,
+                element_group,
+                pressure,
+            } => BoundaryConditionConfig::Pressure(PressureBcConfig {
+                name: name.clone(),
+                element_group: element_group.clone(),
+                pressure: *pressure,
+            }),
+            BoundaryConditionSer::Traction {
+                name,
+                element_group,
+                traction_type,
+            } => BoundaryConditionConfig::Traction(TractionBcConfig {
+                name: name.clone(),
+                element_group: element_group.clone(),
+                traction_type: match traction_type {
+                    TractionTypeSer::Uniform { fx, fy, fz } => TractionTypeConfig::Uniform {
+                        fx: *fx,
+                        fy: *fy,
+                        fz: *fz,
                     },
-                })
-            }
-            BoundaryConditionSer::BodyForce { name, element_group, force_type } => {
-                BoundaryConditionConfig::BodyForce(BodyForceBcConfig {
-                    name: name.clone(),
-                    element_group: element_group.clone(),
-                    force_type: match force_type {
-                        BodyForceTypeSer::Gravity { gx, gy, gz } =>
-                            BodyForceTypeConfig::Gravity { gx: *gx, gy: *gy, gz: *gz },
-                        BodyForceTypeSer::Centrifugal { axis_point, axis_direction, angular_velocity } =>
-                            BodyForceTypeConfig::Centrifugal {
-                                axis_point: *axis_point,
-                                axis_direction: *axis_direction,
-                                angular_velocity: *angular_velocity,
-                            },
-                        BodyForceTypeSer::Uniform { fx, fy, fz } =>
-                            BodyForceTypeConfig::Uniform { fx: *fx, fy: *fy, fz: *fz },
+                    TractionTypeSer::Normal { magnitude } => TractionTypeConfig::Normal {
+                        magnitude: *magnitude,
                     },
-                })
-            }
+                    TractionTypeSer::Shear { magnitude } => TractionTypeConfig::Shear {
+                        magnitude: *magnitude,
+                    },
+                },
+            }),
+            BoundaryConditionSer::BodyForce {
+                name,
+                element_group,
+                force_type,
+            } => BoundaryConditionConfig::BodyForce(BodyForceBcConfig {
+                name: name.clone(),
+                element_group: element_group.clone(),
+                force_type: match force_type {
+                    BodyForceTypeSer::Gravity { gx, gy, gz } => BodyForceTypeConfig::Gravity {
+                        gx: *gx,
+                        gy: *gy,
+                        gz: *gz,
+                    },
+                    BodyForceTypeSer::Centrifugal {
+                        axis_point,
+                        axis_direction,
+                        angular_velocity,
+                    } => BodyForceTypeConfig::Centrifugal {
+                        axis_point: *axis_point,
+                        axis_direction: *axis_direction,
+                        angular_velocity: *angular_velocity,
+                    },
+                    BodyForceTypeSer::Uniform { fx, fy, fz } => BodyForceTypeConfig::Uniform {
+                        fx: *fx,
+                        fy: *fy,
+                        fz: *fz,
+                    },
+                },
+            }),
         }
     }
 }
@@ -392,16 +459,15 @@ impl From<&BoundaryConditionSer> for BoundaryConditionConfig {
 
 /// Save project to TOML file
 pub fn save_project(
-    path: &Path, 
+    path: &Path,
     name: &str,
     mesh_path: Option<&Path>,
-    config: &SimulationConfig
+    config: &SimulationConfig,
 ) -> Result<(), String> {
     let toml_str = serialize_project_toml(name, mesh_path, config)?;
-    
-    std::fs::write(path, toml_str)
-        .map_err(|e| format!("Failed to write file: {}", e))?;
-    
+
+    std::fs::write(path, toml_str).map_err(|e| format!("Failed to write file: {}", e))?;
+
     Ok(())
 }
 
@@ -409,7 +475,7 @@ pub fn save_project(
 pub fn serialize_project_toml(
     name: &str,
     mesh_path: Option<&Path>,
-    config: &SimulationConfig
+    config: &SimulationConfig,
 ) -> Result<String, String> {
     let project = ProjectFile {
         name: name.to_string(),
@@ -417,26 +483,25 @@ pub fn serialize_project_toml(
         mesh: mesh_path.map(|p| p.to_string_lossy().to_string()),
         simulation: config.into(),
     };
-    
-    toml::to_string_pretty(&project)
-        .map_err(|e| format!("Failed to serialize project: {}", e))
+
+    toml::to_string_pretty(&project).map_err(|e| format!("Failed to serialize project: {}", e))
 }
 
 /// Load project from TOML file
 pub fn load_project(path: &Path) -> Result<(ProjectFile, SimulationConfig), String> {
-    let contents = std::fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
-    
+    let contents =
+        std::fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
+
     parse_project_toml(&contents)
 }
 
 /// Parse project from TOML string (for WASM file uploads)
 pub fn parse_project_toml(contents: &str) -> Result<(ProjectFile, SimulationConfig), String> {
-    let project: ProjectFile = toml::from_str(contents)
-        .map_err(|e| format!("Failed to parse TOML: {}", e))?;
-    
+    let project: ProjectFile =
+        toml::from_str(contents).map_err(|e| format!("Failed to parse TOML: {}", e))?;
+
     let config: SimulationConfig = (&project.simulation).into();
-    
+
     Ok((project, config))
 }
 
@@ -483,5 +548,6 @@ force_z = 0.0
 time_steps = 10000
 vtk_save_steps = 100
 state_save_steps = 100
-"#.to_string()
+"#
+    .to_string()
 }

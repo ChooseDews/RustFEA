@@ -24,7 +24,7 @@ pub enum AssemblyOutputType {
     SymmetricUpper,
     SymmetricLower,
     SymmetricFull,
-    Unsymmetric
+    Unsymmetric,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -53,7 +53,7 @@ pub struct Simulation {
     #[serde(skip, default = "Vec::new")]
     pub active_elements: Vec<usize>,
     pub worker_count: usize,
-    
+
     pub steps: Vec<SimulationStep>, // Timestep data
 }
 
@@ -240,9 +240,10 @@ impl Simulation {
         debug!("Total mass: {}", total_mass);
     }
 
-
-
-    pub fn assemble(&mut self, output_type: AssemblyOutputType) -> (HashMap<(usize, usize), f64>, Vec<f64>) {
+    pub fn assemble(
+        &mut self,
+        output_type: AssemblyOutputType,
+    ) -> (HashMap<(usize, usize), f64>, Vec<f64>) {
         debug!("Starting assembly process");
         let mut global_stiffness_matrix: HashMap<(usize, usize), f64> = HashMap::new();
         let dof = self.dofs;
@@ -266,9 +267,8 @@ impl Simulation {
                             let global_j = element_connectivity[j] * dof + l;
                             let key = (global_i, global_j);
 
-
-                            match output_type { 
-                                AssemblyOutputType::SymmetricUpper => { 
+                            match output_type {
+                                AssemblyOutputType::SymmetricUpper => {
                                     if global_i > global_j {
                                         continue;
                                     }
@@ -280,7 +280,6 @@ impl Simulation {
                                 }
                                 _ => {}
                             }
-
 
                             let value = element_stiffness_matrix[(i * dof + k, j * dof + l)];
                             *global_stiffness_matrix.entry(key).or_insert(0.0) += value;
@@ -295,7 +294,9 @@ impl Simulation {
             .unwrap_or(1e12);
         for (g_index, value) in specified_bc {
             // Get existing diagonal entry, or use 0.0 if not yet assembled
-            let v = *global_stiffness_matrix.get(&(g_index, g_index)).unwrap_or(&0.0);
+            let v = *global_stiffness_matrix
+                .get(&(g_index, g_index))
+                .unwrap_or(&0.0);
             global_stiffness_matrix.insert((g_index, g_index), v + extra_stiffness);
             if value.abs() > 0.0 {
                 global_force[g_index] += value * extra_stiffness; // F = K*u so K_extra*u_extra = -F_extra
@@ -359,7 +360,10 @@ impl Simulation {
         let time_steps = self.keywords.get_int("SOLVER_TIME_STEPS").unwrap_or(100);
         let print_steps = self.keywords.get_int("SOLVER_PRINT_STEPS").unwrap_or(0);
         let mut vtk_save_steps = self.keywords.get_int("SOLVER_VTK_SAVE_STEPS").unwrap_or(0); //0 means no vtk saving
-        let state_save_steps = self.keywords.get_int("SOLVER_STATE_SAVE_STEPS").unwrap_or(0); //0 means no state saving
+        let state_save_steps = self
+            .keywords
+            .get_int("SOLVER_STATE_SAVE_STEPS")
+            .unwrap_or(0); //0 means no state saving
         if output_vtk.is_none() {
             vtk_save_steps = 0;
         }
@@ -426,7 +430,11 @@ impl Simulation {
                     .par_iter_mut()
                     .enumerate()
                     .for_each(|(node_id, node)| {
-                        node.set_displacement(u[node_id * 3], u[node_id * 3 + 1], u[node_id * 3 + 2]);
+                        node.set_displacement(
+                            u[node_id * 3],
+                            u[node_id * 3 + 1],
+                            u[node_id * 3 + 2],
+                        );
                     });
             }
             #[cfg(not(feature = "native"))]
@@ -453,7 +461,7 @@ impl Simulation {
             }
             if state_save_steps > 0 && i % state_save_steps == 0 {
                 self.compute_result_fields();
-                
+
                 // Collect element fields for this timestep
                 let mut element_fields_map = HashMap::new();
                 for element_id in self.active_elements() {
@@ -462,7 +470,7 @@ impl Simulation {
                         element_fields_map.insert(element_id, fields);
                     }
                 }
-                
+
                 // Add step to simulation
                 let step = SimulationStep {
                     iteration: i as u64,
@@ -509,7 +517,8 @@ impl Simulation {
     pub fn solve_direct(&mut self) {
         info!("Starting simulation solve process (faer)");
         debug!("Assembling system");
-        let (global_stiffness_matrix, global_force) = self.assemble(AssemblyOutputType::SymmetricFull);
+        let (global_stiffness_matrix, global_force) =
+            self.assemble(AssemblyOutputType::SymmetricFull);
         info!("Solving system");
         let u = direct_solve(&global_stiffness_matrix, &global_force);
         info!("Performing post-solve computations");

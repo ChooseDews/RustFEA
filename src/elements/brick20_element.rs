@@ -32,13 +32,13 @@
 //!  19:  (-1,1,0)   between 3-7
 //! ```
 
-use crate::{simulation::Simulation, utilities::check_for_nans};
-use super::base_element::{BaseElement, Material, ElementFields, ElementType};
-use nalgebra as na;
-use na::{DMatrix, DVector, Matrix3, Vector6};
+use super::base_element::{BaseElement, ElementFields, ElementType, Material};
 use crate::utilities::compute_von_mises;
-use serde::{Serialize, Deserialize};
+use crate::{simulation::Simulation, utilities::check_for_nans};
 use log::{debug, trace};
+use na::{DMatrix, DVector, Matrix3, Vector6};
+use nalgebra as na;
+use serde::{Deserialize, Serialize};
 
 /// Number of nodes in C3D20 element
 const NUM_NODES: usize = 20;
@@ -119,18 +119,18 @@ impl Brick20Element {
             (1.0, 1.0, 1.0),    // 6
             (-1.0, 1.0, 1.0),   // 7
             // Mid-edge nodes 8-19
-            (0.0, -1.0, -1.0),  // 8  (between 0-1)
-            (1.0, 0.0, -1.0),   // 9  (between 1-2)
-            (0.0, 1.0, -1.0),   // 10 (between 2-3)
-            (-1.0, 0.0, -1.0),  // 11 (between 3-0)
-            (0.0, -1.0, 1.0),   // 12 (between 4-5)
-            (1.0, 0.0, 1.0),    // 13 (between 5-6)
-            (0.0, 1.0, 1.0),    // 14 (between 6-7)
-            (-1.0, 0.0, 1.0),   // 15 (between 7-4)
-            (-1.0, -1.0, 0.0),  // 16 (between 0-4)
-            (1.0, -1.0, 0.0),   // 17 (between 1-5)
-            (1.0, 1.0, 0.0),    // 18 (between 2-6)
-            (-1.0, 1.0, 0.0),   // 19 (between 3-7)
+            (0.0, -1.0, -1.0), // 8  (between 0-1)
+            (1.0, 0.0, -1.0),  // 9  (between 1-2)
+            (0.0, 1.0, -1.0),  // 10 (between 2-3)
+            (-1.0, 0.0, -1.0), // 11 (between 3-0)
+            (0.0, -1.0, 1.0),  // 12 (between 4-5)
+            (1.0, 0.0, 1.0),   // 13 (between 5-6)
+            (0.0, 1.0, 1.0),   // 14 (between 6-7)
+            (-1.0, 0.0, 1.0),  // 15 (between 7-4)
+            (-1.0, -1.0, 0.0), // 16 (between 0-4)
+            (1.0, -1.0, 0.0),  // 17 (between 1-5)
+            (1.0, 1.0, 0.0),   // 18 (between 2-6)
+            (-1.0, 1.0, 0.0),  // 19 (between 3-7)
         ];
         &COORDS
     }
@@ -140,7 +140,7 @@ impl Brick20Element {
         static GP: f64 = 0.7745966692414834;
         static W1: f64 = 0.5555555555555556;
         static W2: f64 = 0.8888888888888889;
-        
+
         static GAUSS_POINTS: [(f64, f64, f64, f64); 27] = [
             (-GP, -GP, -GP, W1 * W1 * W1),
             (0.0, -GP, -GP, W2 * W1 * W1),
@@ -151,7 +151,6 @@ impl Brick20Element {
             (-GP, GP, -GP, W1 * W1 * W1),
             (0.0, GP, -GP, W2 * W1 * W1),
             (GP, GP, -GP, W1 * W1 * W1),
-            
             (-GP, -GP, 0.0, W1 * W1 * W2),
             (0.0, -GP, 0.0, W2 * W1 * W2),
             (GP, -GP, 0.0, W1 * W1 * W2),
@@ -161,7 +160,6 @@ impl Brick20Element {
             (-GP, GP, 0.0, W1 * W1 * W2),
             (0.0, GP, 0.0, W2 * W1 * W2),
             (GP, GP, 0.0, W1 * W1 * W2),
-            
             (-GP, -GP, GP, W1 * W1 * W1),
             (0.0, -GP, GP, W2 * W1 * W1),
             (GP, -GP, GP, W1 * W1 * W1),
@@ -179,38 +177,42 @@ impl Brick20Element {
     fn get_shape_functions(&self, xi: f64, eta: f64, zeta: f64) -> DVector<f64> {
         let mut n = DVector::zeros(NUM_NODES);
         let node_coords = Self::get_node_coordinates();
-        
+
         let xi2 = xi * xi;
         let eta2 = eta * eta;
         let zeta2 = zeta * zeta;
-        
+
         // Corner nodes (0-7)
         for i in 0..8 {
             let (xi_i, eta_i, zeta_i) = node_coords[i];
             let xi_term = 1.0 + xi_i * xi;
             let eta_term = 1.0 + eta_i * eta;
             let zeta_term = 1.0 + zeta_i * zeta;
-            n[i] = 0.125 * xi_term * eta_term * zeta_term * (xi_i * xi + eta_i * eta + zeta_i * zeta - 2.0);
+            n[i] = 0.125
+                * xi_term
+                * eta_term
+                * zeta_term
+                * (xi_i * xi + eta_i * eta + zeta_i * zeta - 2.0);
         }
-        
+
         // Mid-edge nodes on bottom face (z = -1)
         n[8] = 0.25 * (1.0 - xi2) * (1.0 - eta) * (1.0 - zeta);
         n[9] = 0.25 * (1.0 + xi) * (1.0 - eta2) * (1.0 - zeta);
         n[10] = 0.25 * (1.0 - xi2) * (1.0 + eta) * (1.0 - zeta);
         n[11] = 0.25 * (1.0 - xi) * (1.0 - eta2) * (1.0 - zeta);
-        
+
         // Mid-edge nodes on top face (z = +1)
         n[12] = 0.25 * (1.0 - xi2) * (1.0 - eta) * (1.0 + zeta);
         n[13] = 0.25 * (1.0 + xi) * (1.0 - eta2) * (1.0 + zeta);
         n[14] = 0.25 * (1.0 - xi2) * (1.0 + eta) * (1.0 + zeta);
         n[15] = 0.25 * (1.0 - xi) * (1.0 - eta2) * (1.0 + zeta);
-        
+
         // Mid-edge nodes on vertical edges
         n[16] = 0.25 * (1.0 - xi) * (1.0 - eta) * (1.0 - zeta2);
         n[17] = 0.25 * (1.0 + xi) * (1.0 - eta) * (1.0 - zeta2);
         n[18] = 0.25 * (1.0 + xi) * (1.0 + eta) * (1.0 - zeta2);
         n[19] = 0.25 * (1.0 - xi) * (1.0 + eta) * (1.0 - zeta2);
-        
+
         n
     }
 
@@ -218,82 +220,87 @@ impl Brick20Element {
     fn get_shape_derivatives_local(&self, xi: f64, eta: f64, zeta: f64) -> DMatrix<f64> {
         let mut dn = DMatrix::zeros(NUM_NODES, 3);
         let node_coords = Self::get_node_coordinates();
-        
+
         let xi2 = xi * xi;
         let eta2 = eta * eta;
         let zeta2 = zeta * zeta;
-        
+
         // Corner nodes (0-7)
         for i in 0..8 {
             let (xi_i, eta_i, zeta_i) = node_coords[i];
-            
+
             let a = 1.0 + xi_i * xi;
             let b = 1.0 + eta_i * eta;
             let c = 1.0 + zeta_i * zeta;
             let d = xi_i * xi + eta_i * eta + zeta_i * zeta - 2.0;
-            
+
             // ∂N_i/∂ξ
-            dn[(i, 0)] = 0.125 * xi_i * b * c * (2.0 * xi_i * xi + eta_i * eta + zeta_i * zeta - 1.0);
-            dn[(i, 1)] = 0.125 * eta_i * a * c * (xi_i * xi + 2.0 * eta_i * eta + zeta_i * zeta - 1.0);
-            dn[(i, 2)] = 0.125 * zeta_i * a * b * (xi_i * xi + eta_i * eta + 2.0 * zeta_i * zeta - 1.0);
+            dn[(i, 0)] =
+                0.125 * xi_i * b * c * (2.0 * xi_i * xi + eta_i * eta + zeta_i * zeta - 1.0);
+            dn[(i, 1)] =
+                0.125 * eta_i * a * c * (xi_i * xi + 2.0 * eta_i * eta + zeta_i * zeta - 1.0);
+            dn[(i, 2)] =
+                0.125 * zeta_i * a * b * (xi_i * xi + eta_i * eta + 2.0 * zeta_i * zeta - 1.0);
         }
-        
+
         // Mid-edge nodes on bottom face (z = -1)
         dn[(8, 0)] = -0.5 * xi * (1.0 - eta) * (1.0 - zeta);
         dn[(8, 1)] = -0.25 * (1.0 - xi2) * (1.0 - zeta);
         dn[(8, 2)] = -0.25 * (1.0 - xi2) * (1.0 - eta);
-        
+
         dn[(9, 0)] = 0.25 * (1.0 - eta2) * (1.0 - zeta);
         dn[(9, 1)] = -0.5 * eta * (1.0 + xi) * (1.0 - zeta);
         dn[(9, 2)] = -0.25 * (1.0 + xi) * (1.0 - eta2);
-        
+
         dn[(10, 0)] = -0.5 * xi * (1.0 + eta) * (1.0 - zeta);
         dn[(10, 1)] = 0.25 * (1.0 - xi2) * (1.0 - zeta);
         dn[(10, 2)] = -0.25 * (1.0 - xi2) * (1.0 + eta);
-        
+
         dn[(11, 0)] = -0.25 * (1.0 - eta2) * (1.0 - zeta);
         dn[(11, 1)] = -0.5 * eta * (1.0 - xi) * (1.0 - zeta);
         dn[(11, 2)] = -0.25 * (1.0 - xi) * (1.0 - eta2);
-        
+
         // Mid-edge nodes on top face (z = +1)
         dn[(12, 0)] = -0.5 * xi * (1.0 - eta) * (1.0 + zeta);
         dn[(12, 1)] = -0.25 * (1.0 - xi2) * (1.0 + zeta);
         dn[(12, 2)] = 0.25 * (1.0 - xi2) * (1.0 - eta);
-        
+
         dn[(13, 0)] = 0.25 * (1.0 - eta2) * (1.0 + zeta);
         dn[(13, 1)] = -0.5 * eta * (1.0 + xi) * (1.0 + zeta);
         dn[(13, 2)] = 0.25 * (1.0 + xi) * (1.0 - eta2);
-        
+
         dn[(14, 0)] = -0.5 * xi * (1.0 + eta) * (1.0 + zeta);
         dn[(14, 1)] = 0.25 * (1.0 - xi2) * (1.0 + zeta);
         dn[(14, 2)] = 0.25 * (1.0 - xi2) * (1.0 + eta);
-        
+
         dn[(15, 0)] = -0.25 * (1.0 - eta2) * (1.0 + zeta);
         dn[(15, 1)] = -0.5 * eta * (1.0 - xi) * (1.0 + zeta);
         dn[(15, 2)] = 0.25 * (1.0 - xi) * (1.0 - eta2);
-        
+
         // Mid-edge nodes on vertical edges
         dn[(16, 0)] = -0.25 * (1.0 - eta) * (1.0 - zeta2);
         dn[(16, 1)] = -0.25 * (1.0 - xi) * (1.0 - zeta2);
         dn[(16, 2)] = -0.5 * zeta * (1.0 - xi) * (1.0 - eta);
-        
+
         dn[(17, 0)] = 0.25 * (1.0 - eta) * (1.0 - zeta2);
         dn[(17, 1)] = -0.25 * (1.0 + xi) * (1.0 - zeta2);
         dn[(17, 2)] = -0.5 * zeta * (1.0 + xi) * (1.0 - eta);
-        
+
         dn[(18, 0)] = 0.25 * (1.0 + eta) * (1.0 - zeta2);
         dn[(18, 1)] = 0.25 * (1.0 + xi) * (1.0 - zeta2);
         dn[(18, 2)] = -0.5 * zeta * (1.0 + xi) * (1.0 + eta);
-        
+
         dn[(19, 0)] = -0.25 * (1.0 + eta) * (1.0 - zeta2);
         dn[(19, 1)] = 0.25 * (1.0 - xi) * (1.0 - zeta2);
         dn[(19, 2)] = -0.5 * zeta * (1.0 - xi) * (1.0 + eta);
-        
+
         dn
     }
 
     fn get_x_local(&self, simulation: &Simulation) -> &DMatrix<f64> {
-        self.nodal_positions.as_ref().expect("Nodal positions not initialized")
+        self.nodal_positions
+            .as_ref()
+            .expect("Nodal positions not initialized")
     }
 
     fn compute_x_local(&self, simulation: &Simulation) -> DMatrix<f64> {
@@ -332,9 +339,15 @@ impl Brick20Element {
     fn compute_jacobian_matrix(&self, x: &DMatrix<f64>, d_n: &DMatrix<f64>) -> Matrix3<f64> {
         let j_mat = d_n.transpose() * x;
         Matrix3::new(
-            j_mat[(0, 0)], j_mat[(0, 1)], j_mat[(0, 2)],
-            j_mat[(1, 0)], j_mat[(1, 1)], j_mat[(1, 2)],
-            j_mat[(2, 0)], j_mat[(2, 1)], j_mat[(2, 2)],
+            j_mat[(0, 0)],
+            j_mat[(0, 1)],
+            j_mat[(0, 2)],
+            j_mat[(1, 0)],
+            j_mat[(1, 1)],
+            j_mat[(1, 2)],
+            j_mat[(2, 0)],
+            j_mat[(2, 1)],
+            j_mat[(2, 2)],
         )
     }
 
@@ -342,12 +355,12 @@ impl Brick20Element {
     fn compute_b(&self, x: &DMatrix<f64>, j: &Matrix3<f64>, d_n: &DMatrix<f64>) -> DMatrix<f64> {
         let mut b = DMatrix::zeros(6, NUM_DOFS);
         let j_inv = j.try_inverse().expect("Jacobian matrix is singular");
-        
+
         for i in 0..NUM_NODES {
             // Global shape function derivatives: ∂N_i/∂x_j = (J^-1)_jk * ∂N_i/∂ξ_k
             let dn_dxi = na::Vector3::new(d_n[(i, 0)], d_n[(i, 1)], d_n[(i, 2)]);
             let n_i = j_inv * dn_dxi;
-            
+
             b[(0, 3 * i)] = n_i[0];
             b[(1, 3 * i + 1)] = n_i[1];
             b[(2, 3 * i + 2)] = n_i[2];
@@ -361,14 +374,24 @@ impl Brick20Element {
         b
     }
 
-    fn compute_stress(&self, x: &DMatrix<f64>, u: &DVector<f64>, d_n: &DMatrix<f64>) -> DVector<f64> {
+    fn compute_stress(
+        &self,
+        x: &DMatrix<f64>,
+        u: &DVector<f64>,
+        d_n: &DMatrix<f64>,
+    ) -> DVector<f64> {
         let j = self.compute_jacobian_matrix(x, d_n);
         let b = self.compute_b(x, &j, d_n);
         let c = self.material.get_3d_matrix();
         DVector::from_column_slice((c * b * u).as_slice())
     }
 
-    fn compute_strain(&self, x: &DMatrix<f64>, u: &DVector<f64>, d_n: &DMatrix<f64>) -> DVector<f64> {
+    fn compute_strain(
+        &self,
+        x: &DMatrix<f64>,
+        u: &DVector<f64>,
+        d_n: &DMatrix<f64>,
+    ) -> DVector<f64> {
         let j = self.compute_jacobian_matrix(x, d_n);
         let b = self.compute_b(x, &j, d_n);
         b * u
@@ -443,22 +466,25 @@ impl BaseElement for Brick20Element {
             let d_n = self.get_shape_derivatives_local(xi, eta, zeta);
             let j = self.compute_jacobian_matrix(x, &d_n);
             let det_j = j.determinant();
-            
+
             if det_j <= 0.0 {
-                panic!("Negative or zero Jacobian determinant in C3D20 element {} (det_j = {})", self.id, det_j);
+                panic!(
+                    "Negative or zero Jacobian determinant in C3D20 element {} (det_j = {})",
+                    self.id, det_j
+                );
             }
-            
+
             let b = self.compute_b(x, &j, &d_n);
             k += &b.transpose() * c * &b * det_j * weight;
         }
-        
+
         // Add small diagonal perturbation for numerical stability (common FEA practice)
         // This helps with near-singular matrices that can arise from element shapes
         let perturbation = 1e-10 * k.diagonal().iter().fold(0.0f64, |acc, &x| acc.max(x.abs()));
         for i in 0..NUM_DOFS {
             k[(i, i)] += perturbation;
         }
-        
+
         self.stiffness = k;
     }
 
@@ -530,7 +556,7 @@ impl BaseElement for Brick20Element {
     fn compute_element_nodal_properties(&self, simulation: &Simulation) -> ElementFields {
         trace!("Computing element nodal properties for C3D20 element");
         let mut element_fields = ElementFields::new(self.get_connectivity().to_vec());
-        
+
         // Use 20 evaluation points (at node locations) for output
         let node_coords = Self::get_node_coordinates();
         let u_e = self.get_u_local(simulation);
@@ -540,9 +566,11 @@ impl BaseElement for Brick20Element {
             let d_n = self.get_shape_derivatives_local(xi, eta, zeta);
             let strain = self.compute_strain(x, &u_e, &d_n);
             let stress = self.compute_stress(x, &u_e, &d_n);
-            let stress_vec = Vector6::new(stress[0], stress[1], stress[2], stress[3], stress[4], stress[5]);
+            let stress_vec = Vector6::new(
+                stress[0], stress[1], stress[2], stress[3], stress[4], stress[5],
+            );
             let vm = compute_von_mises(stress_vec);
-            
+
             element_fields.append_to_field("e_xx", nn, strain[0]);
             element_fields.append_to_field("e_yy", nn, strain[1]);
             element_fields.append_to_field("e_zz", nn, strain[2]);
@@ -569,11 +597,11 @@ impl BaseElement for Brick20Element {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_shape_functions_partition_of_unity() {
         let elem = Brick20Element::new(0, (0..20).collect(), Material::aluminum());
-        
+
         // Test at several points that shape functions sum to 1
         let test_points = [
             (0.0, 0.0, 0.0),
@@ -581,40 +609,52 @@ mod tests {
             (-0.5, 0.3, -0.7),
             (0.8, -0.6, 0.2),
         ];
-        
+
         for (xi, eta, zeta) in test_points {
             let n = elem.get_shape_functions(xi, eta, zeta);
             let sum: f64 = n.iter().sum();
-            assert!((sum - 1.0).abs() < 1e-12, 
-                "Shape functions don't sum to 1 at ({}, {}, {}): sum = {}", xi, eta, zeta, sum);
+            assert!(
+                (sum - 1.0).abs() < 1e-12,
+                "Shape functions don't sum to 1 at ({}, {}, {}): sum = {}",
+                xi,
+                eta,
+                zeta,
+                sum
+            );
         }
     }
-    
+
     #[test]
     fn test_shape_functions_at_nodes() {
         let elem = Brick20Element::new(0, (0..20).collect(), Material::aluminum());
         let node_coords = Brick20Element::get_node_coordinates();
-        
+
         // At each node, only that node's shape function should be 1
         for (i, &(xi, eta, zeta)) in node_coords.iter().enumerate() {
             let n = elem.get_shape_functions(xi, eta, zeta);
             for j in 0..20 {
                 let expected = if i == j { 1.0 } else { 0.0 };
-                assert!((n[j] - expected).abs() < 1e-12,
-                    "N[{}] at node {} = {}, expected {}", j, i, n[j], expected);
+                assert!(
+                    (n[j] - expected).abs() < 1e-12,
+                    "N[{}] at node {} = {}, expected {}",
+                    j,
+                    i,
+                    n[j],
+                    expected
+                );
             }
         }
     }
-    
+
     #[test]
     fn test_shape_derivative_consistency() {
         let elem = Brick20Element::new(0, (0..20).collect(), Material::aluminum());
         let eps = 1e-6;
-        
+
         // Test at center
         let (xi, eta, zeta) = (0.3, -0.2, 0.4);
         let dn = elem.get_shape_derivatives_local(xi, eta, zeta);
-        
+
         // Numerical derivatives
         let n_xi_p = elem.get_shape_functions(xi + eps, eta, zeta);
         let n_xi_m = elem.get_shape_functions(xi - eps, eta, zeta);
@@ -622,18 +662,33 @@ mod tests {
         let n_eta_m = elem.get_shape_functions(xi, eta - eps, zeta);
         let n_zeta_p = elem.get_shape_functions(xi, eta, zeta + eps);
         let n_zeta_m = elem.get_shape_functions(xi, eta, zeta - eps);
-        
+
         for i in 0..20 {
             let dn_dxi_num = (n_xi_p[i] - n_xi_m[i]) / (2.0 * eps);
             let dn_deta_num = (n_eta_p[i] - n_eta_m[i]) / (2.0 * eps);
             let dn_dzeta_num = (n_zeta_p[i] - n_zeta_m[i]) / (2.0 * eps);
-            
-            assert!((dn[(i, 0)] - dn_dxi_num).abs() < 1e-5,
-                "dN[{}]/dξ: analytical = {}, numerical = {}", i, dn[(i, 0)], dn_dxi_num);
-            assert!((dn[(i, 1)] - dn_deta_num).abs() < 1e-5,
-                "dN[{}]/dη: analytical = {}, numerical = {}", i, dn[(i, 1)], dn_deta_num);
-            assert!((dn[(i, 2)] - dn_dzeta_num).abs() < 1e-5,
-                "dN[{}]/dζ: analytical = {}, numerical = {}", i, dn[(i, 2)], dn_dzeta_num);
+
+            assert!(
+                (dn[(i, 0)] - dn_dxi_num).abs() < 1e-5,
+                "dN[{}]/dξ: analytical = {}, numerical = {}",
+                i,
+                dn[(i, 0)],
+                dn_dxi_num
+            );
+            assert!(
+                (dn[(i, 1)] - dn_deta_num).abs() < 1e-5,
+                "dN[{}]/dη: analytical = {}, numerical = {}",
+                i,
+                dn[(i, 1)],
+                dn_deta_num
+            );
+            assert!(
+                (dn[(i, 2)] - dn_dzeta_num).abs() < 1e-5,
+                "dN[{}]/dζ: analytical = {}, numerical = {}",
+                i,
+                dn[(i, 2)],
+                dn_dzeta_num
+            );
         }
     }
 }

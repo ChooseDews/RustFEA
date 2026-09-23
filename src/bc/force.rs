@@ -1,10 +1,9 @@
-use crate::simulation::Simulation;
 use crate::bc::BoundaryCondition;
-use nalgebra as na;
-use na::DVector;
-use serde::{Serialize, Deserialize};
 use crate::bc::BoundaryConditionType;
-
+use crate::simulation::Simulation;
+use na::DVector;
+use nalgebra as na;
+use serde::{Deserialize, Serialize};
 
 /// Represents a load boundary condition
 /// # Mathematical Formulation
@@ -14,10 +13,10 @@ use crate::bc::BoundaryConditionType;
 /// # Fields
 /// * `nodes`: The nodes to apply the load condition to.
 /// * `force`: The force to apply to the nodes.
-#[derive(Serialize, Deserialize, Debug)] 
+#[derive(Serialize, Deserialize, Debug)]
 pub struct LoadCondition {
     nodes: Vec<usize>,
-    force: DVector<f64>
+    force: DVector<f64>,
 }
 
 impl LoadCondition {
@@ -37,8 +36,8 @@ impl BoundaryCondition for LoadCondition {
     fn apply(&mut self, simulation: &mut Simulation) {
         for &node_id in &self.nodes {
             for i in 0..self.force.len() {
-                let global_index = simulation.get_global_index(node_id, i );
-                simulation.load_vector[global_index ] += self.force[i];
+                let global_index = simulation.get_global_index(node_id, i);
+                simulation.load_vector[global_index] += self.force[i];
             }
         }
     }

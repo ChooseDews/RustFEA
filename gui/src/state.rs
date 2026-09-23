@@ -69,7 +69,7 @@ impl UserSettings {
         }
         Self::default()
     }
-    
+
     #[cfg(not(feature = "native"))]
     pub fn load() -> Self {
         // In WASM, try to load from localStorage
@@ -87,7 +87,7 @@ impl UserSettings {
         }
         Self::default()
     }
-    
+
     /// Save settings to disk (native only)
     #[cfg(feature = "native")]
     pub fn save(&self) {
@@ -100,7 +100,7 @@ impl UserSettings {
             }
         }
     }
-    
+
     #[cfg(not(feature = "native"))]
     pub fn save(&self) {
         // In WASM, save to localStorage
@@ -115,7 +115,7 @@ impl UserSettings {
             }
         }
     }
-    
+
     /// Add a file to recent files list
     pub fn add_recent_file(&mut self, path: &std::path::Path) {
         let path_str = path.to_string_lossy().to_string();
@@ -222,43 +222,43 @@ impl UndoStack {
             max_size: 50,
         }
     }
-    
+
     /// Push an action onto the undo stack
     pub fn push(&mut self, action: UndoAction) {
         self.undo_stack.push(action);
         self.redo_stack.clear(); // Clear redo when new action is performed
-        
+
         // Trim to max size
         if self.undo_stack.len() > self.max_size {
             self.undo_stack.remove(0);
         }
     }
-    
+
     /// Pop an action from the undo stack and push its inverse to redo
     pub fn pop_undo(&mut self) -> Option<UndoAction> {
         self.undo_stack.pop()
     }
-    
+
     /// Push an action to redo stack (called after undoing)
     pub fn push_redo(&mut self, action: UndoAction) {
         self.redo_stack.push(action);
     }
-    
+
     /// Pop an action from the redo stack
     pub fn pop_redo(&mut self) -> Option<UndoAction> {
         self.redo_stack.pop()
     }
-    
+
     /// Check if undo is available
     pub fn can_undo(&self) -> bool {
         !self.undo_stack.is_empty()
     }
-    
+
     /// Check if redo is available
     pub fn can_redo(&self) -> bool {
         !self.redo_stack.is_empty()
     }
-    
+
     /// Get the name of the next undo action
     pub fn undo_description(&self) -> Option<&'static str> {
         self.undo_stack.last().map(|a| match a {
@@ -273,7 +273,7 @@ impl UndoStack {
             UndoAction::MeshTransform(_, _, _, _) => "Transform Mesh",
         })
     }
-    
+
     /// Get the name of the next redo action
     pub fn redo_description(&self) -> Option<&'static str> {
         self.redo_stack.last().map(|a| match a {
@@ -288,7 +288,7 @@ impl UndoStack {
             UndoAction::MeshTransform(_, _, _, _) => "Transform Mesh",
         })
     }
-    
+
     /// Clear both stacks
     pub fn clear(&mut self) {
         self.undo_stack.clear();
@@ -331,43 +331,43 @@ impl Default for StatsOverlay {
 pub struct AppState {
     /// Current project path
     pub project_path: Option<PathBuf>,
-    
+
     /// Loaded meshes
     pub meshes: Vec<MeshState>,
-    
+
     /// Current mesh index
     pub current_mesh_idx: Option<usize>,
-    
+
     /// Simulation setup
     pub simulation_config: SimulationConfig,
-    
+
     /// Simulation results
     pub results: Option<SimulationResults>,
-    
+
     /// UI state
     pub ui_state: UiState,
-    
+
     /// Is simulation currently running
     pub is_running: bool,
-    
+
     /// Simulation progress (0.0 - 1.0)
     pub progress: f32,
-    
+
     /// Status message
     pub status_message: String,
-    
+
     /// Detailed solve progress tracking
     pub solve_progress: SolveProgress,
-    
+
     /// Undo/Redo stack
     pub undo_stack: UndoStack,
-    
+
     /// User settings (persisted)
     pub user_settings: UserSettings,
-    
+
     /// Statistics overlay
     pub stats_overlay: StatsOverlay,
-    
+
     /// Frame timing for performance stats
     pub frame_times: Vec<f32>,
 }
@@ -376,7 +376,7 @@ impl AppState {
     pub fn new() -> Self {
         // Load user settings from disk
         let user_settings = UserSettings::load();
-        
+
         let mut state = Self {
             status_message: "Ready".to_string(),
             user_settings,
@@ -385,24 +385,28 @@ impl AppState {
             frame_times: Vec::with_capacity(120), // Store last ~2 seconds at 60fps
             ..Default::default()
         };
-        
+
         // Apply saved display settings
-        state.user_settings.display.apply_to(&mut state.ui_state.display_settings);
+        state
+            .user_settings
+            .display
+            .apply_to(&mut state.ui_state.display_settings);
         state.ui_state.displacement_scale = state.user_settings.default_displacement_scale;
         state.ui_state.animation.speed = state.user_settings.default_animation_speed;
-        
+
         state
     }
-    
+
     /// Save current settings to disk
     pub fn save_settings(&mut self) {
         // Update serializable settings from current state
-        self.user_settings.display = DisplaySettingsSerializable::from(&self.ui_state.display_settings);
+        self.user_settings.display =
+            DisplaySettingsSerializable::from(&self.ui_state.display_settings);
         self.user_settings.default_displacement_scale = self.ui_state.displacement_scale;
         self.user_settings.default_animation_speed = self.ui_state.animation.speed;
         self.user_settings.save();
     }
-    
+
     /// Record frame time for performance stats
     pub fn record_frame_time(&mut self, dt: f32) {
         self.frame_times.push(dt);
@@ -410,24 +414,29 @@ impl AppState {
             self.frame_times.remove(0);
         }
     }
-    
+
     /// Get average FPS from recent frames
     pub fn average_fps(&self) -> f32 {
         if self.frame_times.is_empty() {
             return 0.0;
         }
         let avg_dt = self.frame_times.iter().sum::<f32>() / self.frame_times.len() as f32;
-        if avg_dt > 0.0 { 1.0 / avg_dt } else { 0.0 }
+        if avg_dt > 0.0 {
+            1.0 / avg_dt
+        } else {
+            0.0
+        }
     }
-    
+
     pub fn current_mesh(&self) -> Option<&MeshState> {
         self.current_mesh_idx.and_then(|idx| self.meshes.get(idx))
     }
-    
+
     pub fn current_mesh_mut(&mut self) -> Option<&mut MeshState> {
-        self.current_mesh_idx.and_then(|idx| self.meshes.get_mut(idx))
+        self.current_mesh_idx
+            .and_then(|idx| self.meshes.get_mut(idx))
     }
-    
+
     pub fn add_mesh(&mut self, mesh: MeshAssembly, name: String, path: Option<PathBuf>) {
         let mesh_state = MeshState::from_mesh(mesh, name, path);
         self.meshes.push(mesh_state);
@@ -439,22 +448,22 @@ impl AppState {
 pub struct MeshState {
     /// The actual mesh data
     pub mesh: MeshAssembly,
-    
+
     /// Display name
     pub name: String,
-    
+
     /// Source file path
     pub path: Option<PathBuf>,
-    
+
     /// Computed bounding box
     pub bounds: BoundingBox,
-    
+
     /// GPU-ready vertex data
     pub render_data: Option<MeshRenderData>,
-    
+
     /// Selected node groups
     pub selected_node_groups: Vec<String>,
-    
+
     /// Selected element groups
     pub selected_element_groups: Vec<String>,
 }
@@ -489,7 +498,7 @@ impl BoundingBox {
             (self.min[2] + self.max[2]) / 2.0,
         ]
     }
-    
+
     pub fn diagonal(&self) -> f32 {
         let dx = self.max[0] - self.min[0];
         let dy = self.max[1] - self.min[1];
@@ -501,7 +510,7 @@ impl BoundingBox {
 pub fn compute_bounding_box_from_mesh(mesh: &MeshAssembly) -> BoundingBox {
     let mut min = [f32::INFINITY; 3];
     let mut max = [f32::NEG_INFINITY; 3];
-    
+
     for node in mesh.nodes.values() {
         for i in 0..3 {
             let coord = node.coordinates[i] as f32;
@@ -509,12 +518,12 @@ pub fn compute_bounding_box_from_mesh(mesh: &MeshAssembly) -> BoundingBox {
             max[i] = max[i].max(coord);
         }
     }
-    
+
     // Handle empty mesh
     if min[0].is_infinite() {
         return BoundingBox::default();
     }
-    
+
     BoundingBox { min, max }
 }
 
@@ -540,7 +549,11 @@ pub struct Vertex {
 
 impl Vertex {
     pub fn new(position: [f32; 3], normal: [f32; 3], color: [f32; 4]) -> Self {
-        Self { position, normal, color }
+        Self {
+            position,
+            normal,
+            color,
+        }
     }
 }
 
@@ -549,19 +562,19 @@ impl Vertex {
 pub struct SimulationConfig {
     /// Solver type
     pub solver: SolverType,
-    
+
     /// Degrees of freedom per node (default: 3 for 3D solid mechanics)
     pub dofs: usize,
-    
+
     /// Materials defined
     pub materials: Vec<MaterialConfig>,
-    
+
     /// Boundary conditions
     pub boundary_conditions: Vec<BoundaryConditionConfig>,
-    
+
     /// Output settings
     pub output: OutputConfig,
-    
+
     /// Explicit solver settings
     pub explicit_settings: ExplicitSettings,
 }
@@ -754,7 +767,11 @@ pub enum TractionTypeConfig {
 
 impl Default for TractionTypeConfig {
     fn default() -> Self {
-        TractionTypeConfig::Uniform { fx: 0.0, fy: 0.0, fz: -1e6 }
+        TractionTypeConfig::Uniform {
+            fx: 0.0,
+            fy: 0.0,
+            fz: -1e6,
+        }
     }
 }
 
@@ -763,7 +780,11 @@ impl Default for TractionBcConfig {
         Self {
             name: "Traction".to_string(),
             element_group: String::new(),
-            traction_type: TractionTypeConfig::Uniform { fx: 0.0, fy: 0.0, fz: -1e6 },
+            traction_type: TractionTypeConfig::Uniform {
+                fx: 0.0,
+                fy: 0.0,
+                fz: -1e6,
+            },
         }
     }
 }
@@ -795,7 +816,11 @@ pub enum BodyForceTypeConfig {
 impl Default for BodyForceTypeConfig {
     fn default() -> Self {
         // Default to Earth gravity in -Y direction
-        BodyForceTypeConfig::Gravity { gx: 0.0, gy: -9.81, gz: 0.0 }
+        BodyForceTypeConfig::Gravity {
+            gx: 0.0,
+            gy: -9.81,
+            gz: 0.0,
+        }
     }
 }
 
@@ -851,28 +876,28 @@ impl Default for ExplicitSettings {
 pub struct SimulationResults {
     /// Displacement field (per node, 3 components)
     pub displacements: Vec<f64>,
-    
+
     /// Stress field (per element) - averaged for backwards compatibility
     pub stresses: HashMap<usize, Vec<f64>>,
-    
+
     /// Strain field (per element) - averaged for backwards compatibility
     pub strains: HashMap<usize, Vec<f64>>,
-    
+
     /// Von Mises stress (per element) - averaged for backwards compatibility
     pub von_mises: HashMap<usize, f64>,
-    
+
     /// Nodal Von Mises stress (per node) - for smooth interpolation
     pub nodal_von_mises: Vec<f64>,
-    
+
     /// Nodal stress components (per node, 6 components: xx, yy, zz, xy, yz, xz)
     pub nodal_stress: Vec<[f64; 6]>,
-    
+
     /// Nodal strain components (per node, 6 components: xx, yy, zz, xy, yz, xz)
     pub nodal_strain: Vec<[f64; 6]>,
-    
+
     /// Result statistics
     pub stats: ResultStats,
-    
+
     /// Time steps (for explicit solver)
     pub time_steps: Vec<TimeStepResult>,
 }
@@ -938,14 +963,14 @@ impl SolvePhaseCategory {
     /// Get display color for the category (RGBA)
     pub fn color(&self) -> [u8; 4] {
         match self {
-            SolvePhaseCategory::Init => [100, 149, 237, 255],       // Cornflower blue
-            SolvePhaseCategory::Assembly => [255, 165, 0, 255],    // Orange
-            SolvePhaseCategory::Solve => [50, 205, 50, 255],       // Lime green
+            SolvePhaseCategory::Init => [100, 149, 237, 255], // Cornflower blue
+            SolvePhaseCategory::Assembly => [255, 165, 0, 255], // Orange
+            SolvePhaseCategory::Solve => [50, 205, 50, 255],  // Lime green
             SolvePhaseCategory::PostProcess => [147, 112, 219, 255], // Medium purple
-            SolvePhaseCategory::Other => [128, 128, 128, 255],     // Gray
+            SolvePhaseCategory::Other => [128, 128, 128, 255], // Gray
         }
     }
-    
+
     /// Get display name
     pub fn name(&self) -> &'static str {
         match self {
@@ -980,102 +1005,102 @@ pub struct SolveProgress {
 pub struct UiState {
     /// Active panel
     pub active_panel: ActivePanel,
-    
+
     /// Show wireframe
     pub show_wireframe: bool,
-    
+
     /// Show mesh faces
     pub show_faces: bool,
-    
+
     /// Show nodes
     pub show_nodes: bool,
-    
+
     /// Show node groups
     pub show_node_groups: bool,
-    
+
     /// Show boundary conditions visualization
     pub show_boundary_conditions: bool,
-    
+
     /// Color mode for results
     pub color_mode: ColorMode,
-    
+
     /// Selected stress component (0=xx, 1=yy, 2=zz, 3=xy, 4=yz, 5=xz)
     pub stress_component: usize,
-    
+
     /// Selected strain component (0=xx, 1=yy, 2=zz, 3=xy, 4=yz, 5=xz)
     pub strain_component: usize,
-    
+
     /// Result scale factor (for displacement visualization)
     pub displacement_scale: f32,
-    
+
     /// Camera state
     pub camera: CameraState,
-    
+
     /// BC editor state
     pub bc_editor: BcEditorState,
-    
+
     /// Material editor state
     pub material_editor: MaterialEditorState,
-    
+
     /// Primitive creation dialog
     pub primitive_dialog_open: bool,
     pub primitive_config: PrimitiveConfig,
-    
+
     /// Node group creator
     pub node_group_creator: NodeGroupCreator,
-    
+
     /// Rename dialog
     pub rename_dialog_open: bool,
     pub rename_buffer: String,
-    
+
     /// Time step playback
     pub current_time_step: usize,
     pub playback_active: bool,
-    pub playback_speed: f32,  // steps per second
-    
+    pub playback_speed: f32, // steps per second
+
     /// Example configuration dialog
     pub example_dialog_open: bool,
     pub example_config: crate::examples::ExampleConfig,
-    
+
     /// Clipping plane for section view
     pub clipping_plane: ClippingPlane,
-    
+
     /// Recent files list
     pub recent_files: RecentFiles,
-    
+
     /// Screenshot settings
     pub screenshot_settings: ScreenshotSettings,
-    
+
     /// Screenshot dialog open
     pub screenshot_dialog_open: bool,
-    
+
     /// Request to export 2D section view as PNG
     pub section_export_requested: bool,
-    
+
     /// Animation playback state  
     pub animation: AnimationState,
-    
+
     /// About dialog open
     pub about_dialog_open: bool,
-    
+
     /// Preferences dialog open
     pub preferences_dialog_open: bool,
-    
+
     /// Show keyboard shortcuts help
     pub show_shortcuts_help: bool,
-    
+
     /// Display settings (colors, grid, etc.)
     pub display_settings: DisplaySettings,
-    
+
     /// Measurement tool state
     pub measurement_tool: MeasurementTool,
-    
+
     /// Mesh editing state (transform, selection, context menus)
     pub mesh_edit: MeshEditState,
-    
+
     /// Statistics overlay
     pub stats_overlay: StatsOverlay,
-    
+
     /// Simulation progress panel (floating window)
     pub sim_progress_panel_open: bool,
 }
@@ -1092,7 +1117,7 @@ impl UiState {
             camera: CameraState::new(),
             primitive_config: PrimitiveConfig::default(),
             node_group_creator: NodeGroupCreator::default(),
-            playback_speed: 10.0,  // 10 steps per second
+            playback_speed: 10.0, // 10 steps per second
             example_config: crate::examples::ExampleConfig::default(),
             ..Default::default()
         }
@@ -1147,37 +1172,37 @@ impl CameraState {
             orthographic: false,
         }
     }
-    
+
     pub fn eye_position(&self) -> [f32; 3] {
         let x = self.target[0] + self.distance * self.pitch.cos() * self.yaw.sin();
         let y = self.target[1] + self.distance * self.pitch.sin();
         let z = self.target[2] + self.distance * self.pitch.cos() * self.yaw.cos();
         [x, y, z]
     }
-    
+
     pub fn fit_to_bounds(&mut self, bounds: &BoundingBox) {
         self.target = bounds.center();
         self.distance = bounds.diagonal() * 1.5;
     }
-    
+
     /// Set camera to top-down view (looking along -Y axis)
     pub fn set_top_view(&mut self) {
         self.yaw = 0.0;
         self.pitch = 89.9_f32.to_radians(); // Nearly 90 degrees to avoid gimbal lock issues
     }
-    
+
     /// Set camera to front view (looking along -Z axis)
     pub fn set_front_view(&mut self) {
         self.yaw = 0.0;
         self.pitch = 0.0;
     }
-    
+
     /// Set camera to side view (looking along -X axis)
     pub fn set_side_view(&mut self) {
         self.yaw = 90.0_f32.to_radians();
         self.pitch = 0.0;
     }
-    
+
     /// Set camera to isometric view
     pub fn set_iso_view(&mut self) {
         self.yaw = 45.0_f32.to_radians();
@@ -1226,16 +1251,16 @@ pub struct PrimitiveConfig {
     pub primitive_type: PrimitiveType,
     pub name: String,
     // Block parameters
-    pub block_size: [f64; 3],      // width, height, depth
+    pub block_size: [f64; 3],        // width, height, depth
     pub block_divisions: [usize; 3], // divisions along each axis
-    pub block_origin: [f64; 3],    // origin position
+    pub block_origin: [f64; 3],      // origin position
     // Cylinder parameters
     pub cyl_radius: f64,
     pub cyl_height: f64,
     pub cyl_radial_divisions: usize,
     pub cyl_height_divisions: usize,
-    pub cyl_axis: [f64; 3],        // axis direction
-    pub cyl_origin: [f64; 3],      // base center position
+    pub cyl_axis: [f64; 3],   // axis direction
+    pub cyl_origin: [f64; 3], // base center position
 }
 
 impl Default for PrimitiveConfig {
@@ -1346,18 +1371,21 @@ impl RecentFiles {
             max_files: 10,
         }
     }
-    
+
     pub fn add(&mut self, path: PathBuf, name: String) {
         // Remove if already exists
         self.files.retain(|f| f.path != path);
-        
+
         // Add to front
-        self.files.insert(0, RecentFile {
-            path,
-            name,
-            timestamp: std::time::SystemTime::now(),
-        });
-        
+        self.files.insert(
+            0,
+            RecentFile {
+                path,
+                name,
+                timestamp: std::time::SystemTime::now(),
+            },
+        );
+
         // Trim to max
         self.files.truncate(self.max_files);
     }
@@ -1395,7 +1423,7 @@ impl Default for ScreenshotSettings {
 pub struct AnimationState {
     pub playing: bool,
     pub loop_playback: bool,
-    pub speed: f32,  // Multiplier (1.0 = realtime if available, otherwise steps/sec)
+    pub speed: f32, // Multiplier (1.0 = realtime if available, otherwise steps/sec)
     pub current_frame: usize,
     pub last_frame_time: Option<web_time::Instant>,
 }
@@ -1439,7 +1467,7 @@ impl Default for DisplaySettings {
             grid_size: 10,
             background_color: [30, 30, 35],
             wireframe_color: [40, 40, 40],
-            face_color: [100, 149, 237],  // Cornflower blue
+            face_color: [100, 149, 237], // Cornflower blue
             show_axis: true,
         }
     }
@@ -1523,9 +1551,9 @@ pub struct FaceSelection {
 pub enum FaceSelectionMode {
     #[default]
     Single,
-    Add,      // Shift-click to add
-    Remove,   // Ctrl-click to remove
-    Box,      // Box select
+    Add,    // Shift-click to add
+    Remove, // Ctrl-click to remove
+    Box,    // Box select
 }
 
 #[derive(Clone, Copy, PartialEq, Default)]

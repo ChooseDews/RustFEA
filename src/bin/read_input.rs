@@ -1,8 +1,8 @@
 use clap::Parser;
+use env_logger::Builder;
+use log::LevelFilter;
 use rust_fea::io::input_reader::read_simulation_file;
 use rust_fea::io::project::Project;
-use log::LevelFilter;
-use env_logger::Builder;
 
 /// Mesh Reader CLI
 #[derive(Parser, Debug)]
@@ -31,9 +31,4 @@ fn main() {
     project.export_vtk();
     project.save();
     project.print();
-    
-
-
-
-    
 }

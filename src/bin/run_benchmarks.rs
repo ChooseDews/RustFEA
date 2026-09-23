@@ -1,16 +1,15 @@
+use clap::{Parser, ValueEnum};
+use log::info;
 use rust_fea::benchmarks::{
+    boussinesq, cantilever_beam, contact_explicit, gravity, hertz_sphere_flat, hertz_sphere_sphere,
+    hydrostatic_compression,
+    plotting::{format_with_units, generate_convergence_table, ConvergenceStudy},
+    pure_shear, spherical_cavity, torsion_explicit, torsion_shaft, uniaxial_tension,
     BenchmarkResult, BenchmarkSuite,
-    uniaxial_tension, pure_shear, hydrostatic_compression,
-    torsion_shaft, torsion_explicit, cantilever_beam, spherical_cavity,
-    boussinesq, hertz_sphere_flat, hertz_sphere_sphere, contact_explicit,
-    gravity,
-    plotting::{format_with_units, ConvergenceStudy, generate_convergence_table},
 };
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
-use clap::{Parser, ValueEnum};
-use log::info;
 
 #[derive(Parser)]
 #[command(name = "run_benchmarks")]
@@ -19,15 +18,15 @@ struct Args {
     /// Output format for the report
     #[arg(short, long, default_value = "markdown")]
     format: OutputFormat,
-    
+
     /// Output file path (stdout if not specified)
     #[arg(short, long)]
     output: Option<String>,
-    
+
     /// Run only specific benchmarks (comma-separated)
     #[arg(short, long)]
     benchmarks: Option<String>,
-    
+
     /// Verbose output
     #[arg(short, long, default_value = "false")]
     verbose: bool,
@@ -42,20 +41,20 @@ enum OutputFormat {
 
 fn main() {
     env_logger::init();
-    
+
     let args = Args::parse();
-    
+
     let mut suite = BenchmarkSuite::new();
-    
+
     // Register all benchmarks
     let filter = args.benchmarks.as_deref();
-    
+
     let benchmarks_to_run: Vec<(&str, fn() -> BenchmarkResult)> = vec![
         // Level 1: Fundamental Element Verification
         ("uniaxial_tension", uniaxial_tension::run),
         ("pure_shear", pure_shear::run),
         ("hydrostatic_compression", hydrostatic_compression::run),
-        // Level 2: 3D Continuum Verification  
+        // Level 2: 3D Continuum Verification
         ("torsion_shaft", torsion_shaft::run),
         // ("hollow_sphere", hollow_sphere::run),  // TODO: Fix mesh generation
         ("cantilever_beam", cantilever_beam::run),
@@ -70,7 +69,7 @@ fn main() {
         // Level 5: Body Force Verification
         ("gravity", gravity::run),
     ];
-    
+
     for (name, run_fn) in benchmarks_to_run.iter() {
         if let Some(filter_str) = filter {
             let filters: Vec<&str> = filter_str.split(',').collect();
@@ -80,18 +79,18 @@ fn main() {
         }
         suite.add_benchmark(name, *run_fn);
     }
-    
+
     // Run all benchmarks
     info!("Running {} benchmarks...", suite.benchmark_count());
     let results = suite.run_all();
-    
+
     // Generate report
     let report = match args.format {
         OutputFormat::Markdown => generate_markdown_report(&results),
         OutputFormat::Json => generate_json_report(&results),
         OutputFormat::Csv => generate_csv_report(&results),
     };
-    
+
     // Output report
     match args.output {
         Some(path) => {
@@ -100,20 +99,21 @@ fn main() {
                 std::fs::create_dir_all(parent).ok();
             }
             let mut file = File::create(&path).expect("Failed to create output file");
-            file.write_all(report.as_bytes()).expect("Failed to write report");
+            file.write_all(report.as_bytes())
+                .expect("Failed to write report");
             println!("Report written to: {}", path);
         }
         None => {
             println!("{}", report);
         }
     }
-    
+
     // Summary
     let passed = results.iter().filter(|r| r.passed).count();
     let total = results.len();
     println!("\n=== Summary ===");
     println!("Passed: {}/{}", passed, total);
-    
+
     if passed < total {
         std::process::exit(1);
     }
@@ -121,9 +121,9 @@ fn main() {
 
 fn generate_markdown_report(results: &[BenchmarkResult]) -> String {
     let mut report = String::new();
-    
+
     report.push_str("# FEA Benchmark Report\n\n");
-    
+
     // Use std::time instead of chrono
     let now = std::time::SystemTime::now();
     let datetime = now.duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
@@ -141,16 +141,25 @@ fn generate_markdown_report(results: &[BenchmarkResult]) -> String {
     let day_of_year = days_since_epoch % 365;
     let month = day_of_year / 30 + 1;
     let day = day_of_year % 30 + 1;
-    report.push_str(&format!("**Generated:** {}-{:02}-{:02} {:02}:{:02}:{:02} UTC\n\n", years, month, day, hours, minutes, seconds));
-    
+    report.push_str(&format!(
+        "**Generated:** {}-{:02}-{:02} {:02}:{:02}:{:02} UTC\n\n",
+        years, month, day, hours, minutes, seconds
+    ));
+
     // Quick summary table
     report.push_str("## Summary\n\n");
     report.push_str("| # | Benchmark | Status | Max Error | Time |\n");
     report.push_str("|---|-----------|--------|-----------|------|\n");
-    
+
     for (i, result) in results.iter().enumerate() {
-        let status = if result.passed { "✅ PASS" } else { "❌ FAIL" };
-        let max_error = result.metrics.iter()
+        let status = if result.passed {
+            "✅ PASS"
+        } else {
+            "❌ FAIL"
+        };
+        let max_error = result
+            .metrics
+            .iter()
             .map(|m| m.relative_error.abs())
             .fold(0.0_f64, f64::max);
         let time_str = format_time(result.elapsed_ms);
@@ -161,29 +170,39 @@ fn generate_markdown_report(results: &[BenchmarkResult]) -> String {
         };
         report.push_str(&format!(
             "| {} | {} | {} | {} | {} |\n",
-            i + 1, result.name, status, error_str, time_str
+            i + 1,
+            result.name,
+            status,
+            error_str,
+            time_str
         ));
     }
-    
+
     // Legend
-    report.push_str("\n**Legend:** Max Error shown as percentage (>0.1%) or scientific notation (<0.1%)\n\n");
-    
+    report.push_str(
+        "\n**Legend:** Max Error shown as percentage (>0.1%) or scientific notation (<0.1%)\n\n",
+    );
+
     report.push_str("---\n\n");
     report.push_str("## Detailed Results\n\n");
-    
+
     for (i, result) in results.iter().enumerate() {
         report.push_str(&format!("### {}. {}\n\n", i + 1, result.name));
         report.push_str(&format!("**Description:** {}\n\n", result.description));
-        
+
         let status_emoji = if result.passed { "✅" } else { "❌" };
-        report.push_str(&format!("**Status:** {} {}\n\n", status_emoji, 
-            if result.passed { "PASS" } else { "FAIL" }));
-        
+        report.push_str(&format!(
+            "**Status:** {} {}\n\n",
+            status_emoji,
+            if result.passed { "PASS" } else { "FAIL" }
+        ));
+
         if !result.metrics.is_empty() {
             // Group metrics by mesh level if present
-            let has_mesh_levels = result.metrics.iter()
-                .any(|m| m.name.contains("coarse") || m.name.contains("medium") || m.name.contains("fine"));
-            
+            let has_mesh_levels = result.metrics.iter().any(|m| {
+                m.name.contains("coarse") || m.name.contains("medium") || m.name.contains("fine")
+            });
+
             if has_mesh_levels {
                 report.push_str("#### Results by Mesh Refinement\n\n");
                 report.push_str(generate_grouped_metrics_table(&result.metrics).as_str());
@@ -191,39 +210,39 @@ fn generate_markdown_report(results: &[BenchmarkResult]) -> String {
                 report.push_str("#### Metrics\n\n");
                 report.push_str(generate_metrics_table(&result.metrics).as_str());
             }
-            
+
             // Add convergence plot if multiple mesh levels
             if has_mesh_levels {
                 report.push_str(&generate_convergence_section(&result.metrics));
             }
         }
-        
+
         if let Some(notes) = &result.notes {
             report.push_str(&format!("\n**Parameters:**\n{}\n", notes));
         }
-        
+
         report.push_str("\n---\n\n");
     }
-    
+
     // Appendix: Theory
     report.push_str("## Appendix: Analytical Solutions\n\n");
     report.push_str(THEORY_APPENDIX);
-    
+
     report
 }
 
 fn generate_metrics_table(metrics: &[rust_fea::benchmarks::MetricComparison]) -> String {
     let mut table = String::new();
-    
+
     table.push_str("| Metric | Analytical | FEA | Error | Status |\n");
     table.push_str("|--------|------------|-----|-------|--------|\n");
-    
+
     for metric in metrics {
         let ana_str = format_value_smart(metric.analytical);
         let comp_str = format_value_smart(metric.computed);
         let error_str = format_error(metric.relative_error, metric.tolerance);
         let status = if metric.passed() { "✓" } else { "✗" };
-        
+
         table.push_str(&format!(
             "| {} | {} | {} | {} | {} |\n",
             clean_metric_name(&metric.name),
@@ -233,43 +252,53 @@ fn generate_metrics_table(metrics: &[rust_fea::benchmarks::MetricComparison]) ->
             status
         ));
     }
-    
+
     table
 }
 
 fn generate_grouped_metrics_table(metrics: &[rust_fea::benchmarks::MetricComparison]) -> String {
     let mut table = String::new();
-    
+
     // Extract mesh levels
-    let levels: Vec<&str> = vec!["coarse", "medium", "fine", "refine_coarse", "refine_medium", "refine_fine"];
-    
+    let levels: Vec<&str> = vec![
+        "coarse",
+        "medium",
+        "fine",
+        "refine_coarse",
+        "refine_medium",
+        "refine_fine",
+    ];
+
     // Find unique base metric names
     let mut base_names: Vec<String> = Vec::new();
     for metric in metrics {
-        let base = levels.iter()
-            .fold(metric.name.clone(), |s, l| s.replace(&format!("{}_", l), ""));
+        let base = levels.iter().fold(metric.name.clone(), |s, l| {
+            s.replace(&format!("{}_", l), "")
+        });
         if !base_names.contains(&base) {
             base_names.push(base);
         }
     }
-    
+
     table.push_str("| Mesh | Metric | Analytical | FEA | Error | Status |\n");
     table.push_str("|------|--------|------------|-----|-------|--------|\n");
-    
+
     for metric in metrics {
-        let mesh_level = levels.iter()
+        let mesh_level = levels
+            .iter()
             .find(|l| metric.name.starts_with(*l))
             .map(|s| capitalize(s))
             .unwrap_or_else(|| "-".to_string());
-        
-        let base_name = levels.iter()
-            .fold(metric.name.clone(), |s, l| s.replace(&format!("{}_", l), ""));
-        
+
+        let base_name = levels.iter().fold(metric.name.clone(), |s, l| {
+            s.replace(&format!("{}_", l), "")
+        });
+
         let ana_str = format_value_smart(metric.analytical);
         let comp_str = format_value_smart(metric.computed);
         let error_str = format_error(metric.relative_error, metric.tolerance);
         let status = if metric.passed() { "✓" } else { "✗" };
-        
+
         table.push_str(&format!(
             "| {} | {} | {} | {} | {} | {} |\n",
             mesh_level,
@@ -280,13 +309,13 @@ fn generate_grouped_metrics_table(metrics: &[rust_fea::benchmarks::MetricCompari
             status
         ));
     }
-    
+
     table
 }
 
 fn generate_convergence_section(metrics: &[rust_fea::benchmarks::MetricComparison]) -> String {
     let mut section = String::new();
-    
+
     // Build convergence data
     let levels = vec![
         ("coarse", 1.0),
@@ -296,52 +325,61 @@ fn generate_convergence_section(metrics: &[rust_fea::benchmarks::MetricCompariso
         ("refine_medium", 0.5),
         ("refine_fine", 0.25),
     ];
-    
+
     // Find primary error metric
-    let error_metrics: Vec<_> = metrics.iter()
-        .filter(|m| m.name.contains("error") || m.name.contains("deflection") || m.name.contains("u_r"))
+    let error_metrics: Vec<_> = metrics
+        .iter()
+        .filter(|m| {
+            m.name.contains("error") || m.name.contains("deflection") || m.name.contains("u_r")
+        })
         .collect();
-    
+
     if error_metrics.len() >= 2 {
         section.push_str("\n#### Convergence Analysis\n\n");
         section.push_str("```\n");
         section.push_str("Error vs Mesh Refinement (schematic):\n\n");
         section.push_str("    Error\n");
         section.push_str("      │\n");
-        
+
         // Simple ASCII convergence plot
-        let max_err = error_metrics.iter()
+        let max_err = error_metrics
+            .iter()
             .map(|m| m.relative_error.abs())
             .fold(0.0_f64, f64::max);
-        
+
         if max_err > 1e-10 {
             for metric in error_metrics.iter().take(6) {
                 let bar_len = ((metric.relative_error.abs() / max_err) * 20.0) as usize;
                 let bar: String = "█".repeat(bar_len.max(1));
-                let level = levels.iter()
+                let level = levels
+                    .iter()
                     .find(|(l, _)| metric.name.starts_with(*l))
                     .map(|(l, _)| *l)
                     .unwrap_or("?");
-                section.push_str(&format!("  {:>8} │{} {:.1}%\n", 
-                    level, bar, metric.relative_error.abs() * 100.0));
+                section.push_str(&format!(
+                    "  {:>8} │{} {:.1}%\n",
+                    level,
+                    bar,
+                    metric.relative_error.abs() * 100.0
+                ));
             }
         }
-        
+
         section.push_str("           └───────────────────────\n");
         section.push_str("              Mesh refinement →\n");
         section.push_str("```\n");
     }
-    
+
     section
 }
 
 fn format_value_smart(value: f64) -> String {
     let abs_val = value.abs();
-    
+
     if abs_val == 0.0 {
         return "0".to_string();
     }
-    
+
     // Use SI prefix for engineering values
     if abs_val >= 1e6 || abs_val < 1e-3 {
         format_with_units(value, "")
@@ -357,7 +395,7 @@ fn format_value_smart(value: f64) -> String {
 fn format_error(error: f64, tolerance: f64) -> String {
     let abs_err = error.abs();
     let pct = abs_err * 100.0;
-    
+
     if abs_err < 0.0001 {
         format!("{:.2e}", error)
     } else if pct < 1.0 {
@@ -378,8 +416,7 @@ fn format_time(ms: f64) -> String {
 }
 
 fn clean_metric_name(name: &str) -> String {
-    name.replace("_", " ")
-        .replace("  ", " ")
+    name.replace("_", " ").replace("  ", " ")
 }
 
 fn capitalize(s: &str) -> String {
@@ -396,8 +433,10 @@ fn generate_json_report(results: &[BenchmarkResult]) -> String {
 
 fn generate_csv_report(results: &[BenchmarkResult]) -> String {
     let mut csv = String::new();
-    csv.push_str("benchmark,metric,analytical,computed,relative_error,tolerance,passed,error_pct\n");
-    
+    csv.push_str(
+        "benchmark,metric,analytical,computed,relative_error,tolerance,passed,error_pct\n",
+    );
+
     for result in results {
         for metric in &result.metrics {
             csv.push_str(&format!(
@@ -413,7 +452,7 @@ fn generate_csv_report(results: &[BenchmarkResult]) -> String {
             ));
         }
     }
-    
+
     csv
 }
 

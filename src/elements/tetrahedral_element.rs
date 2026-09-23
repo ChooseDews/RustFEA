@@ -30,15 +30,15 @@
 //! For a linear tetrahedron, the shape function derivatives are CONSTANT
 //! throughout the element, so only 1 Gauss point is needed (at the centroid).
 
-use crate::{simulation::Simulation, utilities::check_for_nans};
-use super::base_element::{BaseElement, Material, ElementFields, ElementType};
-use nalgebra as na;
-use na::{DMatrix, DVector, SMatrix, SVector, Matrix3, Matrix4, Vector3, Vector4};
+use super::base_element::{BaseElement, ElementFields, ElementType, Material};
 use crate::utilities::compute_von_mises;
-use serde::{Serialize, Deserialize};
+use crate::{simulation::Simulation, utilities::check_for_nans};
 use log::{debug, trace};
+use na::{DMatrix, DVector, Matrix3, Matrix4, SMatrix, SVector, Vector3, Vector4};
+use nalgebra as na;
+use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug)] 
+#[derive(Serialize, Deserialize, Debug)]
 pub struct TetElement {
     id: usize,
     connectivity: Vec<usize>,
@@ -113,7 +113,9 @@ impl TetElement {
     }
 
     fn get_x_local(&self, simulation: &Simulation) -> &SMatrix<f64, 4, 3> {
-        self.nodal_positions.as_ref().expect("Nodal positions not initialized")
+        self.nodal_positions
+            .as_ref()
+            .expect("Nodal positions not initialized")
     }
 
     fn compute_x_local(&mut self, simulation: &Simulation) -> SMatrix<f64, 4, 3> {
@@ -163,13 +165,12 @@ impl TetElement {
     /// Transform to global: dN/dx = dN/dL * J^(-1)
     fn compute_b_matrix(x: &SMatrix<f64, 4, 3>) -> SMatrix<f64, 6, 12> {
         let j = Self::compute_jacobian(x);
-        let j_inv = j.try_inverse().expect("Jacobian is singular - degenerate element");
-        
+        let j_inv = j
+            .try_inverse()
+            .expect("Jacobian is singular - degenerate element");
+
         let dn_dl = SMatrix::<f64, 4, 3>::from_row_slice(&[
-            -1.0, -1.0, -1.0,
-             1.0,  0.0,  0.0,
-             0.0,  1.0,  0.0,
-             0.0,  0.0,  1.0,
+            -1.0, -1.0, -1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0,
         ]);
 
         let dn_dx = dn_dl * j_inv;
@@ -177,24 +178,24 @@ impl TetElement {
         // B_i = [dNi/dx, 0, 0; 0, dNi/dy, 0; 0, 0, dNi/dz;
         //        dNi/dy, dNi/dx, 0; 0, dNi/dz, dNi/dy; dNi/dz, 0, dNi/dx]
         let mut b = SMatrix::<f64, 6, 12>::zeros();
-        
+
         for i in 0..4 {
             let dnx = dn_dx[(i, 0)];
             let dny = dn_dx[(i, 1)];
             let dnz = dn_dx[(i, 2)];
             let col = i * 3;
-            
-            b[(0, col)]     = dnx;
+
+            b[(0, col)] = dnx;
             b[(1, col + 1)] = dny;
             b[(2, col + 2)] = dnz;
-            b[(3, col)]     = dny;
+            b[(3, col)] = dny;
             b[(3, col + 1)] = dnx;
             b[(4, col + 1)] = dnz;
             b[(4, col + 2)] = dny;
-            b[(5, col)]     = dnz;
+            b[(5, col)] = dnz;
             b[(5, col + 2)] = dnx;
         }
-        
+
         b
     }
 
@@ -202,7 +203,7 @@ impl TetElement {
         let mut u = SVector::<f64, 12>::zeros();
         for (i, node_id) in self.connectivity.iter().enumerate() {
             let node = simulation.get_node(*node_id).unwrap();
-            u[3 * i]     = node.displacement[0];
+            u[3 * i] = node.displacement[0];
             u[3 * i + 1] = node.displacement[1];
             u[3 * i + 2] = node.displacement[2];
         }
@@ -217,9 +218,7 @@ impl TetElement {
 
     /// Single Gauss point at centroid (L1=L2=L3=L4=1/4), weight = 1/6
     fn get_gauss_points() -> &'static [(f64, f64, f64, f64)] {
-        static GAUSS_POINTS: [(f64, f64, f64, f64); 1] = [
-            (0.25, 0.25, 0.25, 1.0/6.0),
-        ];
+        static GAUSS_POINTS: [(f64, f64, f64, f64); 1] = [(0.25, 0.25, 0.25, 1.0 / 6.0)];
         &GAUSS_POINTS
     }
 
@@ -260,11 +259,7 @@ impl BaseElement for TetElement {
         &self.deformation_gradient
     }
 
-    fn get_global_position(
-        &self,
-        n: &DVector<f64>,
-        simulation: &Simulation,
-    ) -> na::Vector3<f64> {
+    fn get_global_position(&self, n: &DVector<f64>, simulation: &Simulation) -> na::Vector3<f64> {
         let mut global_position = na::Vector3::<f64>::zeros();
         for (i, node_id) in self.connectivity.iter().enumerate() {
             let node = simulation.get_node(*node_id).unwrap();
@@ -288,7 +283,7 @@ impl BaseElement for TetElement {
         let mut u = DVector::<f64>::zeros(12);
         for (i, node_id) in self.connectivity.iter().enumerate() {
             let node = simulation.get_node(*node_id).unwrap();
-            u[3 * i]     = node.displacement[0];
+            u[3 * i] = node.displacement[0];
             u[3 * i + 1] = node.displacement[1];
             u[3 * i + 2] = node.displacement[2];
         }
@@ -296,12 +291,16 @@ impl BaseElement for TetElement {
     }
 
     fn get_shape_derivatives(&self, _l2: f64, _l3: f64, _l4: f64) -> DMatrix<f64> {
-        DMatrix::from_row_slice(4, 3, &[
-            -1.0, -1.0, -1.0,  // dN1/dL
-             1.0,  0.0,  0.0,  // dN2/dL
-             0.0,  1.0,  0.0,  // dN3/dL
-             0.0,  0.0,  1.0,  // dN4/dL
-        ])
+        DMatrix::from_row_slice(
+            4,
+            3,
+            &[
+                -1.0, -1.0, -1.0, // dN1/dL
+                1.0, 0.0, 0.0, // dN2/dL
+                0.0, 1.0, 0.0, // dN3/dL
+                0.0, 0.0, 1.0, // dN4/dL
+            ],
+        )
     }
 
     fn get_b(&self, _l2: f64, _l3: f64, _l4: f64, _simulation: &Simulation) -> DMatrix<f64> {
@@ -311,12 +310,12 @@ impl BaseElement for TetElement {
 
     fn compute_stiffness(&mut self, simulation: &Simulation) {
         trace!("Computing stiffness matrix for tetrahedral element");
-        
+
         // K = V * B^T * C * B
         let b = self.b_matrix.as_ref().expect("B matrix not initialized");
         let c = self.material.get_3d_matrix();
         let v = self.volume;
-        
+
         self.stiffness = v * b.transpose() * c * b;
         self.stiffness_dmatrix = DMatrix::from_fn(12, 12, |i, j| self.stiffness[(i, j)]);
     }
@@ -329,11 +328,11 @@ impl BaseElement for TetElement {
         // M_ii = ρV/10, M_ij = ρV/20 (i≠j)
         let density = self.material.density;
         let v = self.volume;
-        
+
         let mut m = DMatrix::<f64>::zeros(4, 4);
         let diag = density * v / 10.0;
         let off_diag = density * v / 20.0;
-        
+
         for i in 0..4 {
             for j in 0..4 {
                 if i == j {
@@ -425,33 +424,30 @@ mod tests {
 
     /// Reference tet: (0,0,0), (1,0,0), (0,1,0), (0,0,1)
     fn create_reference_tet() -> SMatrix<f64, 4, 3> {
-        SMatrix::from_row_slice(&[
-            0.0, 0.0, 0.0,
-            1.0, 0.0, 0.0,
-            0.0, 1.0, 0.0,
-            0.0, 0.0, 1.0,
-        ])
+        SMatrix::from_row_slice(&[0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0])
     }
 
     #[test]
     fn test_volume_computation() {
         let x = create_reference_tet();
         let volume = TetElement::compute_volume(&x);
-        assert!((volume - 1.0/6.0).abs() < 1e-10, 
-            "Volume should be 1/6, got {}", volume);
+        assert!(
+            (volume - 1.0 / 6.0).abs() < 1e-10,
+            "Volume should be 1/6, got {}",
+            volume
+        );
     }
 
     #[test]
     fn test_volume_scaled() {
-        let x = SMatrix::from_row_slice(&[
-            0.0, 0.0, 0.0,
-            2.0, 0.0, 0.0,
-            0.0, 2.0, 0.0,
-            0.0, 0.0, 2.0,
-        ]);
+        let x =
+            SMatrix::from_row_slice(&[0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 2.0]);
         let volume = TetElement::compute_volume(&x);
-        assert!((volume - 8.0/6.0).abs() < 1e-10,
-            "Volume should be 8/6, got {}", volume);
+        assert!(
+            (volume - 8.0 / 6.0).abs() < 1e-10,
+            "Volume should be 8/6, got {}",
+            volume
+        );
     }
 
     #[test]
@@ -468,9 +464,14 @@ mod tests {
         for (l2, l3, l4) in test_points {
             let n = TetElement::get_shape_functions(l2, l3, l4);
             let sum: f64 = n.iter().sum();
-            assert!((sum - 1.0).abs() < 1e-10,
-                "Shape functions should sum to 1 at ({}, {}, {}), got {}", 
-                l2, l3, l4, sum);
+            assert!(
+                (sum - 1.0).abs() < 1e-10,
+                "Shape functions should sum to 1 at ({}, {}, {}), got {}",
+                l2,
+                l3,
+                l4,
+                sum
+            );
         }
     }
 
@@ -489,8 +490,14 @@ mod tests {
             let n = TetElement::get_shape_functions(l2, l3, l4);
             for j in 0..4 {
                 let expected = if i == j { 1.0 } else { 0.0 };
-                assert!((n[j] - expected).abs() < 1e-10,
-                    "N{}({}) should be {}, got {}", j, i, expected, n[j]);
+                assert!(
+                    (n[j] - expected).abs() < 1e-10,
+                    "N{}({}) should be {}, got {}",
+                    j,
+                    i,
+                    expected,
+                    n[j]
+                );
             }
         }
     }
@@ -499,13 +506,19 @@ mod tests {
     fn test_jacobian_matrix() {
         let x = create_reference_tet();
         let j = TetElement::compute_jacobian(&x);
-        
+
         let expected = Matrix3::<f64>::identity();
         for i in 0..3 {
             for k in 0..3 {
                 let diff: f64 = j[(i, k)] - expected[(i, k)];
-                assert!(diff.abs() < 1e-10,
-                    "Jacobian[{},{}] should be {}, got {}", i, k, expected[(i,k)], j[(i,k)]);
+                assert!(
+                    diff.abs() < 1e-10,
+                    "Jacobian[{},{}] should be {}, got {}",
+                    i,
+                    k,
+                    expected[(i, k)],
+                    j[(i, k)]
+                );
             }
         }
     }
@@ -514,61 +527,90 @@ mod tests {
     fn test_b_matrix_strain_computation() {
         let x = create_reference_tet();
         let b = TetElement::compute_b_matrix(&x);
-        
+
         // Uniform tension in x: u = [0.01*x, 0, 0]
         let u = SVector::<f64, 12>::from_row_slice(&[
-            0.0, 0.0, 0.0,
-            0.01, 0.0, 0.0,
-            0.0, 0.0, 0.0,
-            0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.01, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
         ]);
-        
+
         let strain = b * u;
-        
-        assert!((strain[0] - 0.01).abs() < 1e-10, "ε_xx should be 0.01, got {}", strain[0]);
-        assert!(strain[1].abs() < 1e-10, "ε_yy should be 0, got {}", strain[1]);
-        assert!(strain[2].abs() < 1e-10, "ε_zz should be 0, got {}", strain[2]);
-        assert!(strain[3].abs() < 1e-10, "γ_xy should be 0, got {}", strain[3]);
-        assert!(strain[4].abs() < 1e-10, "γ_yz should be 0, got {}", strain[4]);
-        assert!(strain[5].abs() < 1e-10, "γ_xz should be 0, got {}", strain[5]);
+
+        assert!(
+            (strain[0] - 0.01).abs() < 1e-10,
+            "ε_xx should be 0.01, got {}",
+            strain[0]
+        );
+        assert!(
+            strain[1].abs() < 1e-10,
+            "ε_yy should be 0, got {}",
+            strain[1]
+        );
+        assert!(
+            strain[2].abs() < 1e-10,
+            "ε_zz should be 0, got {}",
+            strain[2]
+        );
+        assert!(
+            strain[3].abs() < 1e-10,
+            "γ_xy should be 0, got {}",
+            strain[3]
+        );
+        assert!(
+            strain[4].abs() < 1e-10,
+            "γ_yz should be 0, got {}",
+            strain[4]
+        );
+        assert!(
+            strain[5].abs() < 1e-10,
+            "γ_xz should be 0, got {}",
+            strain[5]
+        );
     }
 
     #[test]
     fn test_rigid_body_translation() {
         let x = create_reference_tet();
         let b = TetElement::compute_b_matrix(&x);
-        
+
         let u = SVector::<f64, 12>::from_row_slice(&[
-            1.0, 2.0, 3.0,
-            1.0, 2.0, 3.0,
-            1.0, 2.0, 3.0,
-            1.0, 2.0, 3.0,
+            1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0,
         ]);
-        
+
         let strain = b * u;
-        
+
         for i in 0..6 {
-            assert!(strain[i].abs() < 1e-10,
-                "Strain component {} should be 0 for rigid translation, got {}", i, strain[i]);
+            assert!(
+                strain[i].abs() < 1e-10,
+                "Strain component {} should be 0 for rigid translation, got {}",
+                i,
+                strain[i]
+            );
         }
     }
 
     #[test]
     fn test_stiffness_matrix_symmetry() {
         let material = Material::new(200e9, 0.3, 7800.0);
-        
+
         let x = create_reference_tet();
         let b = TetElement::compute_b_matrix(&x);
         let c = material.get_3d_matrix();
         let v = TetElement::compute_volume(&x);
-        
+
         let k = v * b.transpose() * c * b;
-        
+
         for i in 0..12 {
             for j in 0..12 {
-                assert!((k[(i, j)] - k[(j, i)]).abs() < 1e-6,
+                assert!(
+                    (k[(i, j)] - k[(j, i)]).abs() < 1e-6,
                     "K should be symmetric: K[{},{}]={} != K[{},{}]={}",
-                    i, j, k[(i,j)], j, i, k[(j,i)]);
+                    i,
+                    j,
+                    k[(i, j)],
+                    j,
+                    i,
+                    k[(j, i)]
+                );
             }
         }
     }
@@ -576,23 +618,26 @@ mod tests {
     #[test]
     fn test_stiffness_matrix_positive_semidefinite() {
         let material = Material::new(200e9, 0.3, 7800.0);
-        
+
         let x = create_reference_tet();
         let b = TetElement::compute_b_matrix(&x);
         let c = material.get_3d_matrix();
         let v = TetElement::compute_volume(&x);
-        
+
         let k = v * b.transpose() * c * b;
-        
+
         let k_dyn = DMatrix::from_fn(12, 12, |i, j| k[(i, j)]);
         let eigen = k_dyn.symmetric_eigen();
-        
-        let max_ev = eigen.eigenvalues.iter().fold(0.0_f64, |a, &b| a.max(b.abs()));
+
+        let max_ev = eigen
+            .eigenvalues
+            .iter()
+            .fold(0.0_f64, |a, &b| a.max(b.abs()));
         let tol = max_ev * 1e-10;
-        
+
         let mut zero_count = 0;
         let mut positive_count = 0;
-        
+
         for &ev in eigen.eigenvalues.iter() {
             if ev.abs() < tol {
                 zero_count += 1;
@@ -602,26 +647,38 @@ mod tests {
                 panic!("Found negative eigenvalue: {} (tolerance: {})", ev, tol);
             }
         }
-        
-        assert_eq!(zero_count, 6, "Expected 6 zero eigenvalues (rigid body modes), got {}", zero_count);
-        assert_eq!(positive_count, 6, "Expected 6 positive eigenvalues, got {}", positive_count);
+
+        assert_eq!(
+            zero_count, 6,
+            "Expected 6 zero eigenvalues (rigid body modes), got {}",
+            zero_count
+        );
+        assert_eq!(
+            positive_count, 6,
+            "Expected 6 positive eigenvalues, got {}",
+            positive_count
+        );
     }
 
     #[test]
     fn test_mass_matrix() {
         let material = Material::new(200e9, 0.3, 1000.0);
-        
+
         let x = create_reference_tet();
         let v = TetElement::compute_volume(&x);
-        
+
         let density = material.density;
         let diag = density * v / 10.0;
         let off_diag = density * v / 20.0;
-        
+
         let expected_mass = density * v;
         let computed_mass = 4.0 * diag + 12.0 * off_diag;
-        
-        assert!((computed_mass - expected_mass).abs() < 1e-6,
-            "Total mass should be {}, got {}", expected_mass, computed_mass);
+
+        assert!(
+            (computed_mass - expected_mass).abs() < 1e-6,
+            "Total mass should be {}, got {}",
+            expected_mass,
+            computed_mass
+        );
     }
 }

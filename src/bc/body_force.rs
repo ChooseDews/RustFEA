@@ -1,26 +1,26 @@
-use crate::simulation::Simulation;
 use crate::bc::BoundaryCondition;
-use nalgebra as na;
-use na::Vector3;
-use serde::{Serialize, Deserialize};
-use std::fmt;
 use crate::bc::BoundaryConditionType;
+use crate::simulation::Simulation;
 use log::debug;
+use na::Vector3;
+use nalgebra as na;
+use serde::{Deserialize, Serialize};
+use std::fmt;
 
 /// Represents a body force boundary condition (distributed force per unit volume)
-/// 
+///
 /// # Mathematical Formulation
 /// Body forces act throughout the volume of the material, not just on surfaces.
 /// Common examples:
 /// - Gravity: b = ρg (density × gravitational acceleration)
 /// - Centrifugal: b = ρω²r (density × angular velocity² × radius)
-/// 
+///
 /// The equivalent nodal forces are computed by integrating over element volumes:
 /// F = ∫∫∫ b * N dV
-/// 
+///
 /// For element-wise constant body forces with lumped mass, this simplifies to:
 /// F_i = (m_i / ρ) * b  where m_i is the lumped mass at node i
-/// 
+///
 /// # Body Force Types
 /// - `Gravity`: Uniform acceleration field (e.g., [0, 0, -9.81])
 /// - `Centrifugal`: Rotation about an axis (point, axis, angular velocity)
@@ -79,7 +79,7 @@ impl BodyForce {
     }
 
     /// Create a centrifugal body force
-    /// 
+    ///
     /// # Arguments
     /// * `axis_point` - A point on the rotation axis
     /// * `axis_direction` - Direction of rotation axis (will be normalized)
@@ -129,14 +129,14 @@ impl BodyForce {
     }
 
     /// Compute body force at a given position
-    fn compute_force_at_position(
-        &self,
-        position: &Vector3<f64>,
-        density: f64,
-    ) -> Vector3<f64> {
+    fn compute_force_at_position(&self, position: &Vector3<f64>, density: f64) -> Vector3<f64> {
         match &self.force_type {
             BodyForceType::Gravity(g) => density * g,
-            BodyForceType::Centrifugal { axis_point, axis_direction, angular_velocity } => {
+            BodyForceType::Centrifugal {
+                axis_point,
+                axis_direction,
+                angular_velocity,
+            } => {
                 // Vector from axis to point
                 let to_point = position - axis_point;
                 // Project onto axis
@@ -144,11 +144,11 @@ impl BodyForce {
                 // Perpendicular component (radial direction from axis)
                 let radial = to_point - parallel;
                 let r = radial.norm();
-                
+
                 if r < 1e-12 {
                     return Vector3::zeros();
                 }
-                
+
                 // Centrifugal force: F = ρω²r (pointing outward from axis)
                 let omega_squared = angular_velocity * angular_velocity;
                 density * omega_squared * radial
@@ -163,14 +163,14 @@ impl BoundaryCondition for BodyForce {
     fn initalize(&mut self, simulation: &Simulation) {
         use std::collections::HashSet;
         let mut node_set = HashSet::new();
-        
+
         // Determine which elements to process
         let elem_ids: Vec<usize> = if self.elements.is_empty() {
             simulation.active_elements()
         } else {
             self.elements.clone()
         };
-        
+
         for &elem_id in &elem_ids {
             if let Some(element) = simulation.get_element(elem_id) {
                 for &node_id in element.get_connectivity() {
@@ -178,10 +178,13 @@ impl BoundaryCondition for BodyForce {
                 }
             }
         }
-        
+
         self.nodes = node_set.into_iter().collect();
-        debug!("Body force BC initialized: {} nodes from {} elements", 
-               self.nodes.len(), elem_ids.len());
+        debug!(
+            "Body force BC initialized: {} nodes from {} elements",
+            self.nodes.len(),
+            elem_ids.len()
+        );
     }
 
     fn apply(&mut self, simulation: &mut Simulation) {
@@ -191,21 +194,21 @@ impl BoundaryCondition for BodyForce {
         } else {
             self.elements.clone()
         };
-        
+
         // For each element, compute nodal forces from body force
         for &elem_id in &elem_ids {
             let element = match simulation.get_element(elem_id) {
                 Some(e) => e,
                 None => continue,
             };
-            
+
             let connectivity = element.get_connectivity().clone();
             let density = element.get_material().get_density();
-            
+
             // Get lumped mass - if empty, compute it on the fly
             let lumped_mass = element.get_lumped_mass().clone();
             let use_precomputed_mass = !lumped_mass.is_empty();
-            
+
             if use_precomputed_mass {
                 // Use pre-computed lumped mass
                 for (local_idx, &node_id) in connectivity.iter().enumerate() {
@@ -214,15 +217,15 @@ impl BoundaryCondition for BodyForce {
                     } else {
                         continue;
                     };
-                    
+
                     let position = match simulation.get_node(node_id) {
                         Some(n) => n.position,
                         None => continue,
                     };
-                    
+
                     let body_force_per_volume = self.compute_force_at_position(&position, density);
                     let nodal_force = body_force_per_volume * (node_mass / density);
-                    
+
                     for i in 0..3 {
                         let global_index = simulation.get_global_index(node_id, i);
                         simulation.load_vector[global_index] += nodal_force[i];
@@ -234,7 +237,7 @@ impl BoundaryCondition for BodyForce {
                 // Lumped mass per node = row sum
                 let mass_matrix = element.compute_mass(simulation);
                 let num_nodes = connectivity.len();
-                
+
                 for (local_idx, &node_id) in connectivity.iter().enumerate() {
                     // Lumped mass for this node is the row sum
                     let node_mass = if local_idx < mass_matrix.nrows() {
@@ -242,19 +245,19 @@ impl BoundaryCondition for BodyForce {
                     } else {
                         continue;
                     };
-                    
+
                     if node_mass < 1e-20 {
                         continue;
                     }
-                    
+
                     let position = match simulation.get_node(node_id) {
                         Some(n) => n.position,
                         None => continue,
                     };
-                    
+
                     let body_force_per_volume = self.compute_force_at_position(&position, density);
                     let nodal_force = body_force_per_volume * (node_mass / density);
-                    
+
                     for i in 0..3 {
                         let global_index = simulation.get_global_index(node_id, i);
                         simulation.load_vector[global_index] += nodal_force[i];
@@ -277,7 +280,9 @@ impl fmt::Display for BodyForce {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let type_str = match &self.force_type {
             BodyForceType::Gravity(g) => format!("Gravity({:.3}, {:.3}, {:.3})", g.x, g.y, g.z),
-            BodyForceType::Centrifugal { angular_velocity, .. } => {
+            BodyForceType::Centrifugal {
+                angular_velocity, ..
+            } => {
                 format!("Centrifugal(ω={:.3} rad/s)", angular_velocity)
             }
             BodyForceType::Uniform(b) => format!("Uniform({:.3e}, {:.3e}, {:.3e})", b.x, b.y, b.z),
