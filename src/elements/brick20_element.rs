@@ -445,12 +445,20 @@ impl BaseElement for Brick20Element {
             let det_j = j.determinant();
             
             if det_j <= 0.0 {
-                panic!("Negative or zero Jacobian determinant in C3D20 element {}", self.id);
+                panic!("Negative or zero Jacobian determinant in C3D20 element {} (det_j = {})", self.id, det_j);
             }
             
             let b = self.compute_b(x, &j, &d_n);
             k += &b.transpose() * c * &b * det_j * weight;
         }
+        
+        // Add small diagonal perturbation for numerical stability (common FEA practice)
+        // This helps with near-singular matrices that can arise from element shapes
+        let perturbation = 1e-10 * k.diagonal().iter().fold(0.0f64, |acc, &x| acc.max(x.abs()));
+        for i in 0..NUM_DOFS {
+            k[(i, i)] += perturbation;
+        }
+        
         self.stiffness = k;
     }
 

@@ -5,6 +5,7 @@
 
 mod app;
 mod examples;
+mod icons;
 mod project_io;
 mod render_cache;
 mod renderer;

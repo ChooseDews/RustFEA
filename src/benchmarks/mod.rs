@@ -15,7 +15,11 @@ pub mod hertz_sphere_sphere;
 pub mod contact_explicit;
 pub mod gravity;
 pub mod c3d20_uniaxial_tension;
+pub mod c3d20_cantilever_beam;
 pub mod c3d4_uniaxial_tension;
+pub mod element_comparison;
+#[cfg(feature = "native")]
+pub mod solver_comparison;
 pub mod mesh_utils;
 pub mod plotting;
 

@@ -1,11 +1,22 @@
+# Build artifacts
 debug/
 target/
-Cargo.lock
 **/*.rs.bk
 *.pdb
-.vscode/
-__pycache__
+*.profraw
 
+# Cargo lock (library crate - consumers should use their own lock)
+Cargo.lock
+
+# Editor/IDE
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+
+# Generated/temporary data files
 *.inp
 *.zip
 *.matrix
@@ -14,13 +25,28 @@ __pycache__
 *.json.xz
 **.msh
 **.hdf
-*.svg
-temp/*
 *.data
 *.data.*
 *.txt
 
-# OS and editor files
+# Temp directory
+temp/
+
+# WASM build output (root level)
+/web/
+
+# Cargo config (platform-specific)
+.cargo/
+
+# OS files
 .DS_Store
 **/.DS_Store
+
+# Kiro agent files
 .kiro/
+
+# Reports - ignore generated but keep markdown and tracked SVGs
+reports/*.json
+reports/*.png
+!reports/*.md
+!reports/*.svg

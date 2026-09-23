@@ -1,12 +1,15 @@
 use log::{debug, warn};
 use nalgebra::DVector;
+#[cfg(feature = "native")]
 use rayon::prelude::*;
+#[cfg(feature = "native")]
 use std::sync::Arc;
 
 use super::Simulation;
 
 impl Simulation {
     pub fn compute_force_vector(&mut self, displacement: &DVector<f64>) -> DVector<f64> {
+        #[cfg(feature = "native")]
         if self.worker_count > 1 {
             return self.compute_force_vector_threaded(displacement);
         }
@@ -24,6 +27,7 @@ impl Simulation {
         force_vector
     }
 
+    #[cfg(feature = "native")]
     pub fn compute_force_vector_threaded(&mut self, displacement: &DVector<f64>) -> DVector<f64> {
         let active_ids = self.active_elements();
         let elements = Arc::new(std::mem::take(&mut self.elements));

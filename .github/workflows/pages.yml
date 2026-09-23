@@ -1,0 +1,84 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build WASM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: wasm-pages-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            wasm-pages-
+
+      - name: Install wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli --version 0.2.92
+
+      - name: Build WASM (release)
+        run: |
+          cargo build \
+            --target wasm32-unknown-unknown \
+            --features wasm \
+            --no-default-features \
+            --release \
+            --package rust_fea_gui
+
+      - name: Generate JS bindings
+        run: |
+          wasm-bindgen \
+            --out-dir gui/web/pkg \
+            --target web \
+            target/wasm32-unknown-unknown/release/rust_fea_gui.wasm
+
+      - name: Prepare pages directory
+        run: |
+          mkdir -p _site
+          cp gui/web/index.html _site/
+          cp gui/web/pkg/rust_fea_gui.js _site/
+          cp gui/web/pkg/rust_fea_gui_bg.wasm _site/
+
+      - name: Upload pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

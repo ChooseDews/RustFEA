@@ -10,6 +10,7 @@ use crate::utilities::{check_for_nans, print_max_displacement, safe_component_di
 use log::{debug, error, info, trace, warn};
 use nalgebra::{geometry, DMatrix, DVector};
 use nalgebra_sparse::ops::Op;
+#[cfg(feature = "native")]
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -205,13 +206,18 @@ impl Simulation {
 
     pub fn compute_all_element_stiffness(&mut self) {
         let mut elements = std::mem::take(&mut self.elements);
-        //single threaded version:
-        // for (_, element) in &mut elements {
-        //     element.compute_stiffness(self);
-        // }
-        elements.par_iter_mut().for_each(|(_, el)| {
-            el.compute_stiffness(self);
-        });
+        #[cfg(feature = "native")]
+        {
+            elements.par_iter_mut().for_each(|(_, el)| {
+                el.compute_stiffness(self);
+            });
+        }
+        #[cfg(not(feature = "native"))]
+        {
+            for (_, el) in elements.iter_mut() {
+                el.compute_stiffness(self);
+            }
+        }
         self.elements = elements;
     }
 
@@ -383,7 +389,9 @@ impl Simulation {
         let mut internal_force = self.compute_force_vector(&u);
         let mut external_force = DVector::zeros(self.nodes.len() * self.dofs);
 
+        #[cfg(feature = "native")]
         let pb: indicatif::ProgressBar = indicatif::ProgressBar::new(time_steps as u64);
+        #[cfg(feature = "native")]
         pb.set_style(
             indicatif::ProgressStyle::default_bar()
                 .template("{elapsed_precise}/{eta_precise} [{bar:40.cyan/blue}] {pos}/{len} {eta} | Simulation Time: {msg}s")
@@ -412,12 +420,21 @@ impl Simulation {
             }
 
             // Update nodal displacements
-            self.nodes_mut()
-                .par_iter_mut()
-                .enumerate()
-                .for_each(|(node_id, node)| {
+            #[cfg(feature = "native")]
+            {
+                self.nodes_mut()
+                    .par_iter_mut()
+                    .enumerate()
+                    .for_each(|(node_id, node)| {
+                        node.set_displacement(u[node_id * 3], u[node_id * 3 + 1], u[node_id * 3 + 2]);
+                    });
+            }
+            #[cfg(not(feature = "native"))]
+            {
+                for (node_id, node) in self.nodes_mut().iter_mut().enumerate() {
                     node.set_displacement(u[node_id * 3], u[node_id * 3 + 1], u[node_id * 3 + 2]);
-                });
+                }
+            }
 
             // Compute new forces and update velocity
             internal_force = self.compute_force_vector(&u);
@@ -459,8 +476,11 @@ impl Simulation {
                 info!("[{}] Time: {}", i, t);
                 print_max_displacement(&u);
             }
-            pb.set_message(format!("{:.6}", t));
-            pb.inc(1);
+            #[cfg(feature = "native")]
+            {
+                pb.set_message(format!("{:.6}", t));
+                pb.inc(1);
+            }
             i += 1;
             t += dt;
         }
@@ -469,7 +489,7 @@ impl Simulation {
     }
 
     pub fn solve(&mut self) {
-        let start_time = std::time::Instant::now();
+        let start_time = web_time::Instant::now();
         let method = self
             .keywords
             .get_string("SOLVER_METHOD")

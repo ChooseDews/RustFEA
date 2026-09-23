@@ -5,6 +5,8 @@
 
 use eframe::egui;
 use crate::app::FeaApp;
+use crate::examples::{ExampleType, ExampleConfig, MeshResolution, load_example_with_config};
+use crate::icons;
 use crate::render_cache;
 use crate::section_cut;
 use crate::state::{ColorMode, BoundaryConditionConfig, BodyForceTypeConfig, ClipAxis};
@@ -19,28 +21,28 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
             ui.label("View:");
             
             // View toggles with keyboard shortcut hints
-            if ui.selectable_label(app.state.ui_state.show_faces, "Faces")
+            if ui.selectable_label(app.state.ui_state.show_faces, format!("{} Faces", icons::FACES))
                 .on_hover_text("Toggle face rendering (F)")
                 .clicked() 
             {
                 app.state.ui_state.show_faces = !app.state.ui_state.show_faces;
                 app.renderer = None;
             }
-            if ui.selectable_label(app.state.ui_state.show_wireframe, "Wire")
+            if ui.selectable_label(app.state.ui_state.show_wireframe, format!("{} Wire", icons::WIREFRAME))
                 .on_hover_text("Toggle wireframe (W)")
                 .clicked() 
             {
                 app.state.ui_state.show_wireframe = !app.state.ui_state.show_wireframe;
                 app.renderer = None;
             }
-            if ui.selectable_label(app.state.ui_state.show_nodes, "Nodes")
+            if ui.selectable_label(app.state.ui_state.show_nodes, format!("{} Nodes", icons::POINTS))
                 .on_hover_text("Toggle node display (N)")
                 .clicked() 
             {
                 app.state.ui_state.show_nodes = !app.state.ui_state.show_nodes;
                 app.renderer = None;
             }
-            if ui.selectable_label(app.state.ui_state.show_boundary_conditions, "BCs")
+            if ui.selectable_label(app.state.ui_state.show_boundary_conditions, format!("{} BCs", icons::MARKUP))
                 .on_hover_text("Toggle boundary conditions (B)")
                 .clicked() 
             {
@@ -48,12 +50,28 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
             }
             
             // Clipping plane toggle
-            if ui.selectable_label(app.state.ui_state.clipping_plane.enabled, "Clip")
+            if ui.selectable_label(app.state.ui_state.clipping_plane.enabled, format!("{} Clip", icons::SCISSORS))
                 .on_hover_text("Toggle section view / clipping plane (C)")
                 .clicked()
             {
                 app.state.ui_state.clipping_plane.enabled = !app.state.ui_state.clipping_plane.enabled;
                 app.render_cache.invalidate();
+            }
+            
+            // Grid toggle
+            if ui.selectable_label(app.state.ui_state.display_settings.show_grid, format!("{} Grid", icons::GRID))
+                .on_hover_text("Toggle grid visibility (G)")
+                .clicked()
+            {
+                app.state.ui_state.display_settings.show_grid = !app.state.ui_state.display_settings.show_grid;
+            }
+            
+            // Stats overlay toggle
+            if ui.selectable_label(app.state.ui_state.stats_overlay.visible, format!("{} Stats", icons::INFO))
+                .on_hover_text("Toggle statistics overlay (I)")
+                .clicked()
+            {
+                app.state.ui_state.stats_overlay.visible = !app.state.ui_state.stats_overlay.visible;
             }
             
             ui.separator();
@@ -71,7 +89,7 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                 app.state.ui_state.camera.yaw = 0.0;
                 app.state.ui_state.camera.pitch = std::f32::consts::FRAC_PI_2 - 0.01;
             }
-            if ui.button("Iso").on_hover_text("Isometric view (0)").clicked() {
+            if ui.button(format!("{} Iso", icons::VIEW_ISO)).on_hover_text("Isometric view (0)").clicked() {
                 app.state.ui_state.camera.yaw = 0.785; // 45°
                 app.state.ui_state.camera.pitch = 0.524; // 30°
             }
@@ -92,7 +110,7 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
             ui.separator();
             
             // Fit view
-            if ui.button("🎯 Fit").on_hover_text("Fit view to mesh (Home)").clicked() {
+            if ui.button(format!("{} Fit", icons::FOCUS)).on_hover_text("Fit view to mesh (Home)").clicked() {
                 if let Some(mesh) = app.state.current_mesh() {
                     let bounds = mesh.bounds;
                     app.state.ui_state.camera.fit_to_bounds(&bounds);
@@ -101,12 +119,12 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
             
             // Screenshot button
             #[cfg(not(target_arch = "wasm32"))]
-            if ui.button("📷").on_hover_text("Save screenshot (Ctrl+S)").clicked() {
+            if ui.button(icons::CAMERA).on_hover_text("Save screenshot (Ctrl+S)").clicked() {
                 app.state.ui_state.screenshot_dialog_open = true;
             }
             
             // Keyboard shortcuts help
-            if ui.button("⌨").on_hover_text("Show keyboard shortcuts (?)").clicked() {
+            if ui.button(icons::QUESTION).on_hover_text("Show keyboard shortcuts (?)").clicked() {
                 app.state.ui_state.show_shortcuts_help = !app.state.ui_state.show_shortcuts_help;
             }
         });
@@ -161,26 +179,117 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                 draw_selected_nodes(&painter, rect, app, mesh_state);
             }
         } else {
-            // Show placeholder text and import examples button
+            // Show quick-load example buttons in empty state
             let center = rect.center();
+            
+            // Calculate total height of the UI block to center it properly
+            let total_height = 24.0 + 20.0 + 16.0 + 15.0 + 32.0 + 15.0 + 20.0; // ~142px
+            let top_y = center.y - total_height / 2.0;
             
             // Draw the "Import a mesh to begin" text
             painter.text(
-                egui::pos2(center.x, center.y - 20.0),
-                egui::Align2::CENTER_CENTER,
+                egui::pos2(center.x, top_y),
+                egui::Align2::CENTER_TOP,
                 "Import a mesh to begin",
                 egui::FontId::proportional(24.0),
                 egui::Color32::from_gray(100)
             );
             
-            // Add "Import Examples" button below the text
-            let button_size = egui::vec2(140.0, 32.0);
-            let button_rect = egui::Rect::from_center_size(
-                egui::pos2(center.x, center.y + 25.0),
-                button_size
+            // "Open an example:" label
+            painter.text(
+                egui::pos2(center.x, top_y + 44.0),
+                egui::Align2::CENTER_TOP,
+                "Open an example:",
+                egui::FontId::proportional(16.0),
+                egui::Color32::from_gray(90)
             );
             
-            if ui.put(button_rect, egui::Button::new("📚 Import Examples")).clicked() {
+            // Three example buttons in a row (default to Medium resolution)
+            let button_width = 140.0;
+            let button_height = 32.0;
+            let h_spacing = 12.0;
+            let total_buttons_width = 3.0 * button_width + 2.0 * h_spacing;
+            let start_x = center.x - total_buttons_width / 2.0;
+            let buttons_y = top_y + 75.0;
+            
+            // Track which example was clicked
+            let mut clicked_example: Option<ExampleType> = None;
+            
+            // Cantilever Beam button
+            let btn_rect = egui::Rect::from_min_size(
+                egui::pos2(start_x, buttons_y),
+                egui::vec2(button_width, button_height)
+            );
+            if ui.put(btn_rect, egui::Button::new("Cantilever Beam")).clicked() {
+                clicked_example = Some(ExampleType::CantileverBeam);
+            }
+            
+            // Torque Shaft button
+            let btn_rect = egui::Rect::from_min_size(
+                egui::pos2(start_x + button_width + h_spacing, buttons_y),
+                egui::vec2(button_width, button_height)
+            );
+            if ui.put(btn_rect, egui::Button::new("Torque Shaft")).clicked() {
+                clicked_example = Some(ExampleType::TorqueShaft);
+            }
+            
+            // Contact Blocks button
+            let btn_rect = egui::Rect::from_min_size(
+                egui::pos2(start_x + 2.0 * (button_width + h_spacing), buttons_y),
+                egui::vec2(button_width, button_height)
+            );
+            if ui.put(btn_rect, egui::Button::new("Contact Blocks")).clicked() {
+                clicked_example = Some(ExampleType::ContactBlocks);
+            }
+            
+            // Handle example loading (default to Medium resolution)
+            if let Some(example_type) = clicked_example {
+                let config = ExampleConfig {
+                    example_type,
+                    resolution: MeshResolution::Medium,
+                    ..Default::default()
+                };
+                let example = load_example_with_config(&config);
+                
+                // Load the mesh using the MeshState constructor
+                let mesh_state = crate::state::MeshState::from_mesh(
+                    example.mesh,
+                    example_type.name().to_string(),
+                    None
+                );
+                app.state.meshes.clear();
+                app.state.meshes.push(mesh_state);
+                app.state.current_mesh_idx = Some(0);
+                
+                // Load the boundary conditions into simulation config
+                app.state.simulation_config.boundary_conditions = example.boundary_conditions;
+                
+                // Set the solver type in simulation config
+                app.state.simulation_config.solver = example.solver_type;
+                
+                // Fit view to mesh
+                if let Some(mesh_state) = app.state.current_mesh() {
+                    let bounds = mesh_state.bounds.clone();
+                    app.state.ui_state.camera.fit_to_bounds(&bounds);
+                }
+                
+                // Clear renderer and cache
+                app.renderer = None;
+                app.render_cache.invalidate();
+                
+                app.state.status_message = format!(
+                    "Loaded {} (Medium mesh)",
+                    example_type.name()
+                );
+            }
+            
+            // "More Examples" link to open the examples panel
+            let more_y = buttons_y + button_height + 18.0;
+            let more_rect = egui::Rect::from_center_size(
+                egui::pos2(center.x, more_y),
+                egui::vec2(120.0, 24.0)
+            );
+            if ui.put(more_rect, egui::Button::new("More Examples").small()).clicked() {
                 app.state.ui_state.example_dialog_open = true;
             }
         }
@@ -350,7 +459,7 @@ fn draw_selected_faces(painter: &egui::Painter, rect: egui::Rect, app: &FeaApp) 
                 painter.add(egui::Shape::convex_polygon(
                     proj.clone(),
                     highlight_color,
-                    egui::Stroke::new(2.0, outline_color)
+                    egui::Stroke::new(2.0_f32, outline_color)
                 ));
                 
                 break;
@@ -774,7 +883,7 @@ fn draw_grid(painter: &egui::Painter, rect: egui::Rect, app: &FeaApp) {
         
         if let (Some(p1), Some(p2)) = (project_grid(p1_3d), project_grid(p2_3d)) {
             if let Some((cp1, cp2)) = clip_line(p1, p2) {
-                painter.line_segment([cp1, cp2], egui::Stroke::new(1.0, grid_color));
+                painter.line_segment([cp1, cp2], egui::Stroke::new(1.0_f32, grid_color));
             }
         }
         
@@ -784,7 +893,7 @@ fn draw_grid(painter: &egui::Painter, rect: egui::Rect, app: &FeaApp) {
         
         if let (Some(p1), Some(p2)) = (project_grid(p1_3d), project_grid(p2_3d)) {
             if let Some((cp1, cp2)) = clip_line(p1, p2) {
-                painter.line_segment([cp1, cp2], egui::Stroke::new(1.0, grid_color));
+                painter.line_segment([cp1, cp2], egui::Stroke::new(1.0_f32, grid_color));
             }
         }
     }
@@ -885,6 +994,10 @@ fn draw_mesh_cached(
         depth: f32,
         color: egui::Color32,
         is_backface: bool,
+        /// Per-corner colors for smooth shading (computed via shape functions)
+        corner_colors: [egui::Color32; 4],
+        /// Whether to use smooth shading (subdivide into triangles with interpolated colors)
+        use_smooth_shading: bool,
     }
     
     let estimated_visible = visible_face_indices.len() / face_stride;
@@ -980,12 +1093,74 @@ fn draw_mesh_cached(
         let center_z = (z0 + z1 + z2 + z3) * 0.25;
         let depth = center_z * 0.6 + min_z * 0.4;
         
-        // Get color from cache
+        // Get color from cache (used for flat shading fallback in solid mode)
         let base_color = cache.get_face_color(face, color_mode);
-        let color = if is_backface {
-            crate::render_cache::darken_color(base_color, 0.6)
+        
+        // Compute per-corner colors for smooth shading with lighting
+        let (corner_colors, use_smooth_shading, color) = if color_mode != ColorMode::Solid {
+            // Get colors for each corner using nodal values
+            let c0 = cache.get_node_color(face.node_ids[0], face.element_id, color_mode);
+            let c1 = cache.get_node_color(face.node_ids[1], face.element_id, color_mode);
+            let c2 = cache.get_node_color(face.node_ids[2], face.element_id, color_mode);
+            let c3 = cache.get_node_color(face.node_ids[3], face.element_id, color_mode);
+            
+            // Compute lighting based on face normal
+            // Light comes from upper-front-right relative to view
+            let light_dir = [0.3_f32, 0.5, 0.8]; // Normalized direction toward light
+            let light_len = (light_dir[0]*light_dir[0] + light_dir[1]*light_dir[1] + light_dir[2]*light_dir[2]).sqrt();
+            let light_dir = [light_dir[0]/light_len, light_dir[1]/light_len, light_dir[2]/light_len];
+            
+            // Normalize face normal
+            let n_len = (face.normal[0]*face.normal[0] + face.normal[1]*face.normal[1] + face.normal[2]*face.normal[2]).sqrt();
+            let n = if n_len > 0.0001 {
+                [face.normal[0]/n_len, face.normal[1]/n_len, face.normal[2]/n_len]
+            } else {
+                [0.0, 0.0, 1.0]
+            };
+            
+            // Diffuse lighting (N dot L), clamped
+            let n_dot_l = n[0]*light_dir[0] + n[1]*light_dir[1] + n[2]*light_dir[2];
+            let diffuse = n_dot_l.abs().clamp(0.0, 1.0); // Use abs for both face orientations
+            
+            // Combine ambient + diffuse lighting
+            let ambient = 0.4_f32;
+            let light_factor = ambient + (1.0 - ambient) * diffuse;
+            
+            // Apply backface darkening
+            let final_factor = if is_backface { light_factor * 0.5 } else { light_factor };
+            
+            (
+                [
+                    crate::render_cache::darken_color(c0, final_factor),
+                    crate::render_cache::darken_color(c1, final_factor),
+                    crate::render_cache::darken_color(c2, final_factor),
+                    crate::render_cache::darken_color(c3, final_factor),
+                ],
+                true,
+                base_color  // fallback color for ProjectedFace
+            )
         } else {
-            base_color
+            // Solid color mode: apply same lighting to flat color
+            // Light direction
+            let light_dir = [0.3_f32, 0.5, 0.8];
+            let light_len = (light_dir[0]*light_dir[0] + light_dir[1]*light_dir[1] + light_dir[2]*light_dir[2]).sqrt();
+            let light_dir = [light_dir[0]/light_len, light_dir[1]/light_len, light_dir[2]/light_len];
+            
+            let n_len = (face.normal[0]*face.normal[0] + face.normal[1]*face.normal[1] + face.normal[2]*face.normal[2]).sqrt();
+            let n = if n_len > 0.0001 {
+                [face.normal[0]/n_len, face.normal[1]/n_len, face.normal[2]/n_len]
+            } else {
+                [0.0, 0.0, 1.0]
+            };
+            
+            let n_dot_l = n[0]*light_dir[0] + n[1]*light_dir[1] + n[2]*light_dir[2];
+            let diffuse = n_dot_l.abs().clamp(0.0, 1.0);
+            let ambient = 0.4_f32;
+            let light_factor = ambient + (1.0 - ambient) * diffuse;
+            let final_factor = if is_backface { light_factor * 0.5 } else { light_factor };
+            
+            let lit_color = crate::render_cache::darken_color(base_color, final_factor);
+            ([lit_color, lit_color, lit_color, lit_color], false, lit_color)
         };
         
         projected_faces.push(ProjectedFace {
@@ -993,6 +1168,8 @@ fn draw_mesh_cached(
             depth,
             color,
             is_backface,
+            corner_colors,
+            use_smooth_shading,
         });
     }
     
@@ -1119,51 +1296,146 @@ fn draw_mesh_cached(
     let mut triangle_shapes: Vec<egui::Shape> = Vec::with_capacity(projected_faces.len() + section_cut_shapes.len());
     let mut line_shapes: Vec<egui::Shape> = Vec::with_capacity(if show_wireframe { projected_faces.len() * 4 } else { 0 });
     
-    let min_edge = 2.0;
+    let _min_edge = 2.0;
     let wire_color = egui::Color32::from_gray(40);
     let max_line_len = rect.width().min(rect.height()) * 0.5;
     let line_margin_rect = rect.expand(100.0);
+    
+    // Helper to interpolate between two colors (linear RGB for better gradients)
+    let lerp_color = |c0: egui::Color32, c1: egui::Color32, t: f32| -> egui::Color32 {
+        // Use linear interpolation in sRGB space (good enough for visualization)
+        let r = (c0.r() as f32 * (1.0 - t) + c1.r() as f32 * t) as u8;
+        let g = (c0.g() as f32 * (1.0 - t) + c1.g() as f32 * t) as u8;
+        let b = (c0.b() as f32 * (1.0 - t) + c1.b() as f32 * t) as u8;
+        egui::Color32::from_rgb(r, g, b)
+    };
+    
+    // Helper to bilinearly interpolate color on quad
+    let bilinear_color = |c: &[egui::Color32; 4], u: f32, v: f32| -> egui::Color32 {
+        // c[0] = (0,0), c[1] = (1,0), c[2] = (1,1), c[3] = (0,1)
+        let c_bottom = lerp_color(c[0], c[1], u);
+        let c_top = lerp_color(c[3], c[2], u);
+        lerp_color(c_bottom, c_top, v)
+    };
+    
+    // Helper to bilinearly interpolate position on quad
+    let bilinear_pos = |p: &[egui::Pos2; 4], u: f32, v: f32| -> egui::Pos2 {
+        let p_bottom = egui::pos2(
+            p[0].x * (1.0 - u) + p[1].x * u,
+            p[0].y * (1.0 - u) + p[1].y * u,
+        );
+        let p_top = egui::pos2(
+            p[3].x * (1.0 - u) + p[2].x * u,
+            p[3].y * (1.0 - u) + p[2].y * u,
+        );
+        egui::pos2(
+            p_bottom.x * (1.0 - v) + p_top.x * v,
+            p_bottom.y * (1.0 - v) + p_top.y * v,
+        )
+    };
+    
+    // Calculate adaptive subdivision based on screen-space size and color variance
+    let calc_subdivision = |proj: &[egui::Pos2; 4], colors: &[egui::Color32; 4]| -> usize {
+        // Base subdivision on screen-space diagonal
+        let diag1 = ((proj[2].x - proj[0].x).powi(2) + (proj[2].y - proj[0].y).powi(2)).sqrt();
+        let diag2 = ((proj[3].x - proj[1].x).powi(2) + (proj[3].y - proj[1].y).powi(2)).sqrt();
+        let max_diag = diag1.max(diag2);
+        
+        // Calculate color variance to determine if more subdivision helps
+        let color_diff = |c0: egui::Color32, c1: egui::Color32| -> f32 {
+            let dr = (c0.r() as f32 - c1.r() as f32).abs();
+            let dg = (c0.g() as f32 - c1.g() as f32).abs();
+            let db = (c0.b() as f32 - c1.b() as f32).abs();
+            (dr + dg + db) / 3.0
+        };
+        
+        // Max color difference across the quad
+        let max_color_diff = color_diff(colors[0], colors[1])
+            .max(color_diff(colors[1], colors[2]))
+            .max(color_diff(colors[2], colors[3]))
+            .max(color_diff(colors[3], colors[0]))
+            .max(color_diff(colors[0], colors[2]))
+            .max(color_diff(colors[1], colors[3]));
+        
+        // More subdivisions for larger faces with higher color variance
+        if max_diag < 20.0 || max_color_diff < 10.0 {
+            2 // Small face or uniform color: 2x2 = 8 triangles
+        } else if max_diag < 50.0 || max_color_diff < 30.0 {
+            3 // Medium: 3x3 = 18 triangles
+        } else if max_diag < 100.0 {
+            4 // Large with variance: 4x4 = 32 triangles
+        } else {
+            5 // Very large: 5x5 = 50 triangles for smooth gradients
+        }
+    };
     
     // Render in depth-sorted order
     for item in &depth_items {
         if let Some(face_idx) = item.face_idx {
             let pf = &projected_faces[face_idx];
             
-            // Draw faces as single convex quads (not split into triangles)
+            // Draw faces
             if show_faces && (!pf.is_backface || !show_wireframe) {
-                if fast_mode {
-                    // Fast path: render quad directly with minimal validation
-                    let area = quad_area_2d(&pf.proj);
-                    if area > 4.0 && area.is_finite() {
+                let area = quad_area_2d(&pf.proj);
+                if area > 1.0 && area.is_finite() {
+                    if pf.use_smooth_shading && !fast_mode {
+                        // Smooth shading: subdivide quad into triangles with interpolated colors
+                        // Use adaptive subdivision based on screen size and color variance
+                        let subdiv = calc_subdivision(&pf.proj, &pf.corner_colors);
+                        let step = 1.0 / subdiv as f32;
+                        
+                        for j in 0..subdiv {
+                            for i in 0..subdiv {
+                                let u0 = i as f32 * step;
+                                let v0 = j as f32 * step;
+                                let u1 = u0 + step;
+                                let v1 = v0 + step;
+                                
+                                // Four corners of this sub-quad
+                                let p00 = bilinear_pos(&pf.proj, u0, v0);
+                                let p10 = bilinear_pos(&pf.proj, u1, v0);
+                                let p01 = bilinear_pos(&pf.proj, u0, v1);
+                                let p11 = bilinear_pos(&pf.proj, u1, v1);
+                                
+                                // Use centroid colors for each triangle to reduce banding
+                                // Triangle 1: p00 - p10 - p11 (centroid at (u0+2*u1)/3, (v0+2*v1)/3)
+                                let uc1 = (u0 + u1 + u1) / 3.0;
+                                let vc1 = (v0 + v0 + v1) / 3.0;
+                                let c1 = bilinear_color(&pf.corner_colors, uc1, vc1);
+                                
+                                triangle_shapes.push(egui::Shape::convex_polygon(
+                                    vec![p00, p10, p11],
+                                    c1,
+                                    egui::Stroke::NONE
+                                ));
+                                
+                                // Triangle 2: p00 - p11 - p01 (centroid at (u0+u0+u1)/3, (v0+v1+v1)/3)
+                                let uc2 = (u0 + u0 + u1) / 3.0;
+                                let vc2 = (v0 + v1 + v1) / 3.0;
+                                let c2 = bilinear_color(&pf.corner_colors, uc2, vc2);
+                                
+                                triangle_shapes.push(egui::Shape::convex_polygon(
+                                    vec![p00, p11, p01],
+                                    c2,
+                                    egui::Stroke::NONE
+                                ));
+                            }
+                        }
+                    } else {
+                        // Flat shading or fast mode: render as single quad
                         triangle_shapes.push(egui::Shape::convex_polygon(
                             vec![pf.proj[0], pf.proj[1], pf.proj[2], pf.proj[3]],
                             pf.color,
                             egui::Stroke::NONE
                         ));
                     }
-                } else {
-                    // Careful path: validate quad edges
-                    let len01 = line_length(pf.proj[0], pf.proj[1]);
-                    let len12 = line_length(pf.proj[1], pf.proj[2]);
-                    let len23 = line_length(pf.proj[2], pf.proj[3]);
-                    let len30 = line_length(pf.proj[3], pf.proj[0]);
-                    
-                    // Check that all edges are valid length
-                    if len01 >= min_edge && len12 >= min_edge && len23 >= min_edge && len30 >= min_edge {
-                        let area = quad_area_2d(&pf.proj);
-                        if area > 1.0 && area.is_finite() {
-                            triangle_shapes.push(egui::Shape::convex_polygon(
-                                vec![pf.proj[0], pf.proj[1], pf.proj[2], pf.proj[3]],
-                                pf.color,
-                                egui::Stroke::NONE
-                            ));
-                        }
-                    }
                 }
             }
             
             // Draw wireframe for front faces only
-            if show_wireframe && !pf.is_backface {
+            // Skip wireframe if section cut surface is shown (it would draw over the cut surface)
+            let skip_wireframe_for_section = clip_enabled && ui_state.clipping_plane.show_section_surface;
+            if show_wireframe && !pf.is_backface && !skip_wireframe_for_section {
                 let edges = [
                     [pf.proj[0], pf.proj[1]],
                     [pf.proj[1], pf.proj[2]],
@@ -1176,7 +1448,7 @@ fn draw_mesh_cached(
                     for edge in &edges {
                         line_shapes.push(egui::Shape::line_segment(
                             *edge,
-                            egui::Stroke::new(1.0, wire_color)
+                            egui::Stroke::new(1.0_f32, wire_color)
                         ));
                     }
                 } else {
@@ -1189,7 +1461,7 @@ fn draw_mesh_cached(
                             if line_margin_rect.contains(edge[0]) && line_margin_rect.contains(edge[1]) {
                                 line_shapes.push(egui::Shape::line_segment(
                                     *edge,
-                                    egui::Stroke::new(1.0, wire_color)
+                                    egui::Stroke::new(1.0_f32, wire_color)
                                 ));
                             }
                         }
@@ -1197,12 +1469,12 @@ fn draw_mesh_cached(
                 }
             }
         } else if let Some(cut_idx) = item.cut_idx {
-            // Draw section cut polygon
+            // Draw section cut polygon (no stroke for seamless appearance)
             let cut = &section_cut_shapes[cut_idx];
             triangle_shapes.push(egui::Shape::convex_polygon(
                 cut.vertices.clone(),
                 cut.color,
-                egui::Stroke::new(0.5, egui::Color32::from_gray(80)),
+                egui::Stroke::NONE,
             ));
         }
     }
@@ -1623,11 +1895,11 @@ fn draw_boundary_conditions(
                         let margin = 100.0;
                         let expanded_rect = rect.expand(margin);
                         if expanded_rect.contains(p1) && expanded_rect.contains(p2) {
-                            painter.line_segment([p1, p2], egui::Stroke::new(3.0, color));
+                            painter.line_segment([p1, p2], egui::Stroke::new(3.0_f32, color));
                             
                             // Draw circular arrow indicator at midpoint
                             let mid = egui::pos2((p1.x + p2.x) / 2.0, (p1.y + p2.y) / 2.0);
-                            painter.circle_stroke(mid, 10.0, egui::Stroke::new(2.0, color));
+                            painter.circle_stroke(mid, 10.0, egui::Stroke::new(2.0_f32, color));
                         }
                     }
                     
@@ -1686,7 +1958,7 @@ fn draw_boundary_conditions(
                             
                             if let Some(proj) = project_point(pos, rect, camera) {
                                 if rect.expand(20.0).contains(proj) {
-                                    painter.circle_stroke(proj, 4.0, egui::Stroke::new(2.0, secondary_color));
+                                    painter.circle_stroke(proj, 4.0, egui::Stroke::new(2.0_f32, secondary_color));
                                 }
                             }
                         }
@@ -1716,7 +1988,7 @@ fn draw_boundary_conditions(
                             if let Some(proj) = project_point(center, rect, camera) {
                                 // Draw pressure symbol (inward pointing arrows)
                                 let size = 6.0;
-                                painter.circle_stroke(proj, size, egui::Stroke::new(2.0, color));
+                                painter.circle_stroke(proj, size, egui::Stroke::new(2.0_f32, color));
                                 // Inner arrows pointing in
                                 for i in 0..4 {
                                     let angle = i as f32 * std::f32::consts::FRAC_PI_2;
@@ -1728,7 +2000,7 @@ fn draw_boundary_conditions(
                                         proj.x + angle.cos() * (size * 0.3),
                                         proj.y + angle.sin() * (size * 0.3)
                                     );
-                                    painter.line_segment([outer, inner], egui::Stroke::new(1.5, color));
+                                    painter.line_segment([outer, inner], egui::Stroke::new(1.5_f32, color));
                                 }
                             }
                         }
@@ -1760,7 +2032,7 @@ fn draw_boundary_conditions(
                                 painter.rect_stroke(
                                     egui::Rect::from_center_size(proj, egui::vec2(size, size)),
                                     2.0,
-                                    egui::Stroke::new(2.0, color),
+                                    egui::Stroke::new(2.0_f32, color),
                                     egui::StrokeKind::Outside
                                 );
                             }
@@ -1871,14 +2143,14 @@ fn draw_fixed_symbol(
         // Vertical line for X constraint
         painter.line_segment(
             [egui::pos2(pos.x - size, pos.y), egui::pos2(pos.x - size, pos.y + size)],
-            egui::Stroke::new(2.0, color)
+            egui::Stroke::new(2.0_f32, color)
         );
         // Ground hatch
         for i in 0..3 {
             let y = pos.y + i as f32 * 3.0;
             painter.line_segment(
                 [egui::pos2(pos.x - size - 4.0, y + 4.0), egui::pos2(pos.x - size, y)],
-                egui::Stroke::new(1.0, color)
+                egui::Stroke::new(1.0_f32, color)
             );
         }
     }
@@ -1887,21 +2159,21 @@ fn draw_fixed_symbol(
         // Horizontal line for Y constraint (below node)
         painter.line_segment(
             [egui::pos2(pos.x - size/2.0, pos.y + size), egui::pos2(pos.x + size/2.0, pos.y + size)],
-            egui::Stroke::new(2.0, color)
+            egui::Stroke::new(2.0_f32, color)
         );
         // Ground hatch
         for i in 0..3 {
             let x = pos.x - size/2.0 + i as f32 * 4.0;
             painter.line_segment(
                 [egui::pos2(x, pos.y + size + 4.0), egui::pos2(x + 4.0, pos.y + size)],
-                egui::Stroke::new(1.0, color)
+                egui::Stroke::new(1.0_f32, color)
             );
         }
     }
     
     if cfg.constrain_z.is_some() {
         // Circle for Z constraint  
-        painter.circle_stroke(pos, 3.0, egui::Stroke::new(2.0, color));
+        painter.circle_stroke(pos, 3.0, egui::Stroke::new(2.0_f32, color));
     }
     
     // If all constrained, draw filled triangle
@@ -1911,7 +2183,7 @@ fn draw_fixed_symbol(
             egui::pos2(pos.x - size/2.0, pos.y + size),
             egui::pos2(pos.x + size/2.0, pos.y + size),
         ];
-        painter.add(egui::Shape::convex_polygon(points, color.linear_multiply(0.5), egui::Stroke::new(1.0, color)));
+        painter.add(egui::Shape::convex_polygon(points, color.linear_multiply(0.5), egui::Stroke::new(1.0_f32, color)));
     }
 }
 
@@ -1936,7 +2208,7 @@ fn draw_selected_nodes(
             
             if let Some(proj) = project_point(pos, rect, camera) {
                 painter.circle_filled(proj, 4.0, color);
-                painter.circle_stroke(proj, 6.0, egui::Stroke::new(1.0, egui::Color32::WHITE));
+                painter.circle_stroke(proj, 6.0, egui::Stroke::new(1.0_f32, egui::Color32::WHITE));
             }
         }
     }
@@ -1961,12 +2233,12 @@ fn draw_axis_indicator(painter: &egui::Painter, rect: egui::Rect, app: &FeaApp) 
         origin.x + x_dir[0] * axis_length,
         origin.y - x_dir[2] * axis_length * cos_pitch - sin_pitch * axis_length * 0.3
     );
-    painter.arrow(origin, x_end - origin, egui::Stroke::new(2.0, egui::Color32::RED));
+    painter.arrow(origin, x_end - origin, egui::Stroke::new(2.0_f32, egui::Color32::RED));
     painter.text(x_end, egui::Align2::CENTER_CENTER, "X", egui::FontId::proportional(12.0), egui::Color32::RED);
     
     // Y axis (green)
     let y_end = egui::pos2(origin.x, origin.y - axis_length * cos_pitch);
-    painter.arrow(origin, y_end - origin, egui::Stroke::new(2.0, egui::Color32::GREEN));
+    painter.arrow(origin, y_end - origin, egui::Stroke::new(2.0_f32, egui::Color32::GREEN));
     painter.text(y_end, egui::Align2::CENTER_CENTER, "Y", egui::FontId::proportional(12.0), egui::Color32::GREEN);
     
     // Z axis (blue)
@@ -1975,7 +2247,7 @@ fn draw_axis_indicator(painter: &egui::Painter, rect: egui::Rect, app: &FeaApp) 
         origin.x + z_dir[0] * axis_length,
         origin.y - z_dir[2] * axis_length * cos_pitch - sin_pitch * axis_length * 0.3
     );
-    painter.arrow(origin, z_end - origin, egui::Stroke::new(2.0, egui::Color32::BLUE));
+    painter.arrow(origin, z_end - origin, egui::Stroke::new(2.0_f32, egui::Color32::BLUE));
     painter.text(z_end, egui::Align2::CENTER_CENTER, "Z", egui::FontId::proportional(12.0), egui::Color32::BLUE);
 }
 
@@ -1990,26 +2262,162 @@ fn draw_view_info(painter: &egui::Painter, rect: egui::Rect, app: &FeaApp) {
         egui::Color32::from_gray(150)
     );
     
-    // Draw mesh statistics in bottom-left
-    if let Some(mesh_state) = app.state.current_mesh() {
-        let stats_text = format!(
-            "Nodes: {} | Elements: {}",
-            mesh_state.mesh.nodes.len(),
-            mesh_state.mesh.elements.len()
-        );
-        painter.text(
-            egui::pos2(rect.left() + 10.0, rect.bottom() - 10.0),
-            egui::Align2::LEFT_BOTTOM,
-            stats_text,
-            egui::FontId::proportional(12.0),
-            egui::Color32::from_gray(150)
-        );
+    // Draw stats overlay if enabled
+    if app.state.ui_state.stats_overlay.visible {
+        draw_stats_overlay(painter, rect, app);
+    }
+    
+    // Draw mesh statistics in bottom-left (simple version, always shown)
+    if !app.state.ui_state.stats_overlay.visible {
+        if let Some(mesh_state) = app.state.current_mesh() {
+            let stats_text = format!(
+                "Nodes: {} | Elements: {}",
+                mesh_state.mesh.nodes.len(),
+                mesh_state.mesh.elements.len()
+            );
+            painter.text(
+                egui::pos2(rect.left() + 10.0, rect.bottom() - 10.0),
+                egui::Align2::LEFT_BOTTOM,
+                stats_text,
+                egui::FontId::proportional(12.0),
+                egui::Color32::from_gray(150)
+            );
+        }
     }
     
     // Draw color legend when showing results
     if app.state.results.is_some() && app.state.ui_state.color_mode != ColorMode::Solid {
         draw_color_legend(painter, rect, app);
     }
+}
+
+/// Draw detailed statistics overlay
+fn draw_stats_overlay(painter: &egui::Painter, rect: egui::Rect, app: &FeaApp) {
+    let overlay = &app.state.ui_state.stats_overlay;
+    
+    // Determine position based on setting
+    let (pos, _anchor) = match overlay.position {
+        0 => (egui::pos2(rect.left() + 10.0, rect.top() + 30.0), egui::Align2::LEFT_TOP),
+        1 => (egui::pos2(rect.right() - 10.0, rect.top() + 30.0), egui::Align2::RIGHT_TOP),
+        2 => (egui::pos2(rect.left() + 10.0, rect.bottom() - 10.0), egui::Align2::LEFT_BOTTOM),
+        _ => (egui::pos2(rect.right() - 10.0, rect.bottom() - 10.0), egui::Align2::RIGHT_BOTTOM),
+    };
+    
+    let mut lines: Vec<String> = Vec::new();
+    
+    // Mesh statistics
+    if overlay.show_mesh_stats {
+        if let Some(mesh_state) = app.state.current_mesh() {
+            lines.push(format!("═══ Mesh: {} ═══", mesh_state.name));
+            lines.push(format!("  Nodes: {}", format_number(mesh_state.mesh.nodes.len())));
+            lines.push(format!("  Elements: {}", format_number(mesh_state.mesh.elements.len())));
+            lines.push(format!("  DOFs: {}", format_number(mesh_state.mesh.nodes.len() * 3)));
+            
+            // Bounding box size
+            let dx = mesh_state.bounds.max[0] - mesh_state.bounds.min[0];
+            let dy = mesh_state.bounds.max[1] - mesh_state.bounds.min[1];
+            let dz = mesh_state.bounds.max[2] - mesh_state.bounds.min[2];
+            lines.push(format!("  Size: {:.3}×{:.3}×{:.3}", dx, dy, dz));
+            
+            // Node/element groups
+            if !mesh_state.mesh.node_groups.is_empty() {
+                lines.push(format!("  Node Groups: {}", mesh_state.mesh.node_groups.len()));
+            }
+            if !mesh_state.mesh.element_groups.is_empty() {
+                lines.push(format!("  Element Groups: {}", mesh_state.mesh.element_groups.len()));
+            }
+        } else {
+            lines.push("No mesh loaded".to_string());
+        }
+    }
+    
+    // Result statistics
+    if overlay.show_result_stats {
+        if let Some(results) = &app.state.results {
+            lines.push("═══ Results ═══".to_string());
+            lines.push(format!("  Max Disp: {:.4e}", results.stats.max_displacement));
+            lines.push(format!("  Max σ_VM: {:.4e}", results.stats.max_von_mises));
+            lines.push(format!("  Solve time: {:.1}s", results.stats.solver_time_ms as f64 / 1000.0));
+            
+            if !results.time_steps.is_empty() {
+                lines.push(format!("  Time steps: {}", results.time_steps.len()));
+            }
+        }
+    }
+    
+    // Camera info
+    if overlay.show_camera_info {
+        lines.push("═══ Camera ═══".to_string());
+        let camera = &app.state.ui_state.camera;
+        lines.push(format!("  Yaw: {:.1}°", camera.yaw.to_degrees()));
+        lines.push(format!("  Pitch: {:.1}°", camera.pitch.to_degrees()));
+        lines.push(format!("  Dist: {:.2}", camera.distance));
+        lines.push(format!("  Mode: {}", if camera.orthographic { "Ortho" } else { "Persp" }));
+    }
+    
+    // Performance stats
+    if overlay.show_performance {
+        lines.push("═══ Performance ═══".to_string());
+        let fps = app.state.average_fps();
+        lines.push(format!("  FPS: {:.1}", fps));
+        if let Some(dt) = app.state.frame_times.last() {
+            lines.push(format!("  Frame: {:.1}ms", dt * 1000.0));
+        }
+    }
+    
+    // Draw background and text
+    if !lines.is_empty() {
+        let font = egui::FontId::monospace(11.0);
+        let text_color = egui::Color32::from_gray(220);
+        let bg_color = egui::Color32::from_rgba_unmultiplied(20, 20, 25, 200);
+        
+        // Calculate text bounds
+        let line_height = 14.0;
+        let max_width = lines.iter()
+            .map(|l| l.len() as f32 * 7.0) // Approximate character width
+            .fold(100.0f32, |a, b| a.max(b));
+        let total_height = lines.len() as f32 * line_height + 10.0;
+        
+        // Compute actual rect position based on anchor
+        let (bg_x, bg_y) = match overlay.position {
+            0 => (pos.x, pos.y),
+            1 => (pos.x - max_width - 10.0, pos.y),
+            2 => (pos.x, pos.y - total_height),
+            _ => (pos.x - max_width - 10.0, pos.y - total_height),
+        };
+        
+        let bg_rect = egui::Rect::from_min_size(
+            egui::pos2(bg_x, bg_y),
+            egui::vec2(max_width + 10.0, total_height)
+        );
+        
+        painter.rect_filled(bg_rect, 4.0, bg_color);
+        painter.rect_stroke(bg_rect, 4.0, egui::Stroke::new(1.0_f32, egui::Color32::from_gray(60)), egui::StrokeKind::Outside);
+        
+        // Draw each line
+        for (i, line) in lines.iter().enumerate() {
+            painter.text(
+                egui::pos2(bg_x + 5.0, bg_y + 5.0 + i as f32 * line_height),
+                egui::Align2::LEFT_TOP,
+                line,
+                font.clone(),
+                text_color,
+            );
+        }
+    }
+}
+
+/// Format a number with thousands separators
+fn format_number(n: usize) -> String {
+    let s = n.to_string();
+    let mut result = String::new();
+    for (i, c) in s.chars().rev().enumerate() {
+        if i > 0 && i % 3 == 0 {
+            result.push(',');
+        }
+        result.push(c);
+    }
+    result.chars().rev().collect()
 }
 
 /// Draw a color legend/scale bar for results visualization
@@ -2096,7 +2504,7 @@ fn draw_color_legend(painter: &egui::Painter, rect: egui::Rect, app: &FeaApp) {
             egui::vec2(legend_width, legend_height)
         ),
         0.0,
-        egui::Stroke::new(1.0, egui::Color32::WHITE),
+        egui::Stroke::new(1.0_f32, egui::Color32::WHITE),
         egui::StrokeKind::Outside
     );
     
@@ -2113,7 +2521,7 @@ fn draw_color_legend(painter: &egui::Painter, rect: egui::Rect, app: &FeaApp) {
                 egui::pos2(legend_x + legend_width, y),
                 egui::pos2(legend_x + legend_width + 4.0, y)
             ],
-            egui::Stroke::new(1.0, egui::Color32::WHITE)
+            egui::Stroke::new(1.0_f32, egui::Color32::WHITE)
         );
         
         // Label
@@ -2306,6 +2714,14 @@ fn average_colors(colors: &[egui::Color32]) -> egui::Color32 {
     )
 }
 
+/// Average exactly 3 colors (optimized for triangle rendering)
+fn average_colors_3(c0: egui::Color32, c1: egui::Color32, c2: egui::Color32) -> egui::Color32 {
+    let r = ((c0.r() as u32 + c1.r() as u32 + c2.r() as u32) / 3) as u8;
+    let g = ((c0.g() as u32 + c1.g() as u32 + c2.g() as u32) / 3) as u8;
+    let b = ((c0.b() as u32 + c1.b() as u32 + c2.b() as u32) / 3) as u8;
+    egui::Color32::from_rgb(r, g, b)
+}
+
 /// Darken a color by a factor (0.0 = black, 1.0 = unchanged)
 #[allow(dead_code)]
 fn darken_color(color: egui::Color32, factor: f32) -> egui::Color32 {
@@ -2387,6 +2803,14 @@ fn handle_keyboard_shortcuts(ctx: &egui::Context, app: &mut FeaApp) {
         if i.key_pressed(egui::Key::B) {
             app.state.ui_state.show_boundary_conditions = !app.state.ui_state.show_boundary_conditions;
         }
+        // Stats overlay toggle
+        if i.key_pressed(egui::Key::I) && !i.modifiers.ctrl && !i.modifiers.command {
+            app.state.ui_state.stats_overlay.visible = !app.state.ui_state.stats_overlay.visible;
+        }
+        // Grid toggle
+        if i.key_pressed(egui::Key::G) && !i.modifiers.ctrl && !i.modifiers.command {
+            app.state.ui_state.display_settings.show_grid = !app.state.ui_state.display_settings.show_grid;
+        }
         if i.key_pressed(egui::Key::C) && !i.modifiers.ctrl && !i.modifiers.command {
             app.state.ui_state.clipping_plane.enabled = !app.state.ui_state.clipping_plane.enabled;
             app.render_cache.invalidate();
@@ -2460,6 +2884,22 @@ fn handle_keyboard_shortcuts(ctx: &egui::Context, app: &mut FeaApp) {
             }
             if i.key_pressed(egui::Key::Num4) {
                 app.state.ui_state.active_panel = crate::state::ActivePanel::Results;
+            }
+            
+            // Undo (Ctrl+Z)
+            if i.key_pressed(egui::Key::Z) && !i.modifiers.shift {
+                crate::ui::menu_bar::perform_undo_public(app);
+            }
+            
+            // Redo (Ctrl+Shift+Z)
+            if i.key_pressed(egui::Key::Z) && i.modifiers.shift {
+                crate::ui::menu_bar::perform_redo_public(app);
+            }
+            
+            // Save settings (Ctrl+S)
+            if i.key_pressed(egui::Key::S) {
+                app.state.save_settings();
+                app.state.status_message = "Settings saved".to_string();
             }
         }
         
@@ -2552,6 +2992,10 @@ fn show_clipping_controls(ui: &mut egui::Ui, app: &mut FeaApp) {
             changed = true;
         }
         
+        // 2D cross-section view toggle
+        ui.checkbox(&mut app.state.ui_state.clipping_plane.show_2d_view, "2D View")
+            .on_hover_text("Show 2D orthographic view of the cross-section");
+        
         if changed {
             app.render_cache.invalidate();
         }
@@ -2575,6 +3019,9 @@ fn show_shortcuts_window(ctx: &egui::Context, app: &mut FeaApp) {
                     ui.strong("N"); ui.label("Toggle nodes"); ui.end_row();
                     ui.strong("B"); ui.label("Toggle boundary conditions"); ui.end_row();
                     ui.strong("C"); ui.label("Toggle clipping plane"); ui.end_row();
+                    ui.strong("G"); ui.label("Toggle grid"); ui.end_row();
+                    ui.strong("I"); ui.label("Toggle stats overlay"); ui.end_row();
+                    ui.strong("P"); ui.label("Toggle perspective/ortho"); ui.end_row();
                 });
             
             ui.add_space(8.0);
@@ -2591,6 +3038,17 @@ fn show_shortcuts_window(ctx: &egui::Context, app: &mut FeaApp) {
                     ui.strong("LMB drag"); ui.label("Rotate"); ui.end_row();
                     ui.strong("RMB drag"); ui.label("Pan"); ui.end_row();
                     ui.strong("Scroll"); ui.label("Zoom"); ui.end_row();
+                });
+            
+            ui.add_space(8.0);
+            ui.heading("Edit");
+            egui::Grid::new("shortcuts_edit")
+                .num_columns(2)
+                .spacing([20.0, 4.0])
+                .show(ui, |ui| {
+                    ui.strong("Ctrl+Z"); ui.label("Undo"); ui.end_row();
+                    ui.strong("Ctrl+Shift+Z"); ui.label("Redo"); ui.end_row();
+                    ui.strong("Ctrl+S"); ui.label("Save settings"); ui.end_row();
                 });
             
             ui.add_space(8.0);

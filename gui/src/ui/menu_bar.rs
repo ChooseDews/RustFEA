@@ -2,7 +2,8 @@
 
 use eframe::egui;
 use crate::app::FeaApp;
-use crate::examples::{ExampleType, load_example, load_example_with_config, MeshResolution};
+use crate::examples::{ExampleType, ExampleElementType, load_example, load_example_with_config, MeshResolution};
+use crate::icons;
 use crate::project_io;
 use crate::state::ActivePanel;
 
@@ -11,24 +12,24 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
         egui::menu::bar(ui, |ui| {
             // File menu
             ui.menu_button("File", |ui| {
-                if ui.button("Open Project...").clicked() {
+                if ui.button(format!("{} Open Project...", icons::FOLDER_OPEN)).clicked() {
                     open_project_dialog(app);
                     ui.close_menu();
                 }
                 
-                if ui.button("Save Project").clicked() {
+                if ui.button(format!("{} Save Project", icons::SAVE)).clicked() {
                     save_project(app);
                     ui.close_menu();
                 }
                 
-                if ui.button("Save Project As...").clicked() {
+                if ui.button(format!("{} Save Project As...", icons::SAVE)).clicked() {
                     save_project_as(app);
                     ui.close_menu();
                 }
                 
                 ui.separator();
                 
-                if ui.button("Import Mesh...").clicked() {
+                if ui.button(format!("{} Import Mesh...", icons::FILE_ADD)).clicked() {
                     import_mesh_dialog(app);
                     ui.close_menu();
                 }
@@ -95,13 +96,13 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                 
                 ui.separator();
                 
-                if ui.button("Export Results...").clicked() {
+                if ui.button(format!("{} Export Results...", icons::DOWNLOAD)).clicked() {
                     export_results_dialog(app);
                     ui.close_menu();
                 }
                 
                 #[cfg(not(target_arch = "wasm32"))]
-                if ui.button("Save Screenshot...").clicked() {
+                if ui.button(format!("{} Save Screenshot...", icons::SCREENSHOT)).clicked() {
                     app.state.ui_state.screenshot_dialog_open = true;
                     ui.close_menu();
                 }
@@ -109,37 +110,58 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                 ui.separator();
                 
                 #[cfg(not(target_arch = "wasm32"))]
-                if ui.button("Exit").clicked() {
+                if ui.button(format!("{} Exit", icons::CLOSE)).clicked() {
                     std::process::exit(0);
                 }
             });
             
             // Edit menu
             ui.menu_button("Edit", |ui| {
-                if ui.button("Undo").on_hover_text("Coming soon").clicked() {
-                    app.state.status_message = "Undo not yet implemented".to_string();
-                    ui.close_menu();
-                }
+                let can_undo = app.state.undo_stack.can_undo();
+                let can_redo = app.state.undo_stack.can_redo();
                 
-                if ui.button("Redo").on_hover_text("Coming soon").clicked() {
-                    app.state.status_message = "Redo not yet implemented".to_string();
-                    ui.close_menu();
-                }
+                let undo_text = if let Some(desc) = app.state.undo_stack.undo_description() {
+                    format!("{} Undo {}", icons::ARROW_LEFT, desc)
+                } else {
+                    format!("{} Undo", icons::ARROW_LEFT)
+                };
+                
+                let redo_text = if let Some(desc) = app.state.undo_stack.redo_description() {
+                    format!("{} Redo {}", icons::ARROW_RIGHT, desc)
+                } else {
+                    format!("{} Redo", icons::ARROW_RIGHT)
+                };
+                
+                ui.add_enabled_ui(can_undo, |ui| {
+                    if ui.button(&undo_text).on_hover_text("Ctrl+Z").clicked() {
+                        perform_undo(app);
+                        ui.close_menu();
+                    }
+                });
+                
+                ui.add_enabled_ui(can_redo, |ui| {
+                    if ui.button(&redo_text).on_hover_text("Ctrl+Shift+Z").clicked() {
+                        perform_redo(app);
+                        ui.close_menu();
+                    }
+                });
                 
                 ui.separator();
                 
-                if ui.button("Preferences...").clicked() {
+                if ui.button(format!("{} Preferences...", icons::SETTINGS)).clicked() {
                     app.state.ui_state.preferences_dialog_open = true;
                     ui.close_menu();
                 }
                 
                 ui.separator();
                 
-                if ui.button("Clear Workspace").on_hover_text("Remove all meshes and reset to default state").clicked() {
+                if ui.button(format!("{} Clear Workspace", icons::DELETE)).on_hover_text("Remove all meshes and reset to default state").clicked() {
                     // Reset state to default while preserving UI preferences
                     let display_settings = app.state.ui_state.display_settings.clone();
+                    let user_settings = app.state.user_settings.clone();
                     app.state = crate::state::AppState::new();
                     app.state.ui_state.display_settings = display_settings;
+                    app.state.user_settings = user_settings;
                     app.renderer = None;
                     app.render_cache.invalidate();
                     app.state.status_message = "Workspace cleared".to_string();
@@ -149,22 +171,22 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
             
             // View menu
             ui.menu_button("View", |ui| {
-                if ui.checkbox(&mut app.state.ui_state.show_faces, "Show Faces").on_hover_text("(F)").changed() {
+                if ui.checkbox(&mut app.state.ui_state.show_faces, format!("{} Show Faces", icons::FACES)).on_hover_text("(F)").changed() {
                     app.renderer = None;
                 }
-                if ui.checkbox(&mut app.state.ui_state.show_wireframe, "Show Wireframe").on_hover_text("(W)").changed() {
+                if ui.checkbox(&mut app.state.ui_state.show_wireframe, format!("{} Show Wireframe", icons::WIREFRAME)).on_hover_text("(W)").changed() {
                     app.renderer = None;
                 }
-                if ui.checkbox(&mut app.state.ui_state.show_nodes, "Show Nodes").on_hover_text("(N)").changed() {
+                if ui.checkbox(&mut app.state.ui_state.show_nodes, format!("{} Show Nodes", icons::POINTS)).on_hover_text("(N)").changed() {
                     app.renderer = None;
                 }
-                ui.checkbox(&mut app.state.ui_state.show_node_groups, "Show Node Groups");
-                ui.checkbox(&mut app.state.ui_state.show_boundary_conditions, "Show Boundary Conditions").on_hover_text("(B)");
+                ui.checkbox(&mut app.state.ui_state.show_node_groups, format!("{} Show Node Groups", icons::NODE_TREE));
+                ui.checkbox(&mut app.state.ui_state.show_boundary_conditions, format!("{} Show Boundary Conditions", icons::MARKUP)).on_hover_text("(B)");
                 
                 ui.separator();
                 
                 // Clipping plane
-                if ui.checkbox(&mut app.state.ui_state.clipping_plane.enabled, "Clipping Plane")
+                if ui.checkbox(&mut app.state.ui_state.clipping_plane.enabled, format!("{} Clipping Plane", icons::SCISSORS))
                     .on_hover_text("Section view (C)")
                     .changed() 
                 {
@@ -173,7 +195,7 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                 
                 ui.separator();
                 
-                if ui.button("Reset Camera").on_hover_text("(Home)").clicked() {
+                if ui.button(format!("{} Reset Camera", icons::FOCUS)).on_hover_text("(Home)").clicked() {
                     if let Some(mesh) = app.state.current_mesh() {
                         let bounds = mesh.bounds;
                         app.state.ui_state.camera.fit_to_bounds(&bounds);
@@ -183,29 +205,29 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                 
                 ui.separator();
                 
-                if ui.button("Front View").on_hover_text("(1)").clicked() {
+                if ui.button(format!("{} Front View", icons::VIEW_FRONT)).on_hover_text("(1)").clicked() {
                     app.state.ui_state.camera.set_front_view();
                     ui.close_menu();
                 }
                 
-                if ui.button("Top View").on_hover_text("(3)").clicked() {
+                if ui.button(format!("{} Top View", icons::VIEW_TOP)).on_hover_text("(3)").clicked() {
                     app.state.ui_state.camera.set_top_view();
                     ui.close_menu();
                 }
                 
-                if ui.button("Side View").on_hover_text("(2)").clicked() {
+                if ui.button(format!("{} Side View", icons::VIEW_LEFT)).on_hover_text("(2)").clicked() {
                     app.state.ui_state.camera.set_side_view();
                     ui.close_menu();
                 }
                 
-                if ui.button("Isometric").on_hover_text("(0)").clicked() {
+                if ui.button(format!("{} Isometric", icons::VIEW_ISO)).on_hover_text("(0)").clicked() {
                     app.state.ui_state.camera.set_iso_view();
                     ui.close_menu();
                 }
                 
                 ui.separator();
                 
-                if ui.button("Keyboard Shortcuts...").on_hover_text("(?)").clicked() {
+                if ui.button(format!("{} Keyboard Shortcuts...", icons::QUESTION)).on_hover_text("(?)").clicked() {
                     app.state.ui_state.show_shortcuts_help = true;
                     ui.close_menu();
                 }
@@ -216,14 +238,14 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                 let can_run = app.state.current_mesh().is_some() && !app.state.is_running;
                 
                 ui.add_enabled_ui(can_run, |ui| {
-                    if ui.button("▶ Run Simulation").clicked() {
+                    if ui.button(format!("{} Run Simulation", icons::PLAY)).clicked() {
                         app.start_simulation();
                         ui.close_menu();
                     }
                 });
                 
                 ui.add_enabled_ui(app.state.is_running, |ui| {
-                    if ui.button("■ Stop Simulation").clicked() {
+                    if ui.button(format!("{} Stop Simulation", icons::STOP)).clicked() {
                         app.stop_simulation();
                         ui.close_menu();
                     }
@@ -231,7 +253,7 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                 
                 ui.separator();
                 
-                if ui.button("Solver Settings...").clicked() {
+                if ui.button(format!("{} Solver Settings...", icons::SETTINGS)).clicked() {
                     app.state.ui_state.active_panel = ActivePanel::Setup;
                     ui.close_menu();
                 }
@@ -239,14 +261,14 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
             
             // Help menu
             ui.menu_button("Help", |ui| {
-                if ui.button("Keyboard Shortcuts").clicked() {
+                if ui.button(format!("{} Keyboard Shortcuts", icons::QUESTION)).clicked() {
                     app.state.ui_state.show_shortcuts_help = true;
                     ui.close_menu();
                 }
                 
                 ui.separator();
                 
-                if ui.button("Documentation").clicked() {
+                if ui.button(format!("{} Documentation", icons::EXTERNAL_LINK)).clicked() {
                     let url = "https://github.com/ChooseDews/RustFEA";
                     #[cfg(not(target_arch = "wasm32"))]
                     {
@@ -269,6 +291,25 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                     ui.close_menu();
                 }
             });
+            
+            // Center attribution - use separator and centered layout
+            ui.separator();
+            ui.centered_and_justified(|ui| {
+                if ui.link("Made by John Dews-Flick").clicked() {
+                    let url = "https://johndews.com";
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        let _ = open::that(url);
+                    }
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        if let Some(window) = web_sys::window() {
+                            let _ = window.open_with_url_and_target(url, "_blank");
+                        }
+                    }
+                }
+            });
+            ui.separator();
             
             // Spacer to push Run button to the right
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -296,6 +337,7 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                         ui.label("Load a mesh to run");
                     }
                 }
+                
             });
         });
     });
@@ -535,8 +577,15 @@ fn load_example_into_app(app: &mut FeaApp, example_type: ExampleType) {
     // Clear previous results
     app.state.results = None;
     
-    // Add the mesh
-    app.state.add_mesh(example.mesh, example.name.clone(), None);
+    // Clear existing meshes and add the new one
+    let mesh_state = crate::state::MeshState::from_mesh(
+        example.mesh,
+        example.name.clone(),
+        None
+    );
+    app.state.meshes.clear();
+    app.state.meshes.push(mesh_state);
+    app.state.current_mesh_idx = Some(0);
     
     // Set up boundary conditions
     app.state.simulation_config.boundary_conditions = example.boundary_conditions;
@@ -553,8 +602,13 @@ fn load_example_into_app(app: &mut FeaApp, example_type: ExampleType) {
     // Disable wireframe for cleaner view on examples
     app.state.ui_state.show_wireframe = false;
     
-    // Invalidate renderer
+    // Ensure faces and boundary conditions are visible
+    app.state.ui_state.show_faces = true;
+    app.state.ui_state.show_boundary_conditions = true;
+    
+    // Invalidate renderer and cache
     app.renderer = None;
+    app.render_cache.invalidate();
     
     // Switch to Setup panel so user can see the BCs
     app.state.ui_state.active_panel = crate::state::ActivePanel::Setup;
@@ -571,8 +625,15 @@ fn load_example_with_custom_config(app: &mut FeaApp) {
     // Clear previous results
     app.state.results = None;
     
-    // Add the mesh
-    app.state.add_mesh(example.mesh, example.name.clone(), None);
+    // Clear existing meshes and add the new one
+    let mesh_state = crate::state::MeshState::from_mesh(
+        example.mesh,
+        example.name.clone(),
+        None
+    );
+    app.state.meshes.clear();
+    app.state.meshes.push(mesh_state);
+    app.state.current_mesh_idx = Some(0);
     
     // Set up boundary conditions
     app.state.simulation_config.boundary_conditions = example.boundary_conditions;
@@ -589,8 +650,13 @@ fn load_example_with_custom_config(app: &mut FeaApp) {
     // Disable wireframe for cleaner view on examples
     app.state.ui_state.show_wireframe = false;
     
-    // Invalidate renderer
+    // Ensure faces and boundary conditions are visible
+    app.state.ui_state.show_faces = true;
+    app.state.ui_state.show_boundary_conditions = true;
+    
+    // Invalidate renderer and cache
     app.renderer = None;
+    app.render_cache.invalidate();
     
     // Switch to Setup panel
     app.state.ui_state.active_panel = crate::state::ActivePanel::Setup;
@@ -639,6 +705,20 @@ pub fn show_example_dialog(ctx: &egui::Context, app: &mut FeaApp) {
             ui.separator();
             ui.add_space(8.0);
             
+            // Element type selection (only for cantilever beam)
+            if config.example_type == ExampleType::CantileverBeam {
+                ui.heading("Element Type");
+                ui.horizontal(|ui| {
+                    ui.selectable_value(&mut config.element_type, ExampleElementType::C3D8, "C3D8 (8-node)");
+                    ui.selectable_value(&mut config.element_type, ExampleElementType::C3D20, "C3D20 (20-node)");
+                });
+                ui.label(config.element_type.description());
+                
+                ui.add_space(12.0);
+                ui.separator();
+                ui.add_space(8.0);
+            }
+            
             // Mesh resolution
             ui.heading("Mesh Resolution");
             ui.horizontal(|ui| {
@@ -656,7 +736,7 @@ pub fn show_example_dialog(ctx: &egui::Context, app: &mut FeaApp) {
                 crate::examples::ExampleMeshParams::default().with_resolution(config.resolution)
             };
             
-            let (est_nodes, est_elements) = estimate_mesh_size(config.example_type, &params);
+            let (est_nodes, est_elements) = estimate_mesh_size(config.example_type, config.element_type, &params);
             ui.label(format!("Estimated: ~{} nodes, ~{} elements", est_nodes, est_elements));
             
             ui.add_space(8.0);
@@ -779,15 +859,34 @@ pub fn show_example_dialog(ctx: &egui::Context, app: &mut FeaApp) {
             });
         });
     
-    app.state.ui_state.example_dialog_open = open;
+    // Only update from window close button if we didn't explicitly close via buttons
+    if open == false {
+        app.state.ui_state.example_dialog_open = false;
+    }
 }
 
 /// Estimate mesh size for given example and parameters
-fn estimate_mesh_size(example_type: ExampleType, params: &crate::examples::ExampleMeshParams) -> (usize, usize) {
+fn estimate_mesh_size(example_type: ExampleType, element_type: ExampleElementType, params: &crate::examples::ExampleMeshParams) -> (usize, usize) {
     match example_type {
         ExampleType::CantileverBeam => {
-            let nodes = (params.beam_nx + 1) * (params.beam_ny + 1) * (params.beam_nz + 1);
             let elements = params.beam_nx * params.beam_ny * params.beam_nz;
+            let nodes = match element_type {
+                ExampleElementType::C3D8 => {
+                    (params.beam_nx + 1) * (params.beam_ny + 1) * (params.beam_nz + 1)
+                }
+                ExampleElementType::C3D20 => {
+                    // C3D20 serendipity: corner nodes + edge midpoint nodes (NO face/body centers)
+                    // Corner nodes: (nx+1) * (ny+1) * (nz+1)
+                    // Edge midpoints (x-direction): nx * (ny+1) * (nz+1)
+                    // Edge midpoints (y-direction): (nx+1) * ny * (nz+1)
+                    // Edge midpoints (z-direction): (nx+1) * (ny+1) * nz
+                    let corners = (params.beam_nx + 1) * (params.beam_ny + 1) * (params.beam_nz + 1);
+                    let edge_x = params.beam_nx * (params.beam_ny + 1) * (params.beam_nz + 1);
+                    let edge_y = (params.beam_nx + 1) * params.beam_ny * (params.beam_nz + 1);
+                    let edge_z = (params.beam_nx + 1) * (params.beam_ny + 1) * params.beam_nz;
+                    corners + edge_x + edge_y + edge_z
+                }
+            };
             (nodes, elements)
         }
         ExampleType::TorqueShaft => {
@@ -802,5 +901,186 @@ fn estimate_mesh_size(example_type: ExampleType, params: &crate::examples::Examp
             let elements_per_block = params.block_divisions.pow(3);
             (nodes_per_block * 2, elements_per_block * 2)
         }
+    }
+}
+
+/// Perform undo operation (public for keyboard shortcuts)
+pub fn perform_undo_public(app: &mut FeaApp) {
+    perform_undo(app);
+}
+
+/// Perform redo operation (public for keyboard shortcuts)
+pub fn perform_redo_public(app: &mut FeaApp) {
+    perform_redo(app);
+}
+
+/// Perform undo operation
+fn perform_undo(app: &mut FeaApp) {
+    use crate::state::UndoAction;
+    
+    if let Some(action) = app.state.undo_stack.pop_undo() {
+        let redo_action = match &action {
+            UndoAction::AddBoundaryCondition(bc) => {
+                // Undo add = remove the last BC
+                if let Some(idx) = app.state.simulation_config.boundary_conditions.iter().position(|b| {
+                    // Match by name since we don't have exact equality
+                    match (b, bc) {
+                        (crate::state::BoundaryConditionConfig::Fixed(a), crate::state::BoundaryConditionConfig::Fixed(b)) => a.name == b.name,
+                        (crate::state::BoundaryConditionConfig::Load(a), crate::state::BoundaryConditionConfig::Load(b)) => a.name == b.name,
+                        (crate::state::BoundaryConditionConfig::Torque(a), crate::state::BoundaryConditionConfig::Torque(b)) => a.name == b.name,
+                        (crate::state::BoundaryConditionConfig::Contact(a), crate::state::BoundaryConditionConfig::Contact(b)) => a.name == b.name,
+                        (crate::state::BoundaryConditionConfig::Pressure(a), crate::state::BoundaryConditionConfig::Pressure(b)) => a.name == b.name,
+                        (crate::state::BoundaryConditionConfig::Traction(a), crate::state::BoundaryConditionConfig::Traction(b)) => a.name == b.name,
+                        (crate::state::BoundaryConditionConfig::BodyForce(a), crate::state::BoundaryConditionConfig::BodyForce(b)) => a.name == b.name,
+                        _ => false,
+                    }
+                }) {
+                    let removed = app.state.simulation_config.boundary_conditions.remove(idx);
+                    UndoAction::RemoveBoundaryCondition(idx, removed)
+                } else {
+                    return;
+                }
+            }
+            UndoAction::RemoveBoundaryCondition(idx, bc) => {
+                // Undo remove = add it back at the same position
+                let idx = (*idx).min(app.state.simulation_config.boundary_conditions.len());
+                app.state.simulation_config.boundary_conditions.insert(idx, bc.clone());
+                UndoAction::AddBoundaryCondition(bc.clone())
+            }
+            UndoAction::ModifyBoundaryCondition(idx, old_bc) => {
+                // Undo modify = restore old value
+                if let Some(current) = app.state.simulation_config.boundary_conditions.get(*idx) {
+                    let redo_bc = current.clone();
+                    app.state.simulation_config.boundary_conditions[*idx] = old_bc.clone();
+                    UndoAction::ModifyBoundaryCondition(*idx, redo_bc)
+                } else {
+                    return;
+                }
+            }
+            UndoAction::AddMaterial(mat) => {
+                // Undo add = remove the material
+                if let Some(idx) = app.state.simulation_config.materials.iter().position(|m| m.name == mat.name) {
+                    let removed = app.state.simulation_config.materials.remove(idx);
+                    UndoAction::RemoveMaterial(idx, removed)
+                } else {
+                    return;
+                }
+            }
+            UndoAction::RemoveMaterial(idx, mat) => {
+                // Undo remove = add it back
+                let idx = (*idx).min(app.state.simulation_config.materials.len());
+                app.state.simulation_config.materials.insert(idx, mat.clone());
+                UndoAction::AddMaterial(mat.clone())
+            }
+            UndoAction::ModifyMaterial(idx, old_mat) => {
+                if let Some(current) = app.state.simulation_config.materials.get(*idx) {
+                    let redo_mat = current.clone();
+                    app.state.simulation_config.materials[*idx] = old_mat.clone();
+                    UndoAction::ModifyMaterial(*idx, redo_mat)
+                } else {
+                    return;
+                }
+            }
+            UndoAction::CreateNodeGroup(mesh_idx, name) => {
+                // Undo create = delete the group
+                if let Some(mesh) = app.state.meshes.get_mut(*mesh_idx) {
+                    if let Some(nodes) = mesh.mesh.node_groups.remove(name) {
+                        UndoAction::DeleteNodeGroup(*mesh_idx, name.clone(), nodes)
+                    } else {
+                        return;
+                    }
+                } else {
+                    return;
+                }
+            }
+            UndoAction::DeleteNodeGroup(mesh_idx, name, nodes) => {
+                // Undo delete = recreate the group
+                if let Some(mesh) = app.state.meshes.get_mut(*mesh_idx) {
+                    mesh.mesh.node_groups.insert(name.clone(), nodes.clone());
+                    UndoAction::CreateNodeGroup(*mesh_idx, name.clone())
+                } else {
+                    return;
+                }
+            }
+            UndoAction::MeshTransform(mesh_idx, trans, scale, rot) => {
+                // For now just record the current transform (would need inverse transform logic)
+                UndoAction::MeshTransform(*mesh_idx, *trans, *scale, *rot)
+            }
+        };
+        
+        app.state.undo_stack.push_redo(redo_action);
+        app.state.status_message = "Undone".to_string();
+    }
+}
+
+/// Perform redo operation
+fn perform_redo(app: &mut FeaApp) {
+    use crate::state::UndoAction;
+    
+    if let Some(action) = app.state.undo_stack.pop_redo() {
+        let undo_action = match &action {
+            UndoAction::AddBoundaryCondition(bc) => {
+                // Redo add = add it back
+                app.state.simulation_config.boundary_conditions.push(bc.clone());
+                UndoAction::AddBoundaryCondition(bc.clone())
+            }
+            UndoAction::RemoveBoundaryCondition(idx, _bc) => {
+                // Redo remove = remove it again
+                if *idx < app.state.simulation_config.boundary_conditions.len() {
+                    let removed = app.state.simulation_config.boundary_conditions.remove(*idx);
+                    UndoAction::RemoveBoundaryCondition(*idx, removed)
+                } else {
+                    return;
+                }
+            }
+            UndoAction::ModifyBoundaryCondition(idx, new_bc) => {
+                if let Some(current) = app.state.simulation_config.boundary_conditions.get(*idx) {
+                    let undo_bc = current.clone();
+                    app.state.simulation_config.boundary_conditions[*idx] = new_bc.clone();
+                    UndoAction::ModifyBoundaryCondition(*idx, undo_bc)
+                } else {
+                    return;
+                }
+            }
+            UndoAction::AddMaterial(mat) => {
+                app.state.simulation_config.materials.push(mat.clone());
+                UndoAction::AddMaterial(mat.clone())
+            }
+            UndoAction::RemoveMaterial(idx, _mat) => {
+                if *idx < app.state.simulation_config.materials.len() {
+                    let removed = app.state.simulation_config.materials.remove(*idx);
+                    UndoAction::RemoveMaterial(*idx, removed)
+                } else {
+                    return;
+                }
+            }
+            UndoAction::ModifyMaterial(idx, new_mat) => {
+                if let Some(current) = app.state.simulation_config.materials.get(*idx) {
+                    let undo_mat = current.clone();
+                    app.state.simulation_config.materials[*idx] = new_mat.clone();
+                    UndoAction::ModifyMaterial(*idx, undo_mat)
+                } else {
+                    return;
+                }
+            }
+            UndoAction::CreateNodeGroup(mesh_idx, name) => {
+                // Can't redo create without the nodes - would need better tracking
+                UndoAction::CreateNodeGroup(*mesh_idx, name.clone())
+            }
+            UndoAction::DeleteNodeGroup(mesh_idx, name, nodes) => {
+                if let Some(mesh) = app.state.meshes.get_mut(*mesh_idx) {
+                    mesh.mesh.node_groups.remove(name);
+                    UndoAction::DeleteNodeGroup(*mesh_idx, name.clone(), nodes.clone())
+                } else {
+                    return;
+                }
+            }
+            UndoAction::MeshTransform(mesh_idx, trans, scale, rot) => {
+                UndoAction::MeshTransform(*mesh_idx, *trans, *scale, *rot)
+            }
+        };
+        
+        app.state.undo_stack.push(undo_action);
+        app.state.status_message = "Redone".to_string();
     }
 }

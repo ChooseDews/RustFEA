@@ -9,7 +9,7 @@ use serde::{Serialize, Deserialize};
 use bincode;
 use serde::de::DeserializeOwned;
 use log::{debug, error};
-use std::time::Instant;
+use web_time::Instant;
 
 /// Returns a writer for the specified file.
 /// Supports `.json`, `.bin`, and `.xz`/`.zst` (compressed) file extensions.

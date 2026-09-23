@@ -7,5 +7,6 @@ pub mod utilities;
 pub mod mesh;
 pub mod solver;
 pub mod bc;
+#[cfg(feature = "native")]
 pub mod benchmarks;
 pub mod mesh_generation;

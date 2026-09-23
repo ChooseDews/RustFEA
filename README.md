@@ -1,110 +1,114 @@
-# Rust FEA
+# RustFEA
 
-RustFEA is a Finite Element Analysis (FEA) library written in Rust. This library aims to provide efficient and robust tools for performing finite element analysis, leveraging the safety and performance benefits of Rust.
+A Finite Element Analysis (FEA) library and GUI written in Rust. Provides efficient, robust tools for solid mechanics simulations with both direct and explicit solving capabilities.
 
-#### Features
-- **Modular Design for Extension**: The library is divided into several modules such as `node`, `elements`, `simulation`, `io`, `utilities`, `mesh`, `solver`, and `bc`.
-- **Dependency Integration**: Utilizes popular Rust crates like `nalgebra`, `faer`, and `serde` for mathematical operations and data serialization.
-- **Pure Rust**: No external C dependencies - builds anywhere Rust builds.
-- **Input Formats**: Supports reading and writing of input files in the .toml format.
+**[Try the Web Demo](https://choosedews.github.io/RustFEA/)** | [Documentation](https://github.com/ChooseDews/RustFEA)
 
-#### Limitations
-- 3D only
-- Solid mechanics focused only
+## Features
 
+- **Pure Rust** - No external C dependencies; builds anywhere Rust builds
+- **Desktop & Web** - Native app plus WebAssembly version ([try it](https://choosedews.github.io/RustFEA/))
+- **Modern Solvers** - `faer` (Cholesky/LU) for direct solving, explicit time integration for dynamics/contact
+- **Multiple Element Types** - C3D8 (8-node brick), C3D20 (20-node quadratic brick), C3D4 (4-node tetrahedra)
+- **Contact Mechanics** - Penalty method contact via explicit solver
+- **Section Cuts** - Interactive clipping planes with 2D cross-section view and PNG export
+- **VTK Export** - Standard VTK and pure-Rust VTK HDF output for ParaView
 
-#### Building
-
-To build the project you need to have `rust` and `cargo` installed then run:
-
-```bash
-cargo build
-```
-
-#### Usage
-
-Take a look in the `examples/*.toml` folder for some example simulation input files.
-
-Here is a basic example to get you started:
+## Quick Start
 
 ```bash
+# Build the library
+cargo build --release
+
+# Run an example simulation
 cargo run --bin read_input -- examples/tube_benchmark.toml -v
+
+# Run the GUI (native desktop)
+cargo run -p rust_fea_gui --release
 ```
 
+See [`gui/README.md`](gui/README.md) for GUI-specific documentation and WASM build instructions.
 
-### Rust FEA Library Overview
+## Project Structure
 
-Rust FEA is a Finite Element Analysis (FEA) library written in Rust, designed to provide efficient and robust tools for performing finite element analysis.
+```
+├── src/              # Core FEA library
+│   ├── elements/     # Element formulations (C3D8, C3D20, C3D4)
+│   ├── bc/           # Boundary conditions (fixed, load, contact, pressure)
+│   ├── simulation/   # Simulation orchestration
+│   ├── solver.rs     # Direct sparse solver (faer)
+│   └── io/           # File I/O (TOML, VTK, mesh formats)
+├── gui/              # egui-based graphical interface
+├── examples/         # Example simulations and mesh sources
+├── test/             # Integration tests
+├── benches/          # Criterion benchmarks
+└── reports/          # Validation reports and comparisons
+```
 
-#### Features
-- **Modular Design**: The library includes various modules such as `node`, `elements`, `simulation`, `io`, `utilities`, `mesh`, `solver`, and `bc`. Each module is responsible for different aspects of the FEA process, ensuring a clean and organized codebase.
-- **Dependency Integration**: Integration with popular Rust crates like `nalgebra` for mathematical operations, `faer` for sparse matrix computations, and `serde` for data serialization. This ensures the library is both powerful and flexible.
-- **Customization**: The library supports a wide range of configurations and customizations, allowing users to tailor the simulation and solver settings to their specific needs.
+## Mesh Support
 
-#### Mesh Support
-This library supports the .inp format for importing meshes. Mesh are represented in a struct called `MeshAssembly` which can also be added together to create a larger mesh or multi body meshes.
+Import meshes in these formats:
+- `.inp` - Abaqus format (recommended via [Gmsh](http://gmsh.info/))
+- `.bin.xz`, `.json.xz`, `.bin`, `.json` - RustFEA internal formats
 
-- `.inp` format
-- Internal Format: `.bin.xz`, `.json.xz`, `.bin`, `.json`
+Gmsh geometry files are in `examples/mesh_src/*.geo`.
 
-[Gmsh](http://gmsh.info/) is recommended for generating meshes then exporting via `.inp` (selecting export options while saving). You can find many gmsh examples under `examples/mesh_src/*.geo`
+## Elements
 
-#### Elements
-The library includes various finite elements, each represented as a structure with associated methods.
-- 8-Node Isoparametric Solid Element (Brick) (3D)
-- 4-Node Isoparametric Surface Element (Quad) (2D)
+| Element | Nodes | Order | Description |
+|---------|-------|-------|-------------|
+| C3D8 | 8 | Linear | Hexahedral brick |
+| C3D20 | 20 | Quadratic | Hexahedral brick with mid-edge nodes |
+| C3D4 | 4 | Linear | Tetrahedral |
 
-#### Boundary Conditions
-Boundary conditions used to apply forces or constraints to the problem.
+## Boundary Conditions
 
-- Fixed Value (Dirichlet)
-    - Prescribed Displacement
-- Prescribed Force (Neumann)
-    - Load
-    - Normal Contact: Penalty method
+- **Dirichlet** - Fixed displacement (clamped faces/nodes)
+- **Neumann** - Applied loads, pressure, torque, body forces
+- **Contact** - Node-to-segment penalty contact (explicit solver only)
 
-#### `Simulation`
-This struct encapsulates the entire simulation setup, including the mesh, elements, boundary conditions, and solver settings. It provides a high-level interface for configuring and executing the simulation.
+## Solvers
 
-#### `Project` File
-This struct represents a project. Which can contain mulitple simulations. Any project `.toml` is loaded in as a `Project` struct.
+### Direct Solver
+Uses `faer` for sparse Cholesky decomposition (symmetric positive-definite systems) with LU fallback. Pure Rust with SIMD optimization, ~1.5-2x faster than UMFPACK on typical FEA matrices.
 
-#### Solver
+### Explicit Solver
+Central-difference time integration for dynamics and contact problems. Element-by-element assembly avoids global matrix formation.
 
-##### Direct Solving
-`faer` and `nalgebra` are used for sparse matrix operations and direct solvers. `faer` uses Cholesky decomposition for symmetric positive-definite systems (typical FEA stiffness matrices) and falls back to LU factorization for other cases. Pure Rust with SIMD optimizations.
+## Output Formats
 
-##### Explicit Solving
-`nalgebra` is used for matrix operations. Overall there is a focus on element based assembly. Contact is only supported via explicit solving.
+- **VTK** (`.vtk`) - Legacy VTK format for ParaView
+- **VTK HDF** (`.hdf`) - Modern HDF5-based format (pure Rust via `hdf5-writer`)
 
-## Todo
-- [~] add tests for common elements and assemblies
-- [x] add nodal property outputs
-- [x] Use better solver for Ax=b - switched to faer (pure Rust, 1.5-2x faster than UMFPACK)
-- [ ] Large Deformation
-    - [ ] Add large deformation elements
-    - [ ] Handle local material propertie updates
-    - [ ] Plasticity?
-- [ ] add intergrations with paraview?
-- [x] add an explict solving scheme
-- [x] contact
-    - [x] Multi-body handling -> Multi-body mesh -> some way to merge meshes together
-    - [ ] Fix issues with contact on element edges
-- [x] Switch config file to use toml format
-- [ ] New Boundary Conditions
-    - [ ] Pressure / Normal vector based BC
-    - [ ] Shear / Tangential vector based BC
-- [ ] New Element Types
-    - [ ] 3D 4 node tetrahedra
-    - [ ] Shell element
-- [ ] VTK HDF Export
-    - [x] Single time step export (pure Rust via hdf5-writer)
-    - [ ] Multi time step export
-- [ ] Generalized field handling
-- [ ] Body forces
-- [ ] Simple material input handling
-- [ ] Non-linear material handling
-### Validations
-- [ ] Beam problems compared to abaqus and exact solutions
-### Problems
-- [ ] What about nodes that are not part of any element?
+## Benchmarks
+
+Run the validation benchmark suite:
+
+```bash
+cargo run --bin run_benchmarks --release
+```
+
+Results compare against analytical solutions for cantilever beams, torsion shafts, hollow spheres, and Hertzian contact.
+
+## Building
+
+### Native
+```bash
+cargo build --release
+```
+
+### WebAssembly
+```bash
+cd gui
+./build_wasm.sh
+```
+
+See [`gui/README.md`](gui/README.md) for detailed WASM instructions.
+
+## License
+
+[Apache License 2.0](LICENSE)
+
+## Author
+
+A project by [John Dews-Flick](https://johndews.com)

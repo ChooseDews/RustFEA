@@ -2,6 +2,12 @@
 web/pkg/
 web/dist/
 
+# wasm-bindgen generated files (in web folder root for local testing)
+web/rust_fea_gui.js
+web/rust_fea_gui_bg.wasm
+web/rust_fea_gui.d.ts
+web/rust_fea_gui_bg.wasm.d.ts
+
 # wasm-bindgen / wasm-pack generated files
 *.wasm
 *.wasm.d.ts

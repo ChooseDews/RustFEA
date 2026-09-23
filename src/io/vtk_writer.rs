@@ -3,6 +3,7 @@ use crate::simulation::Simulation;
 use crate::elements::{BrickElement, BaseElement, ElementType};
 use std::collections::HashMap;
 
+#[cfg(feature = "native")]
 use hdf5_writer::{DatasetBuilder, Hdf5Builder, Hdf5Writer, WriteOptions, AttributeBuilder};
 use nalgebra::Vector3;
 
@@ -93,6 +94,8 @@ pub fn write_vtk(filename: &str, simulation: &Simulation) -> std::io::Result<()>
 
 
 /// Write VTKHDF file (pure Rust, no C library)
+/// Only available on native builds (requires hdf5-writer)
+#[cfg(feature = "native")]
 pub fn write_vtkhdf(filename: &str, simulation: &Simulation) -> std::io::Result<()> {
     println!("Writing VTKHDF file: {}", filename);
 

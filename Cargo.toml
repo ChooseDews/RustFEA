@@ -6,31 +6,53 @@ resolver = "2"
 name = "rust_fea"
 version = "0.1.0"
 edition = "2021"
+license = "Apache-2.0"
+
+[features]
+default = ["native"]
+native = ["russell_sparse", "russell_lab", "hdf5", "hdf5-sys", "hdf5-writer", "zstd", "xz2", "rayon", "indicatif", "clap", "env_logger", "criterion", "faer"]
+wasm = ["web-sys"]
 
 [dependencies]
-clap = { version = "4.5", features = ["derive"] }
 nalgebra = { version = "0.35.0", features = ["serde-serialize"] }
 nalgebra-sparse = "0.12"
-faer = { version = "0.24", features = ["sparse-linalg"] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-xz2 = "0.1"
-zstd = "0.14"
 typetag = "0.2"
 bincode = "1.3"
 log = "0.4"
-env_logger = "0.11"
-toml = "1.0"
-rayon = "1.10"
-indicatif = "0.18"
-hdf5-writer = "0.9.1"
+toml = "0.8.19"
+ndarray = "0.16.1"
+chrono = "0.4"
 
-[dev-dependencies]
-criterion = "0.5"
+# Cross-platform time (works on WASM)
+web-time = "1.1"
+
+# Pure-Rust sparse solver (works on WASM)
+rsparse = "1.2"
+
+# WASM dependencies
+web-sys = { version = "0.3", features = ["Window", "Performance"], optional = true }
+
+# Native-only dependencies
+clap = { version = "4.3.21", features = ["derive"], optional = true }
+russell_sparse = { version = "2.8.1", optional = true }
+russell_lab = { version = "2.8.3", optional = true }
+xz2 = { version = "0.1", optional = true }
+zstd = { version = "0.13", optional = true }
+hdf5 = { version = "0.8.0", optional = true }
+hdf5-sys = { version = "0.8.1", features = ["static"], optional = true }
+hdf5-writer = { version = "0.9.1", optional = true }
+rayon = { version = "1.10.0", optional = true }
+indicatif = { version = "0.17.8", optional = true }
+env_logger = { version = "0.11", optional = true }
+criterion = { version = "0.5.1", optional = true }
+faer = { version = "0.24", features = ["sparse-linalg"], optional = true }
+
 
 [lints.rust]
 unused = "allow"
-non_snake_case = "allow"
+non_snake_case = "allow" #nice for fea vars
 
 [profile.release]
 opt-level = 3

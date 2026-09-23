@@ -836,7 +836,7 @@ fn show_box_selection_ui(ui: &mut egui::Ui, app: &mut FeaApp) {
     });
     
     // Drop mutable borrow before calling update function
-    drop(creator);
+    let _ = creator;
     
     if ui.button("Update Selection").clicked() {
         update_box_selection(app);
@@ -903,7 +903,7 @@ fn show_plane_selection_ui(ui: &mut egui::Ui, app: &mut FeaApp) {
     });
     
     // Drop mutable borrow before calling update function
-    drop(creator);
+    let _ = creator;
     
     if ui.button("Update Selection").clicked() {
         update_plane_selection(app);

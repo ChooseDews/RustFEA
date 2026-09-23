@@ -25,6 +25,8 @@ pub struct CachedFace {
     pub node_indices: [usize; 4],
     /// Node IDs for color lookup
     pub node_ids: [usize; 4],
+    /// Parametric coordinates (xi, eta, zeta) for each corner - for shape function interpolation
+    pub parametric_coords: [[f32; 3]; 4],
 }
 
 /// Cached colors for nodes/elements - avoids recomputation every frame
@@ -189,7 +191,7 @@ impl OctreeNode {
         
         // Create children if needed
         if self.children.is_none() {
-            let center = self.bounds.center();
+            let _center = self.bounds.center();
             let children = [
                 OctreeNode::new(Self::child_bounds(&self.bounds, 0)),
                 OctreeNode::new(Self::child_bounds(&self.bounds, 1)),
@@ -486,7 +488,7 @@ impl RenderCache {
     /// Check if cache is valid for current state
     pub fn is_valid(
         &self,
-        mesh_state: &MeshState,
+        _mesh_state: &MeshState,
         results: &Option<SimulationResults>,
         displacement_scale: f32,
         color_mode: ColorMode,
@@ -535,12 +537,25 @@ impl RenderCache {
         
         // Face ordering for 8-node brick element
         let face_indices = [
-            [0, 1, 2, 3], // Bottom
-            [4, 7, 6, 5], // Top
-            [0, 4, 5, 1], // Front
-            [2, 6, 7, 3], // Back
-            [0, 3, 7, 4], // Left
-            [1, 5, 6, 2], // Right
+            [0, 1, 2, 3], // Bottom (zeta = -1)
+            [4, 7, 6, 5], // Top (zeta = +1)
+            [0, 4, 5, 1], // Front (eta = -1)
+            [2, 6, 7, 3], // Back (eta = +1)
+            [0, 3, 7, 4], // Left (xi = -1)
+            [1, 5, 6, 2], // Right (xi = +1)
+        ];
+        
+        // Natural coordinates for 8 corner nodes of hex element
+        // Node ordering: 0-3 are bottom (zeta=-1), 4-7 are top (zeta=+1)
+        const HEX_NATURAL_COORDS: [[f32; 3]; 8] = [
+            [-1.0, -1.0, -1.0], // 0
+            [ 1.0, -1.0, -1.0], // 1
+            [ 1.0,  1.0, -1.0], // 2
+            [-1.0,  1.0, -1.0], // 3
+            [-1.0, -1.0,  1.0], // 4
+            [ 1.0, -1.0,  1.0], // 5
+            [ 1.0,  1.0,  1.0], // 6
+            [-1.0,  1.0,  1.0], // 7
         ];
         
         // Extract all faces from all elements
@@ -623,6 +638,14 @@ impl RenderCache {
                     conn[face[3]],
                 ];
                 
+                // Get parametric coordinates for each corner of this face
+                let parametric_coords = [
+                    HEX_NATURAL_COORDS[face[0]],
+                    HEX_NATURAL_COORDS[face[1]],
+                    HEX_NATURAL_COORDS[face[2]],
+                    HEX_NATURAL_COORDS[face[3]],
+                ];
+                
                 self.faces.push(CachedFace {
                     corners,
                     normal,
@@ -631,6 +654,7 @@ impl RenderCache {
                     face_index: face_idx,
                     node_indices: *face,
                     node_ids,
+                    parametric_coords,
                 });
             }
         }
@@ -726,37 +750,63 @@ impl RenderCache {
             ColorMode::VonMises => {
                 if let Some(res) = results {
                     let max_vm = res.stats.max_von_mises.max(1e-10);
+                    
+                    // Cache per-element colors for backwards compatibility
                     for (&el_id, &vm) in &res.von_mises {
                         let t = (vm / max_vm) as f32;
                         self.colors.element_colors.insert(el_id, value_to_color(t.clamp(0.0, 1.0)));
+                    }
+                    
+                    // Cache per-node colors for smooth shading (using nodal VM values)
+                    for (node_id, &vm) in res.nodal_von_mises.iter().enumerate() {
+                        let t = (vm / max_vm) as f32;
+                        self.colors.node_colors.insert(node_id, value_to_color(t.clamp(0.0, 1.0)));
                     }
                 }
             }
             ColorMode::Stress => {
                 if let Some(res) = results {
-                    let max_val = res.stresses.values()
-                        .filter_map(|s| s.get(stress_component))
-                        .map(|v| v.abs())
+                    // Find max value for normalization
+                    let max_val = res.nodal_stress.iter()
+                        .map(|s| s[stress_component].abs())
                         .fold(1e-10f64, |a, b| a.max(b));
+                    
+                    // Cache per-element colors for backwards compatibility
                     for (&el_id, stress) in &res.stresses {
                         if let Some(&val) = stress.get(stress_component) {
                             let t = ((val / max_val) * 0.5 + 0.5) as f32;
                             self.colors.element_colors.insert(el_id, value_to_color(t.clamp(0.0, 1.0)));
                         }
                     }
+                    
+                    // Cache per-node colors for smooth shading
+                    for (node_id, stress) in res.nodal_stress.iter().enumerate() {
+                        let val = stress[stress_component];
+                        let t = ((val / max_val) * 0.5 + 0.5) as f32;
+                        self.colors.node_colors.insert(node_id, value_to_color(t.clamp(0.0, 1.0)));
+                    }
                 }
             }
             ColorMode::Strain => {
                 if let Some(res) = results {
-                    let max_val = res.strains.values()
-                        .filter_map(|s| s.get(strain_component))
-                        .map(|v| v.abs())
+                    // Find max value for normalization
+                    let max_val = res.nodal_strain.iter()
+                        .map(|s| s[strain_component].abs())
                         .fold(1e-10f64, |a, b| a.max(b));
+                    
+                    // Cache per-element colors for backwards compatibility
                     for (&el_id, strain) in &res.strains {
                         if let Some(&val) = strain.get(strain_component) {
                             let t = ((val / max_val) * 0.5 + 0.5) as f32;
                             self.colors.element_colors.insert(el_id, value_to_color(t.clamp(0.0, 1.0)));
                         }
+                    }
+                    
+                    // Cache per-node colors for smooth shading
+                    for (node_id, strain) in res.nodal_strain.iter().enumerate() {
+                        let val = strain[strain_component];
+                        let t = ((val / max_val) * 0.5 + 0.5) as f32;
+                        self.colors.node_colors.insert(node_id, value_to_color(t.clamp(0.0, 1.0)));
                     }
                 }
             }
@@ -795,6 +845,31 @@ impl RenderCache {
                 self.colors.element_colors.get(&face.element_id)
                     .copied()
                     .unwrap_or(egui::Color32::GRAY)
+            }
+        }
+    }
+    
+    /// Get color for a specific node (for smooth shading)
+    pub fn get_node_color(&self, node_id: usize, element_id: usize, color_mode: ColorMode) -> egui::Color32 {
+        match color_mode {
+            ColorMode::Solid => egui::Color32::from_rgb(100, 149, 237),
+            ColorMode::Displacement => {
+                // Use per-node displacement color
+                self.colors.node_colors.get(&node_id)
+                    .copied()
+                    .unwrap_or(egui::Color32::GRAY)
+            }
+            ColorMode::VonMises | ColorMode::Stress | ColorMode::Strain => {
+                // For element-based fields, use the node color if available
+                // (these are now stored as nodal values from the solver)
+                self.colors.node_colors.get(&node_id)
+                    .copied()
+                    .unwrap_or_else(|| {
+                        // Fallback to element color
+                        self.colors.element_colors.get(&element_id)
+                            .copied()
+                            .unwrap_or(egui::Color32::GRAY)
+                    })
             }
         }
     }

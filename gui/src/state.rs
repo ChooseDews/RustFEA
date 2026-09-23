@@ -1,10 +1,8 @@
 //! Application state management for RustFEA GUI
 
-use nalgebra::{DVector, Vector3};
-use rust_fea::bc::{FixedCondition, LoadCondition, TorqueCondition, NormalContact};
 use rust_fea::elements::Material;
 use rust_fea::mesh::MeshAssembly;
-use rust_fea::simulation::Simulation;
+use rust_fea::mesh::NodeGroup;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -14,6 +12,318 @@ use std::path::PathBuf;
 pub struct TestMode {
     pub enabled: bool,
     pub screenshot_path: Option<String>,
+}
+
+/// User settings that persist across sessions
+#[derive(Clone, Serialize, Deserialize)]
+pub struct UserSettings {
+    /// Display settings
+    pub display: DisplaySettingsSerializable,
+    /// Default solver type
+    pub default_solver: String,
+    /// Recent files (paths as strings for serialization)
+    pub recent_files: Vec<String>,
+    /// Max recent files to track
+    pub max_recent_files: usize,
+    /// Auto-fit camera when loading mesh
+    pub auto_fit_on_load: bool,
+    /// Show welcome screen on startup
+    pub show_welcome: bool,
+    /// Animation speed multiplier
+    pub default_animation_speed: f32,
+    /// Default displacement scale factor
+    pub default_displacement_scale: f32,
+    /// Window state (if we want to restore position/size)
+    pub window_maximized: bool,
+}
+
+impl Default for UserSettings {
+    fn default() -> Self {
+        Self {
+            display: DisplaySettingsSerializable::default(),
+            default_solver: "Direct".to_string(),
+            recent_files: Vec::new(),
+            max_recent_files: 10,
+            auto_fit_on_load: true,
+            show_welcome: true,
+            default_animation_speed: 1.0,
+            default_displacement_scale: 1.0,
+            window_maximized: false,
+        }
+    }
+}
+
+impl UserSettings {
+    /// Load settings from disk (native only)
+    #[cfg(feature = "native")]
+    pub fn load() -> Self {
+        if let Some(config_dir) = dirs::config_dir() {
+            let settings_path = config_dir.join("RustFEA").join("settings.json");
+            if settings_path.exists() {
+                if let Ok(contents) = std::fs::read_to_string(&settings_path) {
+                    if let Ok(settings) = serde_json::from_str(&contents) {
+                        return settings;
+                    }
+                }
+            }
+        }
+        Self::default()
+    }
+    
+    #[cfg(not(feature = "native"))]
+    pub fn load() -> Self {
+        // In WASM, try to load from localStorage
+        #[cfg(target_arch = "wasm32")]
+        {
+            if let Some(window) = web_sys::window() {
+                if let Ok(Some(storage)) = window.local_storage() {
+                    if let Ok(Some(data)) = storage.get_item("rustfea_settings") {
+                        if let Ok(settings) = serde_json::from_str(&data) {
+                            return settings;
+                        }
+                    }
+                }
+            }
+        }
+        Self::default()
+    }
+    
+    /// Save settings to disk (native only)
+    #[cfg(feature = "native")]
+    pub fn save(&self) {
+        if let Some(config_dir) = dirs::config_dir() {
+            let app_dir = config_dir.join("RustFEA");
+            let _ = std::fs::create_dir_all(&app_dir);
+            let settings_path = app_dir.join("settings.json");
+            if let Ok(json) = serde_json::to_string_pretty(self) {
+                let _ = std::fs::write(&settings_path, json);
+            }
+        }
+    }
+    
+    #[cfg(not(feature = "native"))]
+    pub fn save(&self) {
+        // In WASM, save to localStorage
+        #[cfg(target_arch = "wasm32")]
+        {
+            if let Some(window) = web_sys::window() {
+                if let Ok(Some(storage)) = window.local_storage() {
+                    if let Ok(json) = serde_json::to_string(self) {
+                        let _ = storage.set_item("rustfea_settings", &json);
+                    }
+                }
+            }
+        }
+    }
+    
+    /// Add a file to recent files list
+    pub fn add_recent_file(&mut self, path: &std::path::Path) {
+        let path_str = path.to_string_lossy().to_string();
+        // Remove if already exists
+        self.recent_files.retain(|p| p != &path_str);
+        // Add to front
+        self.recent_files.insert(0, path_str);
+        // Trim to max
+        self.recent_files.truncate(self.max_recent_files);
+    }
+}
+
+/// Serializable version of DisplaySettings for persistence
+#[derive(Clone, Serialize, Deserialize)]
+pub struct DisplaySettingsSerializable {
+    pub show_grid: bool,
+    pub grid_spacing: f32,
+    pub grid_size: i32,
+    pub background_color: [u8; 3],
+    pub wireframe_color: [u8; 3],
+    pub face_color: [u8; 3],
+    pub show_axis: bool,
+}
+
+impl Default for DisplaySettingsSerializable {
+    fn default() -> Self {
+        Self {
+            show_grid: true,
+            grid_spacing: 1.0,
+            grid_size: 10,
+            background_color: [30, 30, 35],
+            wireframe_color: [40, 40, 40],
+            face_color: [100, 149, 237],
+            show_axis: true,
+        }
+    }
+}
+
+impl From<&DisplaySettings> for DisplaySettingsSerializable {
+    fn from(d: &DisplaySettings) -> Self {
+        Self {
+            show_grid: d.show_grid,
+            grid_spacing: d.grid_spacing,
+            grid_size: d.grid_size,
+            background_color: d.background_color,
+            wireframe_color: d.wireframe_color,
+            face_color: d.face_color,
+            show_axis: d.show_axis,
+        }
+    }
+}
+
+impl DisplaySettingsSerializable {
+    pub fn apply_to(&self, d: &mut DisplaySettings) {
+        d.show_grid = self.show_grid;
+        d.grid_spacing = self.grid_spacing;
+        d.grid_size = self.grid_size;
+        d.background_color = self.background_color;
+        d.wireframe_color = self.wireframe_color;
+        d.face_color = self.face_color;
+        d.show_axis = self.show_axis;
+    }
+}
+
+/// Undo/Redo action types
+#[derive(Clone)]
+pub enum UndoAction {
+    /// Boundary condition added
+    AddBoundaryCondition(BoundaryConditionConfig),
+    /// Boundary condition removed (index, config)
+    RemoveBoundaryCondition(usize, BoundaryConditionConfig),
+    /// Boundary condition modified (index, old config)
+    ModifyBoundaryCondition(usize, BoundaryConditionConfig),
+    /// Material added
+    AddMaterial(MaterialConfig),
+    /// Material removed (index, config)
+    RemoveMaterial(usize, MaterialConfig),
+    /// Material modified (index, old config)
+    ModifyMaterial(usize, MaterialConfig),
+    /// Node group created (mesh index, group name)
+    CreateNodeGroup(usize, String),
+    /// Node group deleted (mesh index, group name, node group)
+    DeleteNodeGroup(usize, String, NodeGroup),
+    /// Mesh transform applied (mesh index, old transform values)
+    MeshTransform(usize, [f64; 3], [f64; 3], [f64; 3]), // translation, scale, rotation
+}
+
+/// Undo/Redo stack for tracking changes
+#[derive(Default)]
+pub struct UndoStack {
+    /// Actions that can be undone
+    undo_stack: Vec<UndoAction>,
+    /// Actions that can be redone
+    redo_stack: Vec<UndoAction>,
+    /// Maximum stack size
+    max_size: usize,
+}
+
+impl UndoStack {
+    pub fn new() -> Self {
+        Self {
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
+            max_size: 50,
+        }
+    }
+    
+    /// Push an action onto the undo stack
+    pub fn push(&mut self, action: UndoAction) {
+        self.undo_stack.push(action);
+        self.redo_stack.clear(); // Clear redo when new action is performed
+        
+        // Trim to max size
+        if self.undo_stack.len() > self.max_size {
+            self.undo_stack.remove(0);
+        }
+    }
+    
+    /// Pop an action from the undo stack and push its inverse to redo
+    pub fn pop_undo(&mut self) -> Option<UndoAction> {
+        self.undo_stack.pop()
+    }
+    
+    /// Push an action to redo stack (called after undoing)
+    pub fn push_redo(&mut self, action: UndoAction) {
+        self.redo_stack.push(action);
+    }
+    
+    /// Pop an action from the redo stack
+    pub fn pop_redo(&mut self) -> Option<UndoAction> {
+        self.redo_stack.pop()
+    }
+    
+    /// Check if undo is available
+    pub fn can_undo(&self) -> bool {
+        !self.undo_stack.is_empty()
+    }
+    
+    /// Check if redo is available
+    pub fn can_redo(&self) -> bool {
+        !self.redo_stack.is_empty()
+    }
+    
+    /// Get the name of the next undo action
+    pub fn undo_description(&self) -> Option<&'static str> {
+        self.undo_stack.last().map(|a| match a {
+            UndoAction::AddBoundaryCondition(_) => "Add Boundary Condition",
+            UndoAction::RemoveBoundaryCondition(_, _) => "Remove Boundary Condition",
+            UndoAction::ModifyBoundaryCondition(_, _) => "Modify Boundary Condition",
+            UndoAction::AddMaterial(_) => "Add Material",
+            UndoAction::RemoveMaterial(_, _) => "Remove Material",
+            UndoAction::ModifyMaterial(_, _) => "Modify Material",
+            UndoAction::CreateNodeGroup(_, _) => "Create Node Group",
+            UndoAction::DeleteNodeGroup(_, _, _) => "Delete Node Group",
+            UndoAction::MeshTransform(_, _, _, _) => "Transform Mesh",
+        })
+    }
+    
+    /// Get the name of the next redo action
+    pub fn redo_description(&self) -> Option<&'static str> {
+        self.redo_stack.last().map(|a| match a {
+            UndoAction::AddBoundaryCondition(_) => "Add Boundary Condition",
+            UndoAction::RemoveBoundaryCondition(_, _) => "Remove Boundary Condition",
+            UndoAction::ModifyBoundaryCondition(_, _) => "Modify Boundary Condition",
+            UndoAction::AddMaterial(_) => "Add Material",
+            UndoAction::RemoveMaterial(_, _) => "Remove Material",
+            UndoAction::ModifyMaterial(_, _) => "Modify Material",
+            UndoAction::CreateNodeGroup(_, _) => "Create Node Group",
+            UndoAction::DeleteNodeGroup(_, _, _) => "Delete Node Group",
+            UndoAction::MeshTransform(_, _, _, _) => "Transform Mesh",
+        })
+    }
+    
+    /// Clear both stacks
+    pub fn clear(&mut self) {
+        self.undo_stack.clear();
+        self.redo_stack.clear();
+    }
+}
+
+/// Statistics overlay configuration
+#[derive(Clone)]
+pub struct StatsOverlay {
+    /// Show the stats overlay
+    pub visible: bool,
+    /// Show mesh statistics
+    pub show_mesh_stats: bool,
+    /// Show performance stats (FPS, render time)
+    pub show_performance: bool,
+    /// Show camera info
+    pub show_camera_info: bool,
+    /// Show result statistics when available
+    pub show_result_stats: bool,
+    /// Position (0 = top-left, 1 = top-right, 2 = bottom-left, 3 = bottom-right)
+    pub position: u8,
+}
+
+impl Default for StatsOverlay {
+    fn default() -> Self {
+        Self {
+            visible: false,
+            show_mesh_stats: true,
+            show_performance: true,
+            show_camera_info: false,
+            show_result_stats: true,
+            position: 0, // top-left
+        }
+    }
 }
 
 /// Application-wide state
@@ -48,14 +358,66 @@ pub struct AppState {
     
     /// Detailed solve progress tracking
     pub solve_progress: SolveProgress,
+    
+    /// Undo/Redo stack
+    pub undo_stack: UndoStack,
+    
+    /// User settings (persisted)
+    pub user_settings: UserSettings,
+    
+    /// Statistics overlay
+    pub stats_overlay: StatsOverlay,
+    
+    /// Frame timing for performance stats
+    pub frame_times: Vec<f32>,
 }
 
 impl AppState {
     pub fn new() -> Self {
-        Self {
+        // Load user settings from disk
+        let user_settings = UserSettings::load();
+        
+        let mut state = Self {
             status_message: "Ready".to_string(),
+            user_settings,
+            undo_stack: UndoStack::new(),
+            stats_overlay: StatsOverlay::default(),
+            frame_times: Vec::with_capacity(120), // Store last ~2 seconds at 60fps
             ..Default::default()
+        };
+        
+        // Apply saved display settings
+        state.user_settings.display.apply_to(&mut state.ui_state.display_settings);
+        state.ui_state.displacement_scale = state.user_settings.default_displacement_scale;
+        state.ui_state.animation.speed = state.user_settings.default_animation_speed;
+        
+        state
+    }
+    
+    /// Save current settings to disk
+    pub fn save_settings(&mut self) {
+        // Update serializable settings from current state
+        self.user_settings.display = DisplaySettingsSerializable::from(&self.ui_state.display_settings);
+        self.user_settings.default_displacement_scale = self.ui_state.displacement_scale;
+        self.user_settings.default_animation_speed = self.ui_state.animation.speed;
+        self.user_settings.save();
+    }
+    
+    /// Record frame time for performance stats
+    pub fn record_frame_time(&mut self, dt: f32) {
+        self.frame_times.push(dt);
+        if self.frame_times.len() > 120 {
+            self.frame_times.remove(0);
         }
+    }
+    
+    /// Get average FPS from recent frames
+    pub fn average_fps(&self) -> f32 {
+        if self.frame_times.is_empty() {
+            return 0.0;
+        }
+        let avg_dt = self.frame_times.iter().sum::<f32>() / self.frame_times.len() as f32;
+        if avg_dt > 0.0 { 1.0 / avg_dt } else { 0.0 }
     }
     
     pub fn current_mesh(&self) -> Option<&MeshState> {
@@ -490,14 +852,23 @@ pub struct SimulationResults {
     /// Displacement field (per node, 3 components)
     pub displacements: Vec<f64>,
     
-    /// Stress field (per element)
+    /// Stress field (per element) - averaged for backwards compatibility
     pub stresses: HashMap<usize, Vec<f64>>,
     
-    /// Strain field (per element)
+    /// Strain field (per element) - averaged for backwards compatibility
     pub strains: HashMap<usize, Vec<f64>>,
     
-    /// Von Mises stress (per element)
+    /// Von Mises stress (per element) - averaged for backwards compatibility
     pub von_mises: HashMap<usize, f64>,
+    
+    /// Nodal Von Mises stress (per node) - for smooth interpolation
+    pub nodal_von_mises: Vec<f64>,
+    
+    /// Nodal stress components (per node, 6 components: xx, yy, zz, xy, yz, xz)
+    pub nodal_stress: Vec<[f64; 6]>,
+    
+    /// Nodal strain components (per node, 6 components: xx, yy, zz, xy, yz, xz)
+    pub nodal_strain: Vec<[f64; 6]>,
     
     /// Result statistics
     pub stats: ResultStats,
@@ -678,6 +1049,9 @@ pub struct UiState {
     /// Screenshot dialog open
     pub screenshot_dialog_open: bool,
     
+    /// Request to export 2D section view as PNG
+    pub section_export_requested: bool,
+    
     /// Animation playback state  
     pub animation: AnimationState,
     
@@ -698,6 +1072,12 @@ pub struct UiState {
     
     /// Mesh editing state (transform, selection, context menus)
     pub mesh_edit: MeshEditState,
+    
+    /// Statistics overlay
+    pub stats_overlay: StatsOverlay,
+    
+    /// Simulation progress panel (floating window)
+    pub sim_progress_panel_open: bool,
 }
 
 impl UiState {
@@ -728,7 +1108,7 @@ pub enum ActivePanel {
     Results,
 }
 
-#[derive(Clone, Copy, PartialEq, Default)]
+#[derive(Clone, Copy, PartialEq, Default, Debug)]
 pub enum ColorMode {
     #[default]
     Solid,
@@ -913,6 +1293,8 @@ pub struct ClippingPlane {
     pub flip: bool,
     /// Show section cut surface with interpolated field values
     pub show_section_surface: bool,
+    /// Show 2D cross-section view window
+    pub show_2d_view: bool,
 }
 
 impl Default for ClippingPlane {
@@ -925,6 +1307,7 @@ impl Default for ClippingPlane {
             show_plane: true,
             flip: false,
             show_section_surface: true,
+            show_2d_view: false,
         }
     }
 }
@@ -1014,7 +1397,7 @@ pub struct AnimationState {
     pub loop_playback: bool,
     pub speed: f32,  // Multiplier (1.0 = realtime if available, otherwise steps/sec)
     pub current_frame: usize,
-    pub last_frame_time: Option<std::time::Instant>,
+    pub last_frame_time: Option<web_time::Instant>,
 }
 
 impl Default for AnimationState {

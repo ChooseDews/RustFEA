@@ -6,6 +6,39 @@ use crate::state::{
     ContactBcConfig, SolverType,
 };
 
+/// Element types available for examples
+#[derive(Clone, Copy, PartialEq, Default, Debug)]
+pub enum ExampleElementType {
+    /// 8-node linear brick (C3D8)
+    #[default]
+    C3D8,
+    /// 20-node quadratic brick (C3D20)
+    C3D20,
+}
+
+impl ExampleElementType {
+    pub fn name(&self) -> &'static str {
+        match self {
+            ExampleElementType::C3D8 => "C3D8 (8-node brick)",
+            ExampleElementType::C3D20 => "C3D20 (20-node brick)",
+        }
+    }
+    
+    pub fn short_name(&self) -> &'static str {
+        match self {
+            ExampleElementType::C3D8 => "C3D8",
+            ExampleElementType::C3D20 => "C3D20",
+        }
+    }
+    
+    pub fn description(&self) -> &'static str {
+        match self {
+            ExampleElementType::C3D8 => "Linear 8-node hexahedral element. Fast but exhibits shear locking in bending.",
+            ExampleElementType::C3D20 => "Quadratic 20-node hexahedral element. More accurate for bending, reduces shear locking.",
+        }
+    }
+}
+
 /// Example types available to load
 #[derive(Clone, Copy, PartialEq)]
 pub enum ExampleType {
@@ -74,6 +107,8 @@ impl MeshResolution {
 pub struct ExampleConfig {
     pub example_type: ExampleType,
     pub resolution: MeshResolution,
+    /// Element type (for applicable examples like cantilever beam)
+    pub element_type: ExampleElementType,
     /// Custom mesh parameters (used when resolution is Custom)
     pub custom_params: ExampleMeshParams,
     /// Load magnitude
@@ -87,6 +122,7 @@ impl Default for ExampleConfig {
         Self {
             example_type: ExampleType::CantileverBeam,
             resolution: MeshResolution::Medium,
+            element_type: ExampleElementType::C3D8,
             custom_params: ExampleMeshParams::default(),
             load_magnitude: 10000.0,
             scale: 1.0,
@@ -192,16 +228,24 @@ pub fn load_example_with_config(config: &ExampleConfig) -> Example {
     };
     
     match config.example_type {
-        ExampleType::CantileverBeam => create_cantilever_beam(&params, config.load_magnitude, config.scale),
+        ExampleType::CantileverBeam => create_cantilever_beam(&params, config.load_magnitude, config.scale, config.element_type),
         ExampleType::TorqueShaft => create_torque_shaft(&params, config.load_magnitude, config.scale),
         ExampleType::ContactBlocks => create_contact_blocks(&params, config.load_magnitude, config.scale),
     }
 }
 
 /// Create a cantilever beam example
-fn create_cantilever_beam(params: &ExampleMeshParams, load: f64, scale: f64) -> Example {
+fn create_cantilever_beam(params: &ExampleMeshParams, load: f64, scale: f64, element_type: ExampleElementType) -> Example {
+    match element_type {
+        ExampleElementType::C3D8 => create_cantilever_beam_c3d8(params, load, scale),
+        ExampleElementType::C3D20 => create_cantilever_beam_c3d20(params, load, scale),
+    }
+}
+
+/// Create a cantilever beam with C3D8 (8-node) elements
+fn create_cantilever_beam_c3d8(params: &ExampleMeshParams, load: f64, scale: f64) -> Example {
     let mut mesh = MeshAssembly::empty();
-    mesh.name = "Cantilever Beam".to_string();
+    mesh.name = "Cantilever Beam (C3D8)".to_string();
     
     // Scaled dimensions
     let length = params.beam_length * scale;
@@ -319,14 +363,204 @@ fn create_cantilever_beam(params: &ExampleMeshParams, load: f64, scale: f64) -> 
     let total_elements = mesh.elements.len();
     
     Example {
-        name: "Cantilever Beam".to_string(),
+        name: "Cantilever Beam (C3D8)".to_string(),
         mesh,
         boundary_conditions,
         solver_type: SolverType::Direct,
         description: format!(
-            "Cantilever beam ({:.1}×{:.1}×{:.1} m) fixed at one end with {:.0} N tip load.\n\
+            "Cantilever beam ({:.1}×{:.1}×{:.1} m) with C3D8 elements, fixed at one end with {:.0} N tip load.\n\
              Mesh: {} nodes, {} elements ({} divisions along length)",
             length, height, width, load, total_nodes, total_elements, nx
+        ),
+    }
+}
+
+/// Create a cantilever beam with C3D20 (20-node quadratic) elements
+/// 
+/// C3D20 uses serendipity shape functions with 20 nodes per element:
+/// - 8 corner nodes
+/// - 12 mid-edge nodes (NO face-center or body-center nodes)
+fn create_cantilever_beam_c3d20(params: &ExampleMeshParams, load: f64, scale: f64) -> Example {
+    let mut mesh = MeshAssembly::empty();
+    mesh.name = "Cantilever Beam (C3D20)".to_string();
+    
+    // Scaled dimensions
+    let length = params.beam_length * scale;
+    let height = params.beam_height * scale;
+    let width = params.beam_width * scale;
+    
+    let nx = params.beam_nx;
+    let ny = params.beam_ny;
+    let nz = params.beam_nz;
+    
+    // For C3D20 serendipity elements, we need:
+    // - Corner nodes at element corners (on the coarse grid)
+    // - Mid-edge nodes between adjacent corners (on edges only, NOT face centers)
+    //
+    // We'll track which fine-grid positions are actually used by elements
+    // Fine grid: (2*nx+1) x (2*ny+1) x (2*nz+1)
+    // But we only create nodes at positions that are corners or edge midpoints
+    
+    let grid_nx = 2 * nx;
+    let grid_ny = 2 * ny;
+    let grid_nz = 2 * nz;
+    
+    // Use a HashMap to create nodes on-demand and track their IDs
+    // Key: (ix, iy, iz) on fine grid, Value: node_id
+    let mut node_map: std::collections::HashMap<(usize, usize, usize), usize> = std::collections::HashMap::new();
+    let mut node_id = 0;
+    
+    // Helper to get or create a node
+    let get_or_create_node = |ix: usize, iy: usize, iz: usize, 
+                                   mesh: &mut MeshAssembly, 
+                                   node_map: &mut std::collections::HashMap<(usize, usize, usize), usize>,
+                                   next_id: &mut usize| -> usize {
+        if let Some(&id) = node_map.get(&(ix, iy, iz)) {
+            id
+        } else {
+            let x = (ix as f64 / grid_nx as f64) * length;
+            let y = (iy as f64 / grid_ny as f64) * height;
+            let z = (iz as f64 / grid_nz as f64) * width;
+            
+            mesh.nodes.insert(*next_id, MeshNode { 
+                coordinates: vec![x, y, z],
+                id: *next_id,
+            });
+            node_map.insert((ix, iy, iz), *next_id);
+            let id = *next_id;
+            *next_id += 1;
+            id
+        }
+    };
+    
+    // Create C3D20 elements, creating nodes as needed
+    let mut elem_id = 0;
+    let mut element_ids = Vec::new();
+    
+    for iz in 0..nz {
+        for iy in 0..ny {
+            for ix in 0..nx {
+                // Map element indices to fine grid indices
+                let gx = 2 * ix;
+                let gy = 2 * iy;
+                let gz = 2 * iz;
+                
+                // C3D20 node ordering (Abaqus convention):
+                // Corner nodes 0-7, then mid-edge nodes 8-19
+                //
+                //        7----14----6
+                //       /|         /|
+                //     15 |       13 |
+                //     /  19      /  18
+                //    4----12----5   |
+                //    |   |      |   |
+                //    |   3---10-|---2
+                //   16  /      17  /
+                //    | 11       | 9
+                //    |/         |/
+                //    0----8-----1
+                
+                let connectivity = vec![
+                    // Corner nodes (0-7)
+                    get_or_create_node(gx, gy, gz, &mut mesh, &mut node_map, &mut node_id),           // 0
+                    get_or_create_node(gx + 2, gy, gz, &mut mesh, &mut node_map, &mut node_id),       // 1
+                    get_or_create_node(gx + 2, gy + 2, gz, &mut mesh, &mut node_map, &mut node_id),   // 2
+                    get_or_create_node(gx, gy + 2, gz, &mut mesh, &mut node_map, &mut node_id),       // 3
+                    get_or_create_node(gx, gy, gz + 2, &mut mesh, &mut node_map, &mut node_id),       // 4
+                    get_or_create_node(gx + 2, gy, gz + 2, &mut mesh, &mut node_map, &mut node_id),   // 5
+                    get_or_create_node(gx + 2, gy + 2, gz + 2, &mut mesh, &mut node_map, &mut node_id), // 6
+                    get_or_create_node(gx, gy + 2, gz + 2, &mut mesh, &mut node_map, &mut node_id),   // 7
+                    // Mid-edge nodes on bottom face (z=0)
+                    get_or_create_node(gx + 1, gy, gz, &mut mesh, &mut node_map, &mut node_id),       // 8:  between 0-1
+                    get_or_create_node(gx + 2, gy + 1, gz, &mut mesh, &mut node_map, &mut node_id),   // 9:  between 1-2
+                    get_or_create_node(gx + 1, gy + 2, gz, &mut mesh, &mut node_map, &mut node_id),   // 10: between 2-3
+                    get_or_create_node(gx, gy + 1, gz, &mut mesh, &mut node_map, &mut node_id),       // 11: between 3-0
+                    // Mid-edge nodes on top face (z=1)
+                    get_or_create_node(gx + 1, gy, gz + 2, &mut mesh, &mut node_map, &mut node_id),   // 12: between 4-5
+                    get_or_create_node(gx + 2, gy + 1, gz + 2, &mut mesh, &mut node_map, &mut node_id), // 13: between 5-6
+                    get_or_create_node(gx + 1, gy + 2, gz + 2, &mut mesh, &mut node_map, &mut node_id), // 14: between 6-7
+                    get_or_create_node(gx, gy + 1, gz + 2, &mut mesh, &mut node_map, &mut node_id),   // 15: between 7-4
+                    // Mid-edge nodes on vertical edges
+                    get_or_create_node(gx, gy, gz + 1, &mut mesh, &mut node_map, &mut node_id),       // 16: between 0-4
+                    get_or_create_node(gx + 2, gy, gz + 1, &mut mesh, &mut node_map, &mut node_id),   // 17: between 1-5
+                    get_or_create_node(gx + 2, gy + 2, gz + 1, &mut mesh, &mut node_map, &mut node_id), // 18: between 2-6
+                    get_or_create_node(gx, gy + 2, gz + 1, &mut mesh, &mut node_map, &mut node_id),   // 19: between 3-7
+                ];
+                
+                mesh.elements.insert(elem_id, MeshElement {
+                    el_type: "C3D20".to_string(),
+                    connectivity,
+                    name: format!("Element_{}", elem_id),
+                    id: elem_id,
+                });
+                element_ids.push(elem_id);
+                elem_id += 1;
+            }
+        }
+    }
+    
+    mesh.element_groups.insert("all_elements".to_string(), ElementGroup {
+        elements: element_ids,
+        name: "all_elements".to_string(),
+        el_type: "C3D20".to_string(),
+    });
+    
+    // Fixed end node group (x = 0) - include all nodes at x=0 (both corner and mid-edge)
+    let mut fixed_nodes = Vec::new();
+    for (&(ix, _iy, _iz), &nid) in &node_map {
+        if ix == 0 {
+            fixed_nodes.push(nid);
+        }
+    }
+    fixed_nodes.sort(); // Keep consistent ordering
+    mesh.node_groups.insert("fixed_end".to_string(), NodeGroup {
+        nodes: fixed_nodes,
+        name: "fixed_end".to_string(),
+    });
+    
+    // Load end node group (x = length) - include all nodes at x=length
+    let mut load_nodes = Vec::new();
+    for (&(ix, _iy, _iz), &nid) in &node_map {
+        if ix == grid_nx {
+            load_nodes.push(nid);
+        }
+    }
+    load_nodes.sort(); // Keep consistent ordering
+    mesh.node_groups.insert("load_end".to_string(), NodeGroup {
+        nodes: load_nodes.clone(),
+        name: "load_end".to_string(),
+    });
+    
+    // Boundary conditions
+    let boundary_conditions = vec![
+        BoundaryConditionConfig::Fixed(FixedBcConfig {
+            name: "Fixed Support".to_string(),
+            node_group: "fixed_end".to_string(),
+            constrain_x: Some(0.0),
+            constrain_y: Some(0.0),
+            constrain_z: Some(0.0),
+        }),
+        BoundaryConditionConfig::Load(LoadBcConfig {
+            name: "Tip Load".to_string(),
+            node_group: "load_end".to_string(),
+            force_x: 0.0,
+            force_y: -load / load_nodes.len() as f64,
+            force_z: 0.0,
+        }),
+    ];
+    
+    let total_nodes = mesh.nodes.len();
+    let total_elements = mesh.elements.len();
+    
+    Example {
+        name: "Cantilever Beam (C3D20)".to_string(),
+        mesh,
+        boundary_conditions,
+        solver_type: SolverType::Direct,
+        description: format!(
+            "Cantilever beam ({:.1}×{:.1}×{:.1} m) with C3D20 quadratic elements, fixed at one end with {:.0} N tip load.\n\
+             Mesh: {} nodes, {} elements ({}×{}×{} elements). C3D20 reduces shear locking in bending.",
+            length, height, width, load, total_nodes, total_elements, nx, ny, nz
         ),
     }
 }

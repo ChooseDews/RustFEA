@@ -2,19 +2,23 @@
 
 A graphical user interface for RustFEA - Finite Element Analysis in Rust.
 
+**[Try the Web Demo](https://choosedews.github.io/RustFEA/)**
+
 ## Features
 
 - **Mesh Import**: Load mesh files in `.inp` (Abaqus), `.bin`, and `.json` formats
-- **3D Visualization**: Interactive 3D view with rotation, pan, and zoom
+- **3D Visualization**: Interactive 3D view with rotation, pan, zoom
+- **Section Cuts**: Clipping planes with 2D cross-section view and PNG export
+- **Built-in Examples**: Quick-load example models (cantilever beam, torque shaft, contact blocks)
 - **Simulation Setup**: 
   - Material definition with presets (Steel, Aluminum, Titanium)
-  - Boundary conditions (Fixed, Load, Torque, Contact)
+  - Boundary conditions (Fixed, Load, Torque, Contact, Pressure)
   - Solver configuration (Direct/Explicit)
 - **Simulation Execution**: Run simulations with progress tracking
 - **Results Visualization**: 
-  - Displacement color maps
+  - Displacement/stress/strain color maps
   - Deformation scaling
-  - Export to VTK and CSV
+  - Export to VTK
 
 ## Building
 
@@ -32,52 +36,42 @@ cargo run -p rust_fea_gui --release
 
 Prerequisites:
 - Install wasm-bindgen-cli: `cargo install wasm-bindgen-cli`
-- Optionally install wasm-opt for smaller binaries: `brew install binaryen` or download from https://github.com/WebAssembly/binaryen
+- Optionally install wasm-opt for smaller binaries: `brew install binaryen`
 
 ```bash
 cd gui
 
-# Option 1: Use the build script
+# Use the build script
 ./build_wasm.sh
 
-# Option 2: Manual build
-cargo build --target wasm32-unknown-unknown --features web --no-default-features --release
-wasm-bindgen --target web --out-dir web/dist ../target/wasm32-unknown-unknown/release/rust_fea_gui.wasm
-
 # Serve locally
-cd web/dist
+cd web
 python3 -m http.server 8080
 ```
 
 Then open `http://localhost:8080` in your browser.
 
 **WASM Notes:**
-- Direct solver uses nalgebra-sparse Cholesky (pure Rust) instead of UMFPACK
-- File import is not available in web version - use primitive mesh generation
-- Simulations run synchronously (blocking UI briefly)
-- Compressed file formats (.xz, .zst) are not supported
+- Direct solver uses nalgebra-sparse Cholesky (pure Rust) instead of faer
+- Compressed file formats (.xz, .zst) are not supported in WASM
+- Simulations run synchronously (may briefly freeze the UI on large models)
 
 ## Usage
 
 ### Workflow
 
-1. **Mesh Tab**: Import a mesh file (.inp from Gmsh, or RustFEA's binary/JSON formats)
-2. **Setup Tab**: 
-   - Configure materials (Young's modulus, Poisson's ratio, density)
-   - Add boundary conditions to node groups
-   - Select solver type
+1. **Mesh Tab**: Import a mesh file or load a built-in example
+2. **Setup Tab**: Configure materials and boundary conditions
 3. **Run Tab**: Execute the simulation
 4. **Results Tab**: Visualize and export results
 
 ### Camera Controls
 
-- **Left Mouse Button + Drag**: Rotate view
-- **Right Mouse Button + Drag**: Pan view  
-- **Scroll Wheel**: Zoom in/out
-
-### Keyboard Shortcuts
-
-- Standard egui shortcuts for copy/paste in text fields
+| Action | Control |
+|--------|---------|
+| Rotate | Left mouse + drag |
+| Pan | Right mouse + drag |
+| Zoom | Scroll wheel |
 
 ## Architecture
 
@@ -87,10 +81,15 @@ gui/
 │   ├── main.rs          # Entry point (native + web)
 │   ├── lib.rs           # Library exports
 │   ├── app.rs           # Main application logic
-│   ├── state.rs         # Application state management
-│   ├── renderer.rs      # GPU rendering (placeholder for wgpu)
+│   ├── state.rs         # Application state management  
+│   ├── icons.rs         # RemixIcon Unicode constants
+│   ├── renderer.rs      # Software 3D renderer
+│   ├── render_cache.rs  # Mesh render caching
+│   ├── section_cut.rs   # Section plane visualization
+│   ├── examples.rs      # Built-in example models
+│   ├── project_io.rs    # Project file handling
+│   ├── web_file_io.rs   # WASM file operations
 │   └── ui/
-│       ├── mod.rs       # UI module exports
 │       ├── menu_bar.rs  # Top menu bar
 │       ├── side_panel.rs # Left workflow panel
 │       ├── status_bar.rs # Bottom status bar
@@ -99,6 +98,7 @@ gui/
 │       ├── setup_panel.rs # BC/material config
 │       ├── run_panel.rs # Simulation execution
 │       └── results_panel.rs # Results visualization
+├── assets/              # Fonts (Inter, JetBrains Mono, RemixIcon, Noto Symbols)
 └── web/
     └── index.html       # Web entry point
 ```
@@ -106,21 +106,9 @@ gui/
 ## Dependencies
 
 - **egui/eframe**: Immediate mode GUI framework
-- **wgpu**: Cross-platform GPU abstraction (for future GPU rendering)
-- **rfd**: Native file dialogs
-- **rust_fea**: The core FEA library
+- **rust_fea**: Core FEA library
+- **rfd**: Native file dialogs (desktop only)
 
-## Current Limitations
+## License
 
-- 3D rendering uses egui's software renderer (painter's algorithm)
-- GPU-accelerated rendering with wgpu is stubbed for future implementation
-- Web file import requires additional implementation
-- Explicit solver GUI integration is incomplete
-
-## Contributing
-
-The GUI is designed to be modular. Key extension points:
-
-1. **New visualization modes**: Add to `ColorMode` enum in `state.rs`
-2. **New boundary conditions**: Add config structs in `state.rs`, UI in `setup_panel.rs`
-3. **GPU rendering**: Implement `MeshRenderer` in `renderer.rs` with wgpu pipeline
+[Apache License 2.0](../LICENSE)

@@ -42,7 +42,7 @@ impl MeshRenderer {
             let base_idx = vertices.len() as u32;
             
             // Add vertices for this element
-            for (local_idx, &node_id) in conn.iter().enumerate() {
+            for (_local_idx, &node_id) in conn.iter().enumerate() {
                 if let Some(node) = mesh.nodes.get(&node_id) {
                     let mut pos = [
                         node.coordinates[0] as f32,

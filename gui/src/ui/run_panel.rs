@@ -268,7 +268,8 @@ fn show_phase_entry(ui: &mut egui::Ui, entry: &crate::state::SolvePhaseEntry) {
 fn show_phase_timing_breakdown(ui: &mut egui::Ui, timing: &crate::state::SolvePhaseTimings) {
     // Waterfall/timeline visualization
     let total_ms = timing.total_ms.max(1) as f32;
-    let available_width = ui.available_width() - 100.0; // Leave room for labels
+    // Fixed width that fits comfortably in sidebar (240px max)
+    let bar_width = 240.0_f32.min(ui.available_width() - 20.0);
     
     // Group by category for summary
     let mut category_totals: std::collections::HashMap<SolvePhaseCategory, u64> = std::collections::HashMap::new();
@@ -279,7 +280,7 @@ fn show_phase_timing_breakdown(ui: &mut egui::Ui, timing: &crate::state::SolvePh
     // Category summary bar
     ui.label("Time by Category:");
     let (rect, _response) = ui.allocate_exact_size(
-        egui::vec2(available_width, 20.0),
+        egui::vec2(bar_width, 20.0),
         egui::Sense::hover()
     );
     
@@ -289,7 +290,7 @@ fn show_phase_timing_breakdown(ui: &mut egui::Ui, timing: &crate::state::SolvePh
     for cat in &[SolvePhaseCategory::Init, SolvePhaseCategory::Assembly, 
                  SolvePhaseCategory::Solve, SolvePhaseCategory::PostProcess] {
         if let Some(&cat_ms) = category_totals.get(cat) {
-            let width = (cat_ms as f32 / total_ms) * available_width;
+            let width = (cat_ms as f32 / total_ms) * bar_width;
             if width > 1.0 {
                 let color = category_color(*cat);
                 painter.rect_filled(
@@ -305,17 +306,23 @@ fn show_phase_timing_breakdown(ui: &mut egui::Ui, timing: &crate::state::SolvePh
         }
     }
     
-    // Legend
-    ui.horizontal(|ui| {
-        for cat in &[SolvePhaseCategory::Init, SolvePhaseCategory::Assembly, 
-                     SolvePhaseCategory::Solve, SolvePhaseCategory::PostProcess] {
-            if let Some(&cat_ms) = category_totals.get(cat) {
-                let pct = (cat_ms as f32 / total_ms) * 100.0;
-                let color = category_color(*cat);
-                ui.colored_label(color, format!("{} {:.0}%", cat.name(), pct));
-            }
+    ui.add_space(4.0);
+    
+    // Legend - each category on its own line with time and percentage
+    for cat in &[SolvePhaseCategory::Init, SolvePhaseCategory::Assembly, 
+                 SolvePhaseCategory::Solve, SolvePhaseCategory::PostProcess] {
+        if let Some(&cat_ms) = category_totals.get(cat) {
+            let pct = (cat_ms as f32 / total_ms) * 100.0;
+            let color = category_color(*cat);
+            ui.horizontal(|ui| {
+                // Color swatch
+                let (swatch_rect, _) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
+                ui.painter().rect_filled(swatch_rect, 2.0, color);
+                // Category name, time, and percentage
+                ui.label(format!("{}: {} ({:.1}%)", cat.name(), format_duration(cat_ms), pct));
+            });
         }
-    });
+    }
     
     ui.add_space(8.0);
     

@@ -473,55 +473,180 @@ fn value_to_color(t: f32) -> egui::Color32 {
     )
 }
 
-fn export_vtk(app: &mut FeaApp) {
-    #[cfg(feature = "native")]
-    {
-        if let Some(path) = rfd::FileDialog::new()
-            .add_filter("VTK", &["vtk"])
-            .save_file()
-        {
-            // TODO: Implement VTK export with results
-            app.state.status_message = format!("VTK exported to {:?}", path);
+/// Generate VTK ASCII content from mesh and results
+fn generate_vtk_content(app: &FeaApp) -> Option<String> {
+    let mesh_state = app.state.current_mesh()?;
+    let results = app.state.results.as_ref()?;
+    let mesh = &mesh_state.mesh;
+    
+    let mut vtk = String::new();
+    
+    // VTK header
+    vtk.push_str("# vtk DataFile Version 2.0\n");
+    vtk.push_str("RustFEA GUI Export\n");
+    vtk.push_str("ASCII\n");
+    vtk.push_str("DATASET UNSTRUCTURED_GRID\n");
+    
+    // Build sorted node list (VTK needs contiguous 0-based indexing)
+    let mut node_ids: Vec<usize> = mesh.nodes.keys().cloned().collect();
+    node_ids.sort();
+    
+    // Create mapping from original node ID to VTK index
+    let mut node_id_to_vtk: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
+    for (vtk_idx, &node_id) in node_ids.iter().enumerate() {
+        node_id_to_vtk.insert(node_id, vtk_idx);
+    }
+    
+    // Write points
+    vtk.push_str(&format!("POINTS {} float\n", node_ids.len()));
+    for &node_id in &node_ids {
+        let node = mesh.nodes.get(&node_id)?;
+        vtk.push_str(&format!("{} {} {}\n", 
+            node.coordinates[0], 
+            node.coordinates[1], 
+            node.coordinates[2]
+        ));
+    }
+    
+    // Collect elements (only brick elements for now)
+    let brick_elements: Vec<(&usize, &rust_fea::mesh::MeshElement)> = mesh.elements
+        .iter()
+        .filter(|(_, el)| el.connectivity.len() == 8) // 8-node bricks
+        .collect();
+    
+    let num_elements = brick_elements.len();
+    let total_entries = num_elements * 9; // 8 nodes + 1 count per element
+    
+    // Write cells
+    vtk.push_str(&format!("CELLS {} {}\n", num_elements, total_entries));
+    for (_, element) in &brick_elements {
+        vtk.push_str("8 ");
+        for &node_id in &element.connectivity {
+            let vtk_idx = node_id_to_vtk.get(&node_id).unwrap_or(&0);
+            vtk.push_str(&format!("{} ", vtk_idx));
+        }
+        vtk.push_str("\n");
+    }
+    
+    // Write cell types (12 = VTK_HEXAHEDRON)
+    vtk.push_str(&format!("CELL_TYPES {}\n", num_elements));
+    for _ in 0..num_elements {
+        vtk.push_str("12\n");
+    }
+    
+    // Write point data
+    vtk.push_str(&format!("POINT_DATA {}\n", node_ids.len()));
+    
+    // Displacement vectors
+    vtk.push_str("VECTORS displacement float\n");
+    for (vtk_idx, &_node_id) in node_ids.iter().enumerate() {
+        let base = vtk_idx * 3;
+        let dx = results.displacements.get(base).copied().unwrap_or(0.0);
+        let dy = results.displacements.get(base + 1).copied().unwrap_or(0.0);
+        let dz = results.displacements.get(base + 2).copied().unwrap_or(0.0);
+        vtk.push_str(&format!("{} {} {}\n", dx, dy, dz));
+    }
+    
+    // Displacement magnitude as scalar
+    vtk.push_str("SCALARS displacement_magnitude float\n");
+    vtk.push_str("LOOKUP_TABLE default\n");
+    for (vtk_idx, &_node_id) in node_ids.iter().enumerate() {
+        let base = vtk_idx * 3;
+        let dx = results.displacements.get(base).copied().unwrap_or(0.0);
+        let dy = results.displacements.get(base + 1).copied().unwrap_or(0.0);
+        let dz = results.displacements.get(base + 2).copied().unwrap_or(0.0);
+        let mag = (dx * dx + dy * dy + dz * dz).sqrt();
+        vtk.push_str(&format!("{}\n", mag));
+    }
+    
+    // Cell data - von Mises stress if available
+    if !results.von_mises.is_empty() {
+        vtk.push_str(&format!("CELL_DATA {}\n", num_elements));
+        vtk.push_str("SCALARS von_mises float\n");
+        vtk.push_str("LOOKUP_TABLE default\n");
+        for (elem_id, _) in &brick_elements {
+            let vm = results.von_mises.get(*elem_id).copied().unwrap_or(0.0);
+            vtk.push_str(&format!("{}\n", vm));
         }
     }
     
-    #[cfg(not(feature = "native"))]
-    {
-        app.state.status_message = "VTK export not available in web version".to_string();
+    Some(vtk)
+}
+
+/// Generate CSV content from results
+fn generate_csv_content(app: &FeaApp) -> Option<String> {
+    let results = app.state.results.as_ref()?;
+    
+    let mut csv = String::from("node_id,dx,dy,dz,magnitude\n");
+    
+    let num_nodes = results.displacements.len() / 3;
+    for i in 0..num_nodes {
+        let dx = results.displacements[i * 3];
+        let dy = results.displacements[i * 3 + 1];
+        let dz = results.displacements[i * 3 + 2];
+        let mag = (dx * dx + dy * dy + dz * dz).sqrt();
+        csv.push_str(&format!("{},{},{},{},{}\n", i, dx, dy, dz, mag));
+    }
+    
+    Some(csv)
+}
+
+fn export_vtk(app: &mut FeaApp) {
+    if let Some(vtk_content) = generate_vtk_content(app) {
+        #[cfg(feature = "native")]
+        {
+            if let Some(path) = rfd::FileDialog::new()
+                .add_filter("VTK", &["vtk"])
+                .save_file()
+            {
+                if let Err(e) = std::fs::write(&path, &vtk_content) {
+                    app.state.status_message = format!("Failed to export VTK: {}", e);
+                } else {
+                    app.state.status_message = format!("VTK exported to {:?}", path);
+                }
+            }
+        }
+        
+        #[cfg(not(feature = "native"))]
+        {
+            let mesh_name = app.state.current_mesh()
+                .map(|m| m.name.clone())
+                .unwrap_or_else(|| "results".to_string());
+            let filename = format!("{}.vtk", mesh_name.replace(" ", "_"));
+            crate::web_file_io::download_vtk(&filename, &vtk_content);
+            app.state.status_message = format!("VTK downloaded: {}", filename);
+        }
+    } else {
+        app.state.status_message = "No mesh or results to export".to_string();
     }
 }
 
 fn export_csv(app: &mut FeaApp) {
-    #[cfg(feature = "native")]
-    {
-        if let Some(path) = rfd::FileDialog::new()
-            .add_filter("CSV", &["csv"])
-            .save_file()
+    if let Some(csv_content) = generate_csv_content(app) {
+        #[cfg(feature = "native")]
         {
-            if let Some(results) = &app.state.results {
-                // Write displacement data
-                let mut csv_data = String::from("node_id,dx,dy,dz,magnitude\n");
-                
-                let num_nodes = results.displacements.len() / 3;
-                for i in 0..num_nodes {
-                    let dx = results.displacements[i * 3];
-                    let dy = results.displacements[i * 3 + 1];
-                    let dz = results.displacements[i * 3 + 2];
-                    let mag = (dx * dx + dy * dy + dz * dz).sqrt();
-                    csv_data.push_str(&format!("{},{},{},{},{}\n", i, dx, dy, dz, mag));
-                }
-                
-                if let Err(e) = std::fs::write(&path, csv_data) {
+            if let Some(path) = rfd::FileDialog::new()
+                .add_filter("CSV", &["csv"])
+                .save_file()
+            {
+                if let Err(e) = std::fs::write(&path, &csv_content) {
                     app.state.status_message = format!("Failed to export CSV: {}", e);
                 } else {
                     app.state.status_message = format!("CSV exported to {:?}", path);
                 }
             }
         }
-    }
-    
-    #[cfg(not(feature = "native"))]
-    {
-        app.state.status_message = "CSV export not available in web version".to_string();
+        
+        #[cfg(not(feature = "native"))]
+        {
+            let mesh_name = app.state.current_mesh()
+                .map(|m| m.name.clone())
+                .unwrap_or_else(|| "results".to_string());
+            let filename = format!("{}.csv", mesh_name.replace(" ", "_"));
+            crate::web_file_io::download_file(&filename, csv_content.as_bytes(), "text/csv");
+            app.state.status_message = format!("CSV downloaded: {}", filename);
+        }
+    } else {
+        app.state.status_message = "No results to export".to_string();
     }
 }

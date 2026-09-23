@@ -2,6 +2,7 @@
 
 use eframe::egui;
 use crate::app::FeaApp;
+use crate::icons;
 use crate::state::ActivePanel;
 use super::{mesh_panel, setup_panel, run_panel, results_panel};
 
@@ -20,18 +21,22 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                 ui.selectable_value(
                     &mut app.state.ui_state.active_panel,
                     ActivePanel::Mesh,
-                    "Mesh"
+                    format!("{} Mesh", icons::GRID)
                 ).on_hover_text("Import or create meshes (Ctrl+1)");
                 
                 // Setup tab
                 ui.selectable_value(
                     &mut app.state.ui_state.active_panel,
                     ActivePanel::Setup,
-                    "Setup"
+                    format!("{} Setup", icons::SETTINGS_4)
                 ).on_hover_text("Define materials and boundary conditions (Ctrl+2)");
                 
                 // Run tab
-                let run_text = if app.state.is_running { "Run..." } else { "Run" };
+                let run_text = if app.state.is_running { 
+                    format!("{} Run...", icons::LOADER)
+                } else { 
+                    format!("{} Run", icons::PLAY)
+                };
                 ui.selectable_value(
                     &mut app.state.ui_state.active_panel,
                     ActivePanel::Run,
@@ -42,7 +47,7 @@ pub fn show(ctx: &egui::Context, app: &mut FeaApp) {
                 ui.selectable_value(
                     &mut app.state.ui_state.active_panel,
                     ActivePanel::Results,
-                    "Results"
+                    format!("{} Results", icons::GALLERY)
                 ).on_hover_text("View and export results (Ctrl+4)");
             });
             
