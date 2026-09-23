@@ -10,7 +10,7 @@ license = "Apache-2.0"
 
 [features]
 default = ["native"]
-native = ["russell_sparse", "russell_lab", "hdf5", "hdf5-sys", "hdf5-writer", "zstd", "xz2", "rayon", "indicatif", "clap", "env_logger", "criterion", "faer"]
+native = ["hdf5-writer", "zstd", "xz2", "rayon", "indicatif", "clap", "env_logger", "criterion", "faer"]
 wasm = ["web-sys"]
 
 [dependencies]
@@ -36,12 +36,8 @@ web-sys = { version = "0.3", features = ["Window", "Performance"], optional = tr
 
 # Native-only dependencies
 clap = { version = "4.3.21", features = ["derive"], optional = true }
-russell_sparse = { version = "2.8.1", optional = true }
-russell_lab = { version = "2.8.3", optional = true }
 xz2 = { version = "0.1", optional = true }
 zstd = { version = "0.13", optional = true }
-hdf5 = { version = "0.8.0", optional = true }
-hdf5-sys = { version = "0.8.1", features = ["static"], optional = true }
 hdf5-writer = { version = "0.9.1", optional = true }
 rayon = { version = "1.10.0", optional = true }
 indicatif = { version = "0.17.8", optional = true }
